@@ -30,8 +30,11 @@ RUN composer install --no-dev --prefer-dist --optimize-autoloader --no-interacti
     && php artisan package:discover --ansi || true
 
 # Image / Laravel runtime config (secrets come from Render env vars)
+# PHP_CATCHALL=1 is required: without it nginx uses try_files … =404 and only "/"
+# reaches Laravel (index.php). All other routes (e.g. /login, /up) return nginx 404.
 ENV SKIP_COMPOSER=1 \
     WEBROOT=/var/www/html/public \
+    PHP_CATCHALL=1 \
     PHP_ERRORS_STDERR=1 \
     RUN_SCRIPTS=1 \
     REAL_IP_HEADER=1 \

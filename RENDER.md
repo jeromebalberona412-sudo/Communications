@@ -1,17 +1,16 @@
 # Deploy Students & Teachers on Render (Docker)
 
-## Root cause of your error
+## Root causes (common)
 
-```text
-Running 'php artisan serve'
-bash: line 1: php: command not found
-```
+### A. `php: command not found`
 
-Render **native runtimes** are Node, Python, Ruby, Go, Rust, Elixir — **not PHP**.
+Render **native runtimes** are Node, Python, Ruby, Go, Rust, Elixir — **not PHP**. Use **Docker**.
 
-Your service was almost certainly a **Node** (or other native) Web Service. The build can succeed (`npm`/`composer` in build command), but the **runtime image has no `php`**, so the start command fails with exit 127.
+### B. `/` redirects but `/login` (and `/up`) show nginx “Page not Found”
 
-Changing the start command alone cannot install PHP. On Render, Laravel requires **Docker**.
+The `richarvey/nginx-php-fpm` image defaults to `try_files … =404`. Only `/` hits `index.php`.
+
+**Fix:** `PHP_CATCHALL=1` in the Dockerfile (already set) so nginx rewrites to `/index.php?$args`.
 
 ## Solution (Option B — keep Render + Docker)
 
