@@ -13,7 +13,10 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        // Vercel serverless filesystem is read-only except /tmp.
+        if (getenv('VERCEL') || getenv('VERCEL_ENV')) {
+            $this->app->useStoragePath('/tmp/storage');
+        }
     }
 
     /**
@@ -24,7 +27,10 @@ class AppServiceProvider extends ServiceProvider
         Paginator::useBootstrapFive();
 
         $appUrl = (string) config('app.url', '');
-        if ($appUrl !== '' && str_starts_with($appUrl, 'https://')) {
+        if (
+            (getenv('VERCEL') || getenv('VERCEL_ENV'))
+            || ($appUrl !== '' && str_starts_with($appUrl, 'https://'))
+        ) {
             URL::forceScheme('https');
         }
     }

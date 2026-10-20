@@ -1,45 +1,66 @@
-# Vercel — Students & Teachers (Vite assets only)
+# Deploy Students & Teachers on Vercel (Laravel + Vite)
 
-This builds **frontend assets** (`public/build`). It does **not** deploy the Laravel/PHP backend.
+## Why you saw `404: NOT_FOUND`
 
-## Root cause of past failures
+The old `vercel.json` set `outputDirectory: public/build`. Vercel then served **only** compiled JS/CSS — no PHP, no Laravel routes, no `/login`. Opening `https://….vercel.app/` returned platform 404 even when status was **Ready**.
 
-1. `resources/js/communications.js` imported `../../../Communications/...` (sibling outside the app).
-2. With **Root Directory = Students**, Vercel only has `/vercel/path0/resources/...` — that sibling path does not exist.
-3. A root `.gitignore` rule `Communications/` also ignored `Students/packages/Communications/` until fixed to `/Communications/`.
+Laravel already redirects `/` → `/login` in `routes/web.php`. PHP must run for that to work.
 
-## Correct imports (inside each app)
+## Correct setup (two Vercel projects)
 
-```javascript
-import '../../packages/Communications/assets/js/communication.js';
-```
-
-From `resources/js` → `packages/Communications/assets/js`.
-
-## Vercel project settings
-
-| Setting | Students | Teachers |
-|---------|----------|----------|
+| Setting | Students project | Teachers project |
+|---------|------------------|------------------|
 | Root Directory | `Students` | `Teachers` |
-| Install Command | `npm install` | `npm install` |
-| Build Command | `npm run build` | `npm run build` |
-| Output Directory | `public/build` | `public/build` |
-| Production Branch | `main` (latest) | `main` (latest) |
+| Framework Preset | Other | Other |
+| Install / Build | from each app’s `vercel.json` | same |
 
-Redeploy **without** build cache after changing imports.
+Do **not** set Output Directory in the Vercel UI (leave empty). Routing is handled by `vercel.json`.
 
-## Before deploy
+## Required Environment Variables (Vercel → Settings → Environment Variables)
 
-```powershell
-cd C:\Users\admin\Documents\GitHub\Communications
-node scripts\sync-comms-package.mjs
-cd Students; npm run build
-cd ..\Teachers; npm run build
+Set for **Production** (and Preview if needed). Never commit secrets.
+
+```
+APP_NAME=iLearnU Students
+APP_ENV=production
+APP_KEY=base64:...          # php artisan key:generate --show
+APP_DEBUG=false
+APP_URL=https://YOUR-students-project.vercel.app
+
+SESSION_DRIVER=cookie
+SESSION_SECURE_COOKIE=true
+SESSION_COOKIE=students_session
+XSRF_COOKIE=students-xsrf
+CACHE_STORE=array
+LOG_CHANNEL=stderr
+QUEUE_CONNECTION=sync
+
+DB_CONNECTION=pgsql
+DB_HOST=...
+DB_PORT=5432
+DB_DATABASE=...
+DB_USERNAME=...
+DB_PASSWORD=...
+DB_SSLMODE=require
+
+VITE_SUPABASE_URL=...
+VITE_SUPABASE_PUBLISHABLE_KEY=...
+SUPABASE_URL=...
+SUPABASE_PUBLISHABLE_KEY=...
+COMMS_PORTAL_USER_TYPE=students
 ```
 
-Commit `Students/packages/Communications` and `Teachers/packages/Communications` (must be in git).
+Teachers: same pattern with `teachers_session`, `COMMS_PORTAL_USER_TYPE=teachers`, and that project’s `APP_URL`.
 
-## npm warnings
+## After pushing
 
-- `cache-dir` — usually injected by the host (Cursor/Vercel tooling), not this repo. Safe to ignore if no project `.npmrc` sets it.
-- `esbuild` install scripts — both apps set `"allowScripts": { "esbuild": true }`.
+1. Commit `api/index.php`, updated `vercel.json`, and `AppServiceProvider` changes.
+2. Redeploy **without** build cache.
+3. Open the deployment URL — you should get redirected to `/login` and see the login page.
+
+## Limits on Vercel
+
+- Writable disk is `/tmp` only (configured automatically).
+- No long-running queues/websockets on the PHP function.
+- WebRTC / Supabase Realtime still use cloud endpoints from the browser.
+- Prefer a VPS/Forge for heavy file uploads or persistent local storage.
