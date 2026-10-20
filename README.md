@@ -13,3 +13,7 @@ See **[LAN-HTTPS.md](./LAN-HTTPS.md)** for mkcert certificates, firewall rules, 
 ## Vercel
 
 See **[VERCEL.md](./VERCEL.md)**. After changing the shared package, run `node scripts/sync-comms-package.mjs` and commit `Students/packages/Communications` + `Teachers/packages/Communications`.
+
+## Render (recommended for Laravel/PHP)
+
+See **[RENDER.md](./RENDER.md)**. Render has **no native PHP runtime** — use **Docker** Web Services (`Students/Dockerfile`, `Teachers/Dockerfile`). Do not use Node + `php artisan serve`.

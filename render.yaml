@@ -1,0 +1,96 @@
+# Blueprint for Render Docker deploys (Laravel has no native PHP runtime on Render).
+# Docs: https://render.com/docs/deploy-php-laravel-docker
+#
+# Create services from this file OR manually as Web Service → Docker.
+# Set secrets in the Render Dashboard (do not put passwords/keys here).
+
+services:
+  - type: web
+    name: communications-students
+    runtime: docker
+    plan: free
+    rootDir: Students
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /up
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_DATABASE
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: SESSION_DRIVER
+        value: cookie
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: CACHE_STORE
+        value: file
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: COMMS_PORTAL_USER_TYPE
+        value: students
+      - key: MIGRATE_ON_DEPLOY
+        value: "false"
+
+  - type: web
+    name: communications-teachers
+    runtime: docker
+    plan: free
+    rootDir: Teachers
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /up
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_DEBUG
+        value: "false"
+      - key: LOG_CHANNEL
+        value: stderr
+      - key: APP_KEY
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: DB_CONNECTION
+        value: pgsql
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_DATABASE
+        sync: false
+      - key: DB_USERNAME
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_SSLMODE
+        value: require
+      - key: SESSION_DRIVER
+        value: cookie
+      - key: SESSION_SECURE_COOKIE
+        value: "true"
+      - key: CACHE_STORE
+        value: file
+      - key: QUEUE_CONNECTION
+        value: sync
+      - key: COMMS_PORTAL_USER_TYPE
+        value: teachers
+      - key: MIGRATE_ON_DEPLOY
+        value: "false"
