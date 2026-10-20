@@ -1,7 +1,5 @@
 <?php
 
-use Illuminate\Support\Str;
-
 return [
 
     /*
@@ -127,10 +125,9 @@ return [
     |
     */
 
-    'cookie' => env(
-        'SESSION_COOKIE',
-        Str::slug(env('APP_NAME', 'laravel'), '_').'_session'
-    ),
+    'cookie' => env('SESSION_COOKIE', 'students_session'),
+
+    'xsrf_cookie' => env('XSRF_COOKIE', 'students-xsrf'),
 
     /*
     |--------------------------------------------------------------------------

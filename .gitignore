@@ -1,0 +1,13 @@
+# Local mkcert CA and TLS keys — never commit
+/certs/
+/tools/mkcert.exe
+*.pem
+!**/public/**/*.pem
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+.freebuff/
+Communications/

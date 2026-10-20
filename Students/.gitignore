@@ -1,0 +1,71 @@
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+
+# Laravel dependencies
+/vendor/
+
+# Node.js dependencies
+/node_modules/
+
+# Frontend build files
+/public/build/
+/public/hot
+
+# Laravel runtime files
+/storage/*.key
+/storage/pail
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/testing/*
+/storage/framework/views/*
+/storage/logs/*
+
+# Bootstrap cache
+/bootstrap/cache/*.php
+
+# PHPUnit / testing
+.phpunit.result.cache
+.phpunit.cache
+/coverage/
+
+# IDEs and editors
+/.idea/
+/.vscode/
+/*.sublime-workspace
+*.swp
+*.swo
+
+# Operating system files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Debug and temporary files
+*.log
+*.tmp
+*.bak
+
+# Local development tools
+/auth.json
+.phpactor.yml
+/.phpunit-watcher.yml
+
+# Local database files
+/database/*.sqlite
+/database/*.sqlite-*
+
+# Vite / npm debug logs
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# Docker local overrides
+docker-compose.override.yml
+
+# Local HTTPS / mkcert (repo-root certs/ is also ignored)
+/certs/
+*.pem
+*.key

@@ -3,7 +3,10 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
-        "dev": "vite"
+        "dev": "vite",
+        "serve:lan": "node ../scripts/lan-https-proxy.mjs both",
+        "serve:lan:students": "node ../scripts/lan-https-proxy.mjs students",
+        "serve:lan:teachers": "node ../scripts/lan-https-proxy.mjs teachers"
     },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",

@@ -1,2 +1,11 @@
 # Communications
 A real-time communication platform that allows users to send chat messages, make voice calls, and start video calls for seamless one-on-one and group communication.
+
+## LAN HTTPS (camera / mic / WebRTC on phones)
+
+See **[LAN-HTTPS.md](./LAN-HTTPS.md)** for mkcert certificates, firewall rules, and `npm run serve:lan`.
+
+| App | URL |
+|-----|-----|
+| Students | `https://192.168.1.50:8440` |
+| Teachers | `https://192.168.1.50:8441` |

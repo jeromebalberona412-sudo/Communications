@@ -2,48 +2,46 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     /**
-     * Run the migrations.
+     * Canonical shared users schema. Do not run this against Supabase
+     * until the reviewed SQL script in database/sql/supabase_users.sql
+     * has been approved and executed manually.
      */
     public function up(): void
     {
+        if (Schema::hasTable('users')) {
+            return;
+        }
+
         Schema::create('users', function (Blueprint $table) {
             $table->id();
-            $table->string('name');
-            $table->string('email')->unique();
-            $table->timestamp('email_verified_at')->nullable();
+            $table->string('student_id', 30)->nullable();
+            $table->string('username', 30)->nullable();
+            $table->string('name')->nullable();
             $table->string('password');
+            $table->string('role', 20);
+            $table->boolean('is_active')->default(true);
             $table->rememberToken();
             $table->timestamps();
         });
 
-        Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
-            $table->string('token');
-            $table->timestamp('created_at')->nullable();
-        });
+        DB::statement('CREATE UNIQUE INDEX IF NOT EXISTS users_student_id_unique ON users (student_id) WHERE student_id IS NOT NULL');
+        DB::statement('CREATE UNIQUE INDEX IF NOT EXISTS users_username_unique ON users (username) WHERE username IS NOT NULL');
+        DB::statement('CREATE INDEX IF NOT EXISTS users_role_index ON users (role)');
 
-        Schema::create('sessions', function (Blueprint $table) {
-            $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index();
-            $table->string('ip_address', 45)->nullable();
-            $table->text('user_agent')->nullable();
-            $table->longText('payload');
-            $table->integer('last_activity')->index();
-        });
+        if (Schema::getConnection()->getDriverName() === 'pgsql') {
+            DB::statement("ALTER TABLE users ADD CONSTRAINT users_role_check CHECK (role IN ('students', 'teachers'))");
+            DB::statement("ALTER TABLE users ADD CONSTRAINT users_identifier_check CHECK ((role = 'students' AND student_id IS NOT NULL) OR (role = 'teachers' AND username IS NOT NULL))");
+        }
     }
 
-    /**
-     * Reverse the migrations.
-     */
     public function down(): void
     {
         Schema::dropIfExists('users');
-        Schema::dropIfExists('password_reset_tokens');
-        Schema::dropIfExists('sessions');
     }
 };

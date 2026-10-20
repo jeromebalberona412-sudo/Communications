@@ -1,0 +1,100 @@
+.page-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: end;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.search-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: end;
+}
+
+.search-form input {
+    min-width: min(100%, 240px);
+}
+
+.primary-button,
+.secondary-button {
+    min-height: 2.6rem;
+    border-radius: 0.7rem;
+    padding: 0.4rem 0.95rem;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.primary-button {
+    border: 0;
+    background: var(--accent);
+    color: #fff;
+}
+
+.primary-button:hover {
+    background: var(--accent-dark);
+    color: #fff;
+}
+
+.secondary-button {
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+}
+
+.student-table {
+    width: 100%;
+    margin: 0;
+}
+
+.student-table th {
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.empty-state {
+    padding: 2rem 1rem;
+    text-align: center;
+    color: var(--muted);
+}
+
+.form-panel {
+    max-width: 640px;
+}
+
+.form-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+@media (max-width: 720px) {
+    .student-table thead {
+        display: none;
+    }
+
+    .student-table tr {
+        display: block;
+        border-bottom: 1px solid var(--line);
+        padding: 0.75rem 0;
+    }
+
+    .student-table td {
+        display: flex;
+        justify-content: space-between;
+        gap: 1rem;
+        border: 0;
+        padding: 0.25rem 0;
+    }
+
+    .student-table td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-weight: 600;
+    }
+}

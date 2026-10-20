@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -12,20 +12,34 @@ class User extends Authenticatable
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
+    public const STATUS_ACTIVE = 'ACTIVE';
+
+    public const ROLE_STUDENTS = 'students';
+
+    public const ROLE_TEACHERS = 'teachers';
+
+    /** Compatibility aliases for the Communications package. */
+    public const ROLE_SK_OFFICIAL = self::ROLE_TEACHERS;
+
+    public const ROLE_SK_FED = 'sk_fed';
+
+    public const ROLE_KABATAAN = self::ROLE_STUDENTS;
+
     /**
-     * The attributes that are mass assignable.
-     *
      * @var list<string>
      */
     protected $fillable = [
+        'student_id',
+        'username',
         'name',
-        'email',
         'password',
+        'role',
+        'is_active',
+        'last_seen',
+        'online_status',
     ];
 
     /**
-     * The attributes that should be hidden for serialization.
-     *
      * @var list<string>
      */
     protected $hidden = [
@@ -34,15 +48,47 @@ class User extends Authenticatable
     ];
 
     /**
-     * Get the attributes that should be cast.
-     *
+     * @var list<string>
+     */
+    protected $appends = [
+        'status',
+    ];
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
+            'is_active' => 'boolean',
             'password' => 'hashed',
+            'last_seen' => 'datetime',
         ];
+    }
+
+    public function getStatusAttribute(): string
+    {
+        return $this->is_active ? self::STATUS_ACTIVE : 'INACTIVE';
+    }
+
+    public function displayName(): string
+    {
+        if (filled($this->name)) {
+            return $this->name;
+        }
+
+        return $this->role === 'teachers'
+            ? (string) $this->username
+            : (string) $this->student_id;
+    }
+
+    public function officialProfile(): HasOne
+    {
+        return $this->hasOne(OfficialProfile::class);
+    }
+
+    public function barangay(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(Barangay::class);
     }
 }
