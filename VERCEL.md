@@ -1,20 +1,34 @@
-# Vercel build (Students & Teachers)
+# Vercel — Students & Teachers (Vite assets only)
 
-## Why the old build failed
+This builds **frontend assets** (`public/build`). It does **not** deploy the Laravel/PHP backend.
 
-`resources/js/communications.js` imported `../../../Communications/...`.
-On Vercel with **Root Directory = Students** (or Teachers), that sibling folder was missing — and the shared `Communications/` package was not in git.
+## Root cause of past failures
 
-## Fix
+1. `resources/js/communications.js` imported `../../../Communications/...` (sibling outside the app).
+2. With **Root Directory = Students**, Vercel only has `/vercel/path0/resources/...` — that sibling path does not exist.
+3. A root `.gitignore` rule `Communications/` also ignored `Students/packages/Communications/` until fixed to `/Communications/`.
 
-1. Shared package is mirrored into each app:
-   - `Students/packages/Communications`
-   - `Teachers/packages/Communications`
-2. Vite resolves `@comms` → `packages/Communications/assets`
-3. Composer autoloads `App\Modules\Communications\` from `packages/Communications/`
-4. `npm run build` runs `prebuild` → `scripts/ensure-comms.mjs`
+## Correct imports (inside each app)
 
-## Before every push (after editing root `Communications/`)
+```javascript
+import '../../packages/Communications/assets/js/communication.js';
+```
+
+From `resources/js` → `packages/Communications/assets/js`.
+
+## Vercel project settings
+
+| Setting | Students | Teachers |
+|---------|----------|----------|
+| Root Directory | `Students` | `Teachers` |
+| Install Command | `npm install` | `npm install` |
+| Build Command | `npm run build` | `npm run build` |
+| Output Directory | `public/build` | `public/build` |
+| Production Branch | `main` (latest) | `main` (latest) |
+
+Redeploy **without** build cache after changing imports.
+
+## Before deploy
 
 ```powershell
 cd C:\Users\admin\Documents\GitHub\Communications
@@ -23,23 +37,9 @@ cd Students; npm run build
 cd ..\Teachers; npm run build
 ```
 
-Commit **both** `packages/Communications` folders (required for Vercel).
+Commit `Students/packages/Communications` and `Teachers/packages/Communications` (must be in git).
 
-> Important: root `.gitignore` must use `/Communications/` (with leading slash).
-> A bare `Communications/` pattern also ignores `Students/packages/Communications`
-> and breaks Vercel with a silent missing-package / `npm run build` exit 1.
+## npm warnings
 
-## Vercel project settings
-
-Create **two** projects from the same monorepo:
-
-| Setting | Students | Teachers |
-|---------|----------|----------|
-| Root Directory | `Students` | `Teachers` |
-| Install Command | `npm install` | `npm install` |
-| Build Command | `npm run build` | `npm run build` |
-| Output Directory | `public/build` | `public/build` |
-
-`vercel.json` in each app already sets install/build/output.
-
-> Note: `npm run build` only builds frontend assets. Full Laravel PHP hosting on Vercel needs a separate PHP runtime / different host (e.g. Forge, Railway, Cloudways). This fix unblocks the Vite step that was failing.
+- `cache-dir` — usually injected by the host (Cursor/Vercel tooling), not this repo. Safe to ignore if no project `.npmrc` sets it.
+- `esbuild` install scripts — both apps set `"allowScripts": { "esbuild": true }`.

@@ -1,5 +1,7 @@
-import '@comms/js/communication.js';
-import '@comms/js/realtime.js';
-import '@comms/js/webrtc.js';
-import '@comms/js/chat.js';
-import '@comms/js/header-chat.js';
+// Resolved inside the Teachers app tree for Vercel Root Directory = Teachers.
+// Path: resources/js → ../../packages/Communications/assets/js
+import '../../packages/Communications/assets/js/communication.js';
+import '../../packages/Communications/assets/js/realtime.js';
+import '../../packages/Communications/assets/js/webrtc.js';
+import '../../packages/Communications/assets/js/chat.js';
+import '../../packages/Communications/assets/js/header-chat.js';

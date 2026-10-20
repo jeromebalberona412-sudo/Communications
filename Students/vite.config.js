@@ -6,6 +6,10 @@ import laravel from 'laravel-vite-plugin';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
+/**
+ * Prefer the vendored package inside this app (Vercel Root Directory = Students).
+ * Fall back to the monorepo sibling only for local development.
+ */
 function resolveCommsAssets() {
     const candidates = [
         path.resolve(__dirname, 'packages/Communications/assets'),
@@ -19,7 +23,8 @@ function resolveCommsAssets() {
     }
 
     throw new Error(
-        'Communications assets not found. Run: node ../scripts/sync-comms-package.mjs'
+        'Communications assets not found at packages/Communications/assets. ' +
+            'From repo root run: node scripts/sync-comms-package.mjs'
     );
 }
 
@@ -38,6 +43,7 @@ export default defineConfig({
     ],
     resolve: {
         alias: {
+            // Optional alias; production imports use ../../packages/... relative paths.
             '@comms': commsAssets,
             '@supabase/supabase-js': path.resolve(__dirname, 'node_modules/@supabase/supabase-js'),
         },
