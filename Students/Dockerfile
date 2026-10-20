@@ -12,6 +12,7 @@ COPY packages ./packages
 COPY app ./app
 COPY bootstrap ./bootstrap
 COPY config ./config
+COPY conf ./conf
 COPY database ./database
 COPY public ./public
 COPY resources ./resources

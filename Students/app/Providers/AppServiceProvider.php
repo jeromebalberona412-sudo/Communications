@@ -27,10 +27,12 @@ class AppServiceProvider extends ServiceProvider
         Paginator::useBootstrapFive();
 
         $appUrl = (string) config('app.url', '');
-        if (
-            (getenv('VERCEL') || getenv('VERCEL_ENV'))
-            || ($appUrl !== '' && str_starts_with($appUrl, 'https://'))
-        ) {
+        $behindHttpsProxy = getenv('VERCEL')
+            || getenv('VERCEL_ENV')
+            || getenv('RENDER')
+            || ($appUrl !== '' && str_starts_with($appUrl, 'https://'));
+
+        if ($behindHttpsProxy) {
             URL::forceScheme('https');
         }
     }

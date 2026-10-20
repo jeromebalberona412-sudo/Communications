@@ -1,124 +1,91 @@
 # Deploy Students & Teachers on Render (Docker)
 
-## Root causes (common)
+Render has **no native PHP**. Use **Docker** Web Services.
 
-### A. `php: command not found`
+Students is verified live: `https://communications-chats.onrender.com/login` → **200**.
 
-Render **native runtimes** are Node, Python, Ruby, Go, Rust, Elixir — **not PHP**. Use **Docker**.
+## Teachers (same stack as Students)
 
-### B. `/` redirects but `/login` (and `/up`) show nginx “Page not Found”
+### Create / fix the Teachers service
 
-The `richarvey/nginx-php-fpm` image defaults to `try_files … =404`. Only `/` hits `index.php`.
+1. **New → Web Service** (or edit existing)
+2. **Runtime: Docker** (not Node)
+3. **Root Directory:** `Teachers`
+4. **Dockerfile Path:** `./Dockerfile`
+5. **Start / Docker Command:** leave **blank**
+6. **Health Check Path:** `/up`
+7. Set env vars (below) → **Deploy** (clear build cache)
 
-**Fix:** `PHP_CATCHALL=1` in the Dockerfile (already set) so nginx rewrites to `/index.php?$args`.
-
-## Solution (Option B — keep Render + Docker)
-
-Official approach: [Deploy Laravel with Docker on Render](https://render.com/docs/deploy-php-laravel-docker)
-
-Files added:
-
-| Path | Purpose |
-|------|---------|
-| `Students/Dockerfile` | PHP 8 + nginx/php-fpm, Composer, Vite build, `public` web root |
-| `Teachers/Dockerfile` | Same for Teachers |
-| `Students/scripts/00-laravel-deploy.sh` | Config/route/view cache on boot (migrations **off** by default) |
-| `Teachers/scripts/00-laravel-deploy.sh` | Same |
-| `Students/.dockerignore` / `Teachers/.dockerignore` | Exclude `.env`, `node_modules`, local `vendor` |
-| `render.yaml` | Optional Blueprint for both services |
-
-Web server: **nginx + php-fpm** (image `richarvey/nginx-php-fpm`), document root = `/var/www/html/public`.  
-Not `php artisan serve` in production.
-
-## Redeploy (manual Dashboard — recommended once)
-
-### Students
-
-1. Render → **New → Web Service** → connect this repo  
-2. **Language / Runtime: Docker** (not Node)  
-3. **Root Directory:** `Students`  
-4. **Dockerfile Path:** `./Dockerfile`  
-5. Clear any old **Start Command** like `php artisan serve` (use image `CMD`)  
-6. **Health Check Path:** `/up`  
-7. Set environment variables (below)  
-8. Deploy  
-
-### Teachers
-
-Same steps with Root Directory `Teachers`.
-
-Or use Blueprint: **New → Blueprint** → select `render.yaml`.
-
-## Environment variables (set in Render UI — never commit)
+### Teachers env vars
 
 ```
-APP_NAME=iLearnU Students
+APP_NAME=iLearnU Teachers
 APP_ENV=production
 APP_DEBUG=false
-APP_KEY=base64:...          # php artisan key:generate --show
-APP_URL=https://YOUR-SERVICE.onrender.com
+APP_KEY=base64:...
+APP_URL=https://YOUR-TEACHERS-SERVICE.onrender.com
 
 LOG_CHANNEL=stderr
 SESSION_DRIVER=cookie
 SESSION_SECURE_COOKIE=true
-SESSION_COOKIE=students_session
+SESSION_COOKIE=teachers_session
 CACHE_STORE=file
 QUEUE_CONNECTION=sync
 
 DB_CONNECTION=pgsql
-DB_HOST=aws-0-....pooler.supabase.com
+DB_HOST=...supabase pooler...
 DB_PORT=5432
 DB_DATABASE=postgres
-DB_USERNAME=postgres....
+DB_USERNAME=...
 DB_PASSWORD=...
 DB_SSLMODE=require
-# Optional instead of discrete DB_* :
-# DB_URL=postgresql://USER:PASS@HOST:5432/postgres?sslmode=require
 
-VITE_SUPABASE_URL=https://....supabase.co
+VITE_SUPABASE_URL=...
 VITE_SUPABASE_PUBLISHABLE_KEY=...
-SUPABASE_URL=https://....supabase.co
+SUPABASE_URL=...
 SUPABASE_PUBLISHABLE_KEY=...
-COMMS_PORTAL_USER_TYPE=students
+COMMS_PORTAL_USER_TYPE=teachers
 MIGRATE_ON_DEPLOY=false
 ```
 
-Teachers: same, with `teachers_session` and `COMMS_PORTAL_USER_TYPE=teachers`.
+Use a **different** `APP_KEY` and `SESSION_COOKIE` than Students.
 
-Use Supabase **session pooler** (port 5432) for long-lived PHP, not the transaction pooler (6543), unless you know you need it.
+### Verify Teachers
 
-## Migrations
+1. `https://YOUR-TEACHERS.onrender.com/up` → 200  
+2. `/` → redirect to `/login`  
+3. `/login` → teacher login page (not nginx sad-face 404)
 
-Not run automatically. When you approve:
+## Students (already working pattern)
 
-```
-MIGRATE_ON_DEPLOY=true
-```
+| Setting | Value |
+|---------|--------|
+| Runtime | Docker |
+| Root Directory | `Students` |
+| Dockerfile | `./Dockerfile` |
+| Health | `/up` |
 
-or one-off Render Shell: `php artisan migrate --force`
+## What the Docker image does
 
-## Verify after deploy
+- PHP 8 + nginx/php-fpm (`richarvey/nginx-php-fpm`)
+- `composer install` + `npm run build` at **image build** time
+- `WEBROOT=public`, `PHP_CATCHALL=1`
+- Explicit `conf/nginx/nginx-site.conf` (Laravel `try_files` → `index.php`)
+- Boot script caches config/routes/views; **no migrate** unless `MIGRATE_ON_DEPLOY=true`
 
-1. Service status **Live**  
-2. `https://YOUR-SERVICE.onrender.com/up` → 200  
-3. `/` redirects to `/login`  
-4. Login works against Supabase Postgres  
+## Common failures
 
-Local Docker check (optional, if Docker Desktop installed):
+| Symptom | Fix |
+|---------|-----|
+| `php: command not found` | Runtime must be **Docker**, clear `php artisan serve` |
+| `/` OK but `/login` nginx 404 | Need `PHP_CATCHALL=1` + nginx-site.conf (already in repo) |
+| Build OK, blank/errors | Check `APP_KEY`, `APP_URL`, DB env vars |
+
+## Before push
 
 ```powershell
-cd Students
-docker build -t communications-students .
+cd C:\Users\admin\Documents\GitHub\Communications
+node scripts\sync-comms-package.mjs
 ```
 
-## Free-tier notes
-
-- Free web services **spin down** after idle; cold start can take ~30–60s  
-- Ephemeral disk — prefer `SESSION_DRIVER=cookie`  
-- Separate free services for Students and Teachers  
-
-## Do not
-
-- Use Node runtime + `php artisan serve`  
-- Commit `.env` or secrets  
-- Set `APP_DEBUG=true` in production  
+Commit `Students/` + `Teachers/` Docker/nginx/scripts changes, then redeploy Teachers.
