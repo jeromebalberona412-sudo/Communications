@@ -9,3 +9,7 @@ See **[LAN-HTTPS.md](./LAN-HTTPS.md)** for mkcert certificates, firewall rules, 
 |-----|-----|
 | Students | `https://192.168.1.50:8440` |
 | Teachers | `https://192.168.1.50:8441` |
+
+## Vercel
+
+See **[VERCEL.md](./VERCEL.md)**. After changing the shared package, run `node scripts/sync-comms-package.mjs` and commit `Students/packages/Communications` + `Teachers/packages/Communications`.

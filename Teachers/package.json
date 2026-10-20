@@ -2,8 +2,10 @@
     "private": true,
     "type": "module",
     "scripts": {
+        "prebuild": "node ./scripts/ensure-comms.mjs",
         "build": "vite build",
         "dev": "vite",
+        "sync:comms": "node ./scripts/ensure-comms.mjs",
         "serve:lan": "node ../scripts/lan-https-proxy.mjs both",
         "serve:lan:students": "node ../scripts/lan-https-proxy.mjs students",
         "serve:lan:teachers": "node ../scripts/lan-https-proxy.mjs teachers"

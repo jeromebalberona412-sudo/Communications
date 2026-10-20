@@ -22,7 +22,7 @@
     "autoload": {
         "psr-4": {
             "App\\": "app/",
-            "App\\Modules\\Communications\\": "../Communications/",
+            "App\\Modules\\Communications\\": "packages/Communications/",
             "Database\\Factories\\": "database/factories/",
             "Database\\Seeders\\": "database/seeders/"
         }

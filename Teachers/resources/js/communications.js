@@ -1,5 +1,5 @@
-import '../../../Communications/assets/js/communication.js';
-import '../../../Communications/assets/js/realtime.js';
-import '../../../Communications/assets/js/webrtc.js';
-import '../../../Communications/assets/js/chat.js';
-import '../../../Communications/assets/js/header-chat.js';
+import '@comms/js/communication.js';
+import '@comms/js/realtime.js';
+import '@comms/js/webrtc.js';
+import '@comms/js/chat.js';
+import '@comms/js/header-chat.js';
