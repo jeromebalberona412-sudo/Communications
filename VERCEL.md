@@ -1,40 +1,50 @@
-# Deploy Students & Teachers on Vercel (Laravel + Vite)
+# Vercel deployment (Students / Teachers)
 
-## Why you saw `404: NOT_FOUND`
+## Root cause of `404: NOT_FOUND`
 
-The old `vercel.json` set `outputDirectory: public/build`. Vercel then served **only** compiled JS/CSS — no PHP, no Laravel routes, no `/login`. Opening `https://….vercel.app/` returned platform 404 even when status was **Ready**.
+Your project **`communications`** deploys from the **repository root**.
 
-Laravel already redirects `/` → `/login` in `routes/web.php`. PHP must run for that to work.
+- `Students/vercel.json` is **ignored** unless Root Directory = `Students`
+- With no root config, Vercel had nothing to serve → platform `NOT_FOUND`
+- Old `outputDirectory: public/build` also caused 404 (static assets only, no PHP)
 
-## Correct setup (two Vercel projects)
+Laravel already does `Route::get('/', fn () => redirect()->route('students.login'))`. PHP must run for `/` → `/login`.
 
-| Setting | Students project | Teachers project |
-|---------|------------------|------------------|
-| Root Directory | `Students` | `Teachers` |
-| Framework Preset | Other | Other |
-| Install / Build | from each app’s `vercel.json` | same |
+## Fix applied
 
-Do **not** set Output Directory in the Vercel UI (leave empty). Routing is handled by `vercel.json`.
+Root [`vercel.json`](./vercel.json) builds **Students** and routes all requests to `Students/api/index.php` (vercel-php).
 
-## Required Environment Variables (Vercel → Settings → Environment Variables)
+## Project settings (communications)
 
-Set for **Production** (and Preview if needed). Never commit secrets.
+| Setting | Value |
+|---------|--------|
+| Root Directory | **`.`** (empty / repository root) — keep this if using root `vercel.json` |
+| Output Directory | **leave empty** |
+| Framework | Other |
+
+**OR** set Root Directory to `Students` and rely on `Students/vercel.json` (then root `vercel.json` is unused).
+
+Do not set Output Directory to `public/build`.
+
+## Teachers (separate Vercel project)
+
+Create a second project with:
+
+- Root Directory = `Teachers`
+- Uses `Teachers/vercel.json`
+
+## Required env vars (Students project)
 
 ```
-APP_NAME=iLearnU Students
 APP_ENV=production
-APP_KEY=base64:...          # php artisan key:generate --show
 APP_DEBUG=false
-APP_URL=https://YOUR-students-project.vercel.app
-
+APP_KEY=base64:...
+APP_URL=https://communications-x3rg.vercel.app
 SESSION_DRIVER=cookie
 SESSION_SECURE_COOKIE=true
-SESSION_COOKIE=students_session
-XSRF_COOKIE=students-xsrf
 CACHE_STORE=array
 LOG_CHANNEL=stderr
 QUEUE_CONNECTION=sync
-
 DB_CONNECTION=pgsql
 DB_HOST=...
 DB_PORT=5432
@@ -42,7 +52,6 @@ DB_DATABASE=...
 DB_USERNAME=...
 DB_PASSWORD=...
 DB_SSLMODE=require
-
 VITE_SUPABASE_URL=...
 VITE_SUPABASE_PUBLISHABLE_KEY=...
 SUPABASE_URL=...
@@ -50,17 +59,12 @@ SUPABASE_PUBLISHABLE_KEY=...
 COMMS_PORTAL_USER_TYPE=students
 ```
 
-Teachers: same pattern with `teachers_session`, `COMMS_PORTAL_USER_TYPE=teachers`, and that project’s `APP_URL`.
+## Redeploy
 
-## After pushing
+```powershell
+git add vercel.json VERCEL.md
+git commit -m "Fix Vercel 404: serve Students Laravel from repo-root vercel.json"
+git push
+```
 
-1. Commit `api/index.php`, updated `vercel.json`, and `AppServiceProvider` changes.
-2. Redeploy **without** build cache.
-3. Open the deployment URL — you should get redirected to `/login` and see the login page.
-
-## Limits on Vercel
-
-- Writable disk is `/tmp` only (configured automatically).
-- No long-running queues/websockets on the PHP function.
-- WebRTC / Supabase Realtime still use cloud endpoints from the browser.
-- Prefer a VPS/Forge for heavy file uploads or persistent local storage.
+Then Redeploy without build cache. Opening `/` should redirect to `/login`.

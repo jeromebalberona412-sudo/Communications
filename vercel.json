@@ -1,0 +1,21 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "framework": null,
+  "installCommand": "cd Students && composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction && npm install",
+  "buildCommand": "cd Students && npm run build",
+  "functions": {
+    "Students/api/index.php": {
+      "runtime": "vercel-php@0.7.4",
+      "memory": 1024,
+      "maxDuration": 30,
+      "includeFiles": "Students/{app,bootstrap,config,database,packages,public,resources,routes,storage,vendor}/**"
+    }
+  },
+  "routes": [
+    { "src": "/build/(.*)", "dest": "/Students/public/build/$1" },
+    { "src": "/favicon.ico", "dest": "/Students/public/favicon.ico" },
+    { "src": "/robots.txt", "dest": "/Students/public/robots.txt" },
+    { "src": "/(.*)", "dest": "/Students/api/index.php" }
+  ]
+}
