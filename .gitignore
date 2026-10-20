@@ -10,4 +10,9 @@ Thumbs.db
 .idea/
 .vscode/
 .freebuff/
-Communications/
+
+# Only the monorepo source at repo root (leading slash = this directory only).
+# Do NOT use a bare "Communications/" pattern — it also ignores
+# Students/packages/Communications and Teachers/packages/Communications,
+# which MUST be committed for Vercel builds.
+/Communications/

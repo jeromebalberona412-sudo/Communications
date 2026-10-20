@@ -1,0 +1,1106 @@
+.comms-auto-page {
+    --auto-accent: #0039A8;
+    --auto-accent-soft: #ececef;
+    --auto-border: #e5e7eb;
+    --auto-muted: #6b7280;
+    --auto-text: #111827;
+    --auto-panel: #ffffff;
+    --auto-bg: #f0f1f5;
+    --auto-danger: #b42318;
+    --auto-success: #15803d;
+
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 2rem 1rem 2.5rem;
+    color: var(--auto-text);
+}
+
+.comms-auto-breadcrumb {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    font-size: 0.82rem;
+    color: var(--auto-muted);
+    margin-bottom: 0.55rem;
+}
+
+.comms-auto-breadcrumb a {
+    color: var(--auto-accent);
+    text-decoration: none;
+    font-weight: 600;
+}
+
+.comms-auto-breadcrumb a:hover,
+.comms-auto-breadcrumb a:focus-visible {
+    text-decoration: underline;
+}
+
+.comms-auto-title-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.comms-auto-title-copy {
+    flex: 1 1 16rem;
+    min-width: 0;
+    padding-bottom: 0.35rem;
+}
+
+.comms-auto-title-main h1 {
+    margin: 0;
+    font-size: 1.55rem;
+    font-weight: 800;
+    color: var(--auto-text);
+    line-height: 1.2;
+}
+
+.comms-auto-lead {
+    margin: 0.55rem 0 0;
+    color: var(--auto-muted);
+    font-size: 0.92rem;
+    max-width: 36rem;
+    line-height: 1.45;
+}
+
+.comms-auto-back-btn {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    align-self: flex-start;
+}
+
+.comms-auto-card {
+    position: relative;
+    background: var(--auto-panel);
+    border: 1px solid var(--auto-border);
+    border-radius: 14px;
+    padding: 1.2rem 1.25rem 1.35rem;
+    box-shadow: 0 1px 2px rgba(17, 24, 39, 0.04);
+}
+
+.comms-auto-loading {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    background: rgba(255, 255, 255, 0.82);
+    border-radius: 14px;
+    color: var(--auto-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.comms-auto-loading[hidden] {
+    display: none !important;
+}
+
+@keyframes commsAutoSpin {
+    to { transform: rotate(360deg); }
+}
+
+.comms-auto-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid #e5e7eb;
+    border-top-color: var(--auto-accent);
+    border-radius: 50%;
+    animation: commsAutoSpin 0.55s linear infinite;
+}
+
+.comms-auto-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--auto-border);
+}
+
+.comms-auto-card-head h2 {
+    margin: 0 0 0.3rem;
+    font-size: 1.15rem;
+    font-weight: 750;
+    color: var(--auto-text);
+}
+
+.comms-auto-desc {
+    margin: 0;
+    color: var(--auto-muted);
+    max-width: 34rem;
+    font-size: 0.9rem;
+}
+
+.comms-auto-master-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    flex-shrink: 0;
+}
+
+.comms-auto-toggle-label {
+    font-weight: 700;
+    font-size: 0.9rem;
+    min-width: 1.6rem;
+    color: var(--auto-accent);
+}
+
+.comms-switch {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 26px;
+    margin: 0;
+    flex-shrink: 0;
+}
+
+.comms-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.comms-switch-slider {
+    position: absolute;
+    inset: 0;
+    cursor: pointer;
+    background: #dc2626;
+    border-radius: 999px;
+    transition: background 0.15s ease;
+}
+
+.comms-switch-slider::before {
+    content: '';
+    position: absolute;
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    top: 3px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.15s ease;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.comms-switch input:checked + .comms-switch-slider,
+.comms-switch.is-on .comms-switch-slider {
+    background: #16a34a;
+}
+
+.comms-switch.is-off .comms-switch-slider {
+    background: #dc2626;
+}
+
+.comms-switch input:checked + .comms-switch-slider::before {
+    transform: translateX(20px);
+}
+
+.comms-switch input:focus-visible + .comms-switch-slider {
+    outline: 2px solid #16a34a;
+    outline-offset: 2px;
+}
+
+.comms-auto-disabled-banner {
+    background: #fff8e8;
+    border: 1px solid #f0d58c;
+    border-radius: 10px;
+    padding: 0.8rem 0.95rem;
+    margin-bottom: 1rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.comms-auto-disabled-banner p {
+    margin: 0;
+    color: #7a5b00;
+    font-size: 0.9rem;
+    flex: 1 1 16rem;
+}
+
+.comms-auto-disabled-banner .comms-auto-btn-primary {
+    flex: 0 0 auto;
+}
+
+.comms-auto-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.95rem;
+}
+
+.comms-auto-count {
+    margin: 0;
+    color: var(--auto-muted);
+    font-size: 0.88rem;
+}
+
+.comms-auto-btn-primary {
+    border: none;
+    background: #16a34a;
+    color: #fff;
+    border-radius: 9px;
+    padding: 0.52rem 0.95rem;
+    font-weight: 650;
+    font-size: 0.9rem;
+}
+
+.comms-auto-btn-primary:hover,
+.comms-auto-btn-primary:focus-visible {
+    background: #15803d;
+    filter: none;
+}
+
+.comms-auto-btn-primary:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    filter: none;
+}
+
+.comms-auto-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.comms-auto-faq-card {
+    position: relative;
+    border: 1px solid var(--auto-border);
+    border-radius: 12px;
+    padding: 0.95rem 1rem;
+    background: #fff;
+    box-sizing: border-box;
+    max-width: 100%;
+    overflow: visible;
+}
+
+.comms-auto-faq-card.is-inactive {
+    opacity: 0.78;
+    background: #fafbfc;
+}
+
+.comms-auto-faq-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.65rem 0.85rem;
+    min-width: 0;
+}
+
+.comms-auto-faq-top-main {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.comms-auto-faq-question {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    color: var(--auto-text);
+    line-height: 1.35;
+}
+
+.comms-auto-faq-num {
+    color: var(--auto-muted);
+    font-weight: 750;
+}
+
+.comms-auto-faq-status-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.45rem 0.65rem;
+    margin-top: 0.55rem;
+}
+
+.comms-auto-faq-status-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: 100%;
+    padding: 0.28rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+.comms-auto-faq-status-chip.is-shown {
+    background: #ecfdf3;
+    color: #15803d;
+    border: 1px solid #bbf7d0;
+}
+
+.comms-auto-faq-status-chip.is-hidden {
+    background: #f3f4f6;
+    color: #6b7280;
+    border: 1px solid #e5e7eb;
+}
+
+.comms-auto-faq-status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+}
+
+.comms-auto-faq-response-label {
+    margin: 0 0 0.3rem;
+    font-size: 0.78rem;
+    color: var(--auto-muted);
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.comms-auto-faq-response-panel {
+    margin-top: 0.85rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px solid #dbeafe;
+    border-radius: 10px;
+    background: #f8fbff;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.comms-auto-faq-response-panel[hidden] {
+    display: none !important;
+}
+
+.comms-auto-faq-response {
+    margin: 0;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    color: #374151;
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.comms-auto-faq-response-hidden {
+    margin-top: 0.85rem;
+    padding: 0.75rem 0.85rem;
+    border: 1px dashed #d1d5db;
+    border-radius: 10px;
+    background: #f9fafb;
+    color: #6b7280;
+    font-size: 0.86rem;
+    cursor: pointer;
+}
+
+.comms-auto-faq-response-hidden:hover,
+.comms-auto-faq-response-hidden:focus-visible {
+    border-color: #0039A8;
+    color: #0039A8;
+    outline: none;
+}
+
+.comms-auto-faq-header-meta .comms-switch,
+.comms-auto-faq-status-row .comms-switch {
+    width: 40px;
+    height: 22px;
+}
+
+.comms-auto-faq-header-meta .comms-switch-slider::before,
+.comms-auto-faq-status-row .comms-switch-slider::before {
+    height: 16px;
+    width: 16px;
+}
+
+.comms-auto-faq-header-meta .comms-switch input:checked + .comms-switch-slider::before,
+.comms-auto-faq-status-row .comms-switch input:checked + .comms-switch-slider::before {
+    transform: translateX(18px);
+}
+
+.comms-auto-more-wrap {
+    position: relative;
+    flex: 0 0 auto;
+    align-self: flex-start;
+}
+
+.comms-auto-more-btn {
+    width: 40px;
+    height: 40px;
+    border: 1px solid #d1d5db;
+    border-radius: 10px;
+    background: #fff;
+    color: #374151;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    padding: 0;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.comms-auto-more-btn:hover,
+.comms-auto-more-btn:focus-visible,
+.comms-auto-more-btn[aria-expanded="true"] {
+    color: #0039A8;
+    border-color: #0039A8;
+    outline: none;
+    background: #eff6ff;
+    box-shadow: 0 0 0 3px rgba(0, 57, 168, 0.12);
+}
+
+.comms-auto-more-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 6px);
+    z-index: 40;
+    min-width: 200px;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
+    padding: 0.5rem;
+    display: grid;
+    gap: 0.4rem;
+}
+
+.comms-auto-more-menu[hidden] {
+    display: none !important;
+}
+
+.comms-auto-more-menu button {
+    border: 0;
+    text-align: left;
+    padding: 0.7rem 0.9rem;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 700;
+    cursor: pointer;
+    min-height: 44px;
+    width: 100%;
+    line-height: 1.25;
+    transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.comms-auto-more-menu button:hover,
+.comms-auto-more-menu button:focus-visible {
+    outline: none;
+}
+
+.comms-auto-more-menu button.is-toggle {
+    background: #eff6ff;
+    color: #0039A8;
+    box-shadow: inset 0 0 0 1px #93c5fd;
+}
+
+.comms-auto-more-menu button.is-toggle:hover,
+.comms-auto-more-menu button.is-toggle:focus-visible {
+    background: #dbeafe;
+    color: #002f8a;
+}
+
+.comms-auto-more-menu button.is-edit,
+.comms-auto-more-menu button.edit-button {
+    background: #facc15;
+    color: #1f2937 !important;
+    box-shadow: inset 0 0 0 1px #eab308;
+}
+
+.comms-auto-more-menu button.is-edit:hover,
+.comms-auto-more-menu button.is-edit:focus-visible,
+.comms-auto-more-menu button.edit-button:hover,
+.comms-auto-more-menu button.edit-button:focus-visible {
+    background: #eab308;
+    color: #111827 !important;
+}
+
+.comms-auto-more-menu button.is-danger {
+    background: #fee2e2;
+    color: #b91c1c;
+    box-shadow: inset 0 0 0 1px #fca5a5;
+}
+
+.comms-auto-more-menu button.is-danger:hover,
+.comms-auto-more-menu button.is-danger:focus-visible {
+    background: #fecaca;
+    color: #991b1b;
+}
+
+/* FAQ active switch — clearer Kabataan toggle */
+.comms-auto-faq-status-row .comms-switch {
+    width: 46px;
+    height: 26px;
+}
+
+.comms-auto-faq-status-row .comms-switch-slider::before {
+    height: 20px;
+    width: 20px;
+    left: 3px;
+    top: 3px;
+}
+
+.comms-auto-faq-status-row .comms-switch input:checked + .comms-switch-slider::before {
+    transform: translateX(20px);
+}
+
+.comms-auto-empty {
+    text-align: center;
+    padding: 1.75rem 1rem;
+}
+
+.comms-auto-empty h3 {
+    margin: 0 0 0.35rem;
+    font-size: 1.05rem;
+}
+
+.comms-auto-empty p {
+    margin: 0 0 0.95rem;
+    color: var(--auto-muted);
+}
+
+.comms-auto-toolbar .comms-auto-btn-primary[hidden] {
+    display: none !important;
+}
+
+/* Compact professional modals */
+.comms-auto-modal {
+    border: none;
+    border-radius: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: min(86vh, 560px);
+}
+
+.comms-auto-modal--delete {
+    max-height: none;
+}
+
+.comms-auto-modal-form {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    flex: 1 1 auto;
+}
+
+#commsFaqModal .modal-dialog {
+    max-width: 420px;
+    width: calc(100% - 1.5rem);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+#commsFaqDeleteModal .modal-dialog {
+    max-width: 360px;
+    width: calc(100% - 1.5rem);
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.comms-auto-modal-header {
+    background: #0039A8 !important;
+    color: #fff !important;
+    border-bottom: none !important;
+    padding: 0.75rem 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-shrink: 0;
+}
+
+.comms-auto-modal-header .modal-title {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 750;
+    margin: 0;
+}
+
+.comms-auto-delete-header {
+    background: #0039A8 !important;
+    color: #fff !important;
+    border-bottom: none !important;
+    padding: 0.75rem 0.95rem;
+}
+
+.comms-auto-delete-header .modal-title {
+    font-size: 1rem;
+    font-weight: 750;
+    margin: 0;
+    color: #fff !important;
+}
+
+.comms-auto-modal-close {
+    background: transparent;
+    border: none;
+    color: #fff !important;
+    font-size: 1.45rem;
+    font-weight: 500;
+    line-height: 1;
+    min-width: 34px;
+    min-height: 34px;
+    padding: 0.2rem 0.45rem;
+    border-radius: 6px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 1;
+    box-shadow: none;
+}
+
+.comms-auto-modal-close:hover,
+.comms-auto-modal-close:focus-visible {
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff !important;
+    outline: none;
+    opacity: 1;
+}
+
+/* Never use Bootstrap's dark X on blue headers */
+#commsFaqDeleteModal .btn-close,
+#commsFaqModal .btn-close {
+    filter: invert(1) grayscale(100%);
+    opacity: 1;
+}
+
+.comms-auto-modal .modal-body {
+    padding: 0.9rem 1rem;
+    overflow-y: auto;
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.comms-auto-modal-footer {
+    flex-shrink: 0;
+    background: #fff;
+    border-top: 1px solid var(--auto-border);
+    padding: 0.75rem 1rem;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+}
+
+.comms-auto-modal-footer .btn-primary,
+.comms-auto-save-btn {
+    background: #16a34a !important;
+    border-color: #15803d !important;
+    color: #fff !important;
+    min-width: 88px;
+    font-weight: 700;
+}
+
+.comms-auto-modal-footer .btn-primary:hover,
+.comms-auto-save-btn:hover {
+    background: #15803d !important;
+    border-color: #166534 !important;
+}
+
+.comms-auto-field {
+    margin-bottom: 0.85rem;
+    max-width: 100%;
+}
+
+.comms-auto-modal .form-label {
+    font-weight: 650;
+    font-size: 0.88rem;
+    color: var(--auto-text);
+    margin-bottom: 0.3rem;
+}
+
+.comms-auto-modal .form-control {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 9px;
+    border-color: #d1d5db;
+    color: var(--auto-text);
+    background: #fff;
+    box-shadow: none;
+}
+
+.comms-auto-response-input {
+    resize: none !important;
+    min-height: 96px;
+    max-height: 160px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.comms-auto-modal .form-control:focus {
+    border-color: var(--auto-accent);
+    box-shadow: 0 0 0 0.2rem rgba(44, 44, 62, 0.12);
+}
+
+.comms-auto-modal .form-control.is-invalid {
+    border-color: var(--auto-danger);
+}
+
+.comms-auto-field-meta {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+}
+
+.comms-auto-counter {
+    color: var(--auto-muted);
+    margin-left: auto;
+    white-space: nowrap;
+}
+
+.comms-auto-counter.is-over {
+    color: var(--auto-danger);
+    font-weight: 700;
+}
+
+.comms-auto-error {
+    color: var(--auto-danger);
+}
+
+.comms-link-btn {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--auto-border);
+    background: #fff;
+    color: var(--auto-accent);
+    border-radius: 9px;
+    padding: 0.45rem 0.85rem;
+    font-weight: 650;
+    font-size: 0.86rem;
+    text-decoration: none;
+}
+
+.comms-link-btn:hover,
+.comms-link-btn:focus-visible {
+    background: var(--auto-accent-soft);
+    color: var(--auto-accent);
+}
+
+@media (max-width: 768px) {
+    .comms-auto-page {
+        overflow-x: hidden;
+        padding: 1.25rem 0.85rem 2rem;
+    }
+
+    .comms-auto-title-main {
+        flex-wrap: nowrap;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .comms-auto-title-copy {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .comms-auto-back-btn {
+        flex: 0 0 auto;
+        width: auto;
+        white-space: nowrap;
+    }
+
+    .comms-auto-card-head {
+        flex-wrap: nowrap;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+
+    .comms-auto-card-head > div:first-child {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .comms-auto-toolbar {
+        flex-wrap: nowrap;
+        gap: 0.65rem;
+    }
+
+    .comms-auto-faq-top {
+        flex-wrap: nowrap;
+        gap: 0.5rem 0.65rem;
+    }
+
+    .comms-auto-faq-status-row {
+        width: auto;
+        flex-wrap: nowrap;
+    }
+
+    .comms-auto-more-menu {
+        min-width: 168px;
+        right: 0;
+    }
+
+    .comms-auto-disabled-banner {
+        flex-wrap: nowrap;
+        align-items: center;
+    }
+
+    .comms-auto-disabled-banner p {
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+}
+
+@media (max-width: 576px) {
+    .comms-auto-page {
+        padding: 1rem 0.75rem 1.75rem;
+        max-width: 100%;
+    }
+
+    .comms-auto-card {
+        padding: 1.05rem 0.95rem 1.15rem;
+        overflow: visible;
+    }
+
+    .comms-auto-faq-card {
+        padding: 0.9rem 0.85rem;
+    }
+
+    /* Keep desktop row layout on mobile */
+    .comms-auto-title-main {
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 0.65rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .comms-auto-title-copy {
+        padding-bottom: 0;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+
+    .comms-auto-title-main h1 {
+        font-size: 1.35rem;
+    }
+
+    .comms-auto-lead {
+        margin-top: 0.4rem;
+        font-size: 0.86rem;
+    }
+
+    .comms-auto-back-btn {
+        width: auto;
+        min-height: 36px;
+        padding: 0.4rem 0.7rem;
+        font-size: 0.8rem;
+        align-self: flex-start;
+    }
+
+    .comms-auto-card-head {
+        flex-direction: row;
+        flex-wrap: nowrap;
+    }
+
+    .comms-auto-card-head h2 {
+        font-size: 1.05rem;
+    }
+
+    .comms-auto-desc {
+        font-size: 0.84rem;
+    }
+
+    .comms-auto-toolbar {
+        flex-direction: row;
+        flex-wrap: nowrap;
+    }
+
+    .comms-auto-btn-primary {
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+
+    .comms-auto-faq-question {
+        font-size: 0.95rem;
+        padding-right: 0.25rem;
+    }
+
+    .comms-auto-faq-status-chip {
+        white-space: nowrap;
+        font-size: 0.68rem;
+        max-width: min(100%, 11.5rem);
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    #commsFaqModal .modal-dialog,
+    #commsFaqDeleteModal .modal-dialog {
+        max-width: calc(100% - 1rem);
+        margin: 0.75rem auto;
+    }
+
+    #commsFaqModal .modal-content,
+    #commsFaqDeleteModal .modal-content {
+        max-height: calc(100dvh - 1.5rem);
+    }
+}
+
+@media (max-width: 390px) {
+    .comms-auto-title-main h1 {
+        font-size: 1.2rem;
+    }
+
+    .comms-auto-lead {
+        font-size: 0.8rem;
+    }
+
+    .comms-auto-back-btn {
+        padding: 0.35rem 0.55rem;
+        font-size: 0.74rem;
+    }
+
+    .comms-auto-faq-status-chip {
+        max-width: 9.5rem;
+    }
+}
+
+@media (max-width: 360px) {
+    .comms-auto-more-btn {
+        width: 36px;
+        height: 36px;
+    }
+
+    .comms-auto-faq-status-row {
+        gap: 0.35rem;
+    }
+}
+
+/* Bootstrap CDN uses .nav-link / .nav-item — keep portal sidebar layout intact */
+body.comms-officials-page .main-sidebar {
+    position: fixed !important;
+    top: var(--sk-header-height, 70px) !important;
+    left: 0 !important;
+    z-index: 998 !important;
+    height: calc(100vh - var(--sk-header-height, 70px)) !important;
+    background: var(--sk-sidebar-bg, #fff) !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+}
+
+@supports (height: 100dvh) {
+    body.comms-officials-page .main-sidebar {
+        height: calc(100dvh - var(--sk-header-height, 70px)) !important;
+    }
+}
+
+body.comms-officials-page .main-sidebar .sidebar-admin {
+    padding-top: 16px !important;
+    padding-bottom: 18px !important;
+}
+
+body.comms-officials-page .main-content {
+    margin-left: var(--sk-sidebar-width, 260px);
+    width: calc(100% - var(--sk-sidebar-width, 260px));
+    max-width: calc(100% - var(--sk-sidebar-width, 260px));
+    min-height: calc(100vh - var(--sk-header-height, 70px));
+    box-sizing: border-box;
+}
+
+body.comms-officials-page .main-content.sidebar-collapsed {
+    margin-left: var(--sk-sidebar-collapsed-width, 80px);
+    width: calc(100% - var(--sk-sidebar-collapsed-width, 80px));
+    max-width: calc(100% - var(--sk-sidebar-collapsed-width, 80px));
+}
+
+@media (max-width: 768px) {
+    body.comms-officials-page .main-content,
+    body.comms-officials-page .main-content.sidebar-collapsed {
+        margin-left: 0;
+        width: 100%;
+        max-width: 100%;
+    }
+}
+
+body.comms-officials-page .main-sidebar .nav-item {
+    width: 100%;
+    margin: 0 0 2px;
+}
+
+body.comms-officials-page .main-sidebar .nav-link,
+body.comms-officials-page .main-sidebar .nav-link-dropdown {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    padding: 9px 14px !important;
+    min-height: 38px !important;
+    font-size: 13.5px !important;
+    line-height: 1.3 !important;
+    color: var(--sk-sidebar-text, inherit) !important;
+    text-decoration: none !important;
+    background: transparent !important;
+    border: 0 !important;
+}
+
+body.comms-officials-page .main-sidebar .nav-link:hover,
+body.comms-officials-page .main-sidebar .nav-link-dropdown:hover {
+    color: var(--sk-sidebar-yellow-hover-text, inherit) !important;
+    background: var(--sk-sidebar-yellow-hover, rgba(0, 57, 168, 0.08)) !important;
+}
+
+body.comms-officials-page .main-sidebar .nav-link.active,
+body.comms-officials-page .main-sidebar .nav-link-dropdown.active {
+    color: var(--sk-sidebar-yellow-text, inherit) !important;
+    background: var(--sk-sidebar-yellow, rgba(0, 57, 168, 0.12)) !important;
+}
+
+body.comms-officials-page .main-sidebar .nav-icon,
+body.comms-officials-page .main-sidebar .nav-subicon {
+    flex-shrink: 0 !important;
+    display: block !important;
+    transform: none !important;
+}
+
+/* Keep header chat actions visible when Bootstrap is loaded on this page */
+body.comms-officials-page .comms-chat-modal:not(.is-fullscreen) .comms-chat-modal-header {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto !important;
+}
+
+body.comms-officials-page .comms-chat-modal-actions,
+body.comms-officials-page .comms-thread-actions {
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    flex-shrink: 0 !important;
+    min-width: 120px !important;
+}
+
+body.comms-officials-page .comms-chat-modal-header .comms-chat-modal-action-btn,
+body.comms-officials-page .comms-chat-modal-header .comms-chat-modal-close,
+body.comms-officials-page .comms-chat-modal-header .comms-chat-modal-close-btn {
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.16) !important;
+}
+
+body.comms-officials-page .comms-chat-modal-header .comms-chat-modal-action-btn svg,
+body.comms-officials-page .comms-chat-modal-header .comms-chat-modal-close svg,
+body.comms-officials-page .comms-chat-modal-header .comms-chat-modal-close-btn svg {
+    stroke: #ffffff !important;
+    color: #ffffff !important;
+    display: block !important;
+}
+
+body.comms-officials-page .comms-thread-actions .comms-icon-btn {
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}

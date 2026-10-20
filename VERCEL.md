@@ -25,6 +25,10 @@ cd ..\Teachers; npm run build
 
 Commit **both** `packages/Communications` folders (required for Vercel).
 
+> Important: root `.gitignore` must use `/Communications/` (with leading slash).
+> A bare `Communications/` pattern also ignores `Students/packages/Communications`
+> and breaks Vercel with a silent missing-package / `npm run build` exit 1.
+
 ## Vercel project settings
 
 Create **two** projects from the same monorepo:

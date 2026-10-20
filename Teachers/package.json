@@ -10,6 +10,9 @@
         "serve:lan:students": "node ../scripts/lan-https-proxy.mjs students",
         "serve:lan:teachers": "node ../scripts/lan-https-proxy.mjs teachers"
     },
+    "allowScripts": {
+        "esbuild": true
+    },
     "devDependencies": {
         "@tailwindcss/vite": "^4.0.0",
         "axios": "^1.7.4",
