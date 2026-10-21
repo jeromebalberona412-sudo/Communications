@@ -19,6 +19,8 @@
         'unreadCount' => route('api.communications.unread-count'),
         'startCall' => url('/api/communications/conversations/__ID__/calls'),
         'callStatus' => url('/api/communications/calls/__ID__/status'),
+        'callShow' => url('/api/communications/calls/__ID__'),
+        'callHeartbeat' => url('/api/communications/calls/__ID__/heartbeat'),
         'calls' => route('api.communications.calls.index'),
         'ringingCalls' => route('api.communications.calls.ringing'),
         'presence' => route('api.communications.presence'),
@@ -28,6 +30,19 @@
         'conversationAvatar' => url('/api/communications/conversations/__ID__/avatar'),
     ];
 @endphp
+@if (session('status') || session('warning') || session('error'))
+<div class="comms-flash-wrap" role="status">
+    @if (session('status'))
+        <div class="alert alert-success mb-0">{{ session('status') }}</div>
+    @endif
+    @if (session('warning'))
+        <div class="alert alert-warning mb-0">{{ session('warning') }}</div>
+    @endif
+    @if (session('error'))
+        <div class="alert alert-danger mb-0">{{ session('error') }}</div>
+    @endif
+</div>
+@endif
 <div class="comms-officials-wrap">
 <div
     class="comms-app"
@@ -185,28 +200,6 @@
                 <div class="comms-modal-actions">
                     <button type="button" class="comms-btn-secondary" data-comms-rename-close>Cancel</button>
                     <button type="submit" class="comms-btn-primary" id="commsRenameSubmit">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <div class="comms-modal" id="commsNewGroupModal" hidden>
-        <div class="comms-modal-backdrop" data-comms-new-group-close></div>
-        <div class="comms-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="commsNewGroupModalTitle">
-            <header class="comms-modal-header">
-                <h2 id="commsNewGroupModalTitle">New group</h2>
-                <button type="button" class="comms-icon-btn" data-comms-new-group-close aria-label="Close">&times;</button>
-            </header>
-            <form class="comms-modal-body" id="commsNewGroupForm">
-                <label class="comms-field-label" for="commsNewGroupName">Group name (optional)</label>
-                <input type="text" id="commsNewGroupName" class="comms-field-input" maxlength="120" autocomplete="off" placeholder="e.g. Capstone Team">
-                <label class="comms-field-label" for="commsNewGroupSearch">Add people</label>
-                <input type="search" id="commsNewGroupSearch" class="comms-field-input" placeholder="Search people" autocomplete="off">
-                <div class="comms-new-group-results" id="commsNewGroupResults" hidden></div>
-                <div class="comms-new-group-selected" id="commsNewGroupSelected"></div>
-                <div class="comms-modal-actions">
-                    <button type="button" class="comms-btn-secondary" data-comms-new-group-close>Cancel</button>
-                    <button type="submit" class="comms-btn-primary" id="commsNewGroupSubmit">Create group</button>
                 </div>
             </form>
         </div>

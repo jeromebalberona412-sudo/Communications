@@ -33,6 +33,13 @@ import { createClient } from '@supabase/supabase-js';
     var inboxChannel = null;
     var callChannel = null;
     var callChannelId = null;
+    // Registry of live channels per topic. Supabase delivers a broadcast to
+    // every channel subscribed to that topic, so creating a second channel
+    // for the same topic makes every event arrive twice.
+    var topicChannels = Object.create(null);
+    var previousConversationTopic = null;
+    var seenSignalKeys = Object.create(null);
+    var seenMessageIds = Object.create(null);
     var pendingSignals = [];
     var typingTimers = Object.create(null);
     var lastTypingSent = 0;
@@ -242,6 +249,16 @@ import { createClient } from '@supabase/supabase-js';
 
     function deliverRealtimeInsert(row) {
         if (!row || row.id == null) return;
+        // The same message can arrive from the conversation channel, the
+        // inbox channel and the global watch. Only handle it once.
+        var messageKey = String(row.id);
+        if (seenMessageIds[messageKey]) return;
+        seenMessageIds[messageKey] = Date.now();
+        Object.keys(seenMessageIds).forEach(function (k) {
+            if (Date.now() - seenMessageIds[k] > 120000) {
+                delete seenMessageIds[k];
+            }
+        });
         var message = normalizeRealtimeMessage(row);
         var isAttachment = row.message_type === 'image' || row.message_type === 'file';
         if (window.CommsChat && typeof window.CommsChat.appendMessage === 'function') {
@@ -257,9 +274,11 @@ import { createClient } from '@supabase/supabase-js';
             window.onCommsHeaderMessageInsert(message);
         }
         // Call system messages arrive even when call-row/inbox signaling is delayed.
+        // Match "ringing…" as well as legacy "started" so the Answer/Decline modal opens.
         if (String(row.message_type || '') === 'call'
-            && /started/i.test(String(row.body || ''))
             && !message.mine
+            && /ringing|started|incoming/i.test(String(row.body || ''))
+            && !/ended|declined|missed|cancelled|canceled|answered/i.test(String(row.body || ''))
             && window.CommsWebRTC
             && typeof window.CommsWebRTC.syncIncomingFromServer === 'function') {
             window.CommsWebRTC.syncIncomingFromServer(row.conversation_id);
@@ -407,7 +426,7 @@ import { createClient } from '@supabase/supabase-js';
         if (!window.Comms) return;
         var gen = ++unreadFetchGen;
         var epoch = Number(window.__COMMS_INBOX_EPOCH__) || 0;
-        window.Comms.api(url, { dedupe: false }).then(function (data) {
+        window.Comms.api(url, { dedupe: true }).then(function (data) {
             if (gen !== unreadFetchGen) return;
             if ((Number(window.__COMMS_INBOX_EPOCH__) || 0) !== epoch) return;
             updateHeaderBadge(data.unread_count || 0);
@@ -477,6 +496,45 @@ import { createClient } from '@supabase/supabase-js';
         if (pendingSignals.length > 40) pendingSignals = pendingSignals.slice(-40);
     }
 
+    /**
+     * Stable signature of a signal payload.
+     *
+     * The same broadcast can be delivered more than once (reconnect, a second
+     * channel on the same topic, a retried send). Processing it twice would
+     * open two incoming-call modals or answer a call twice.
+     */
+    function signalSignature(payload) {
+        if (!payload || typeof payload !== 'object') return '';
+        return [
+            payload.type || '',
+            payload.call_id != null ? payload.call_id : '',
+            payload.conversation_id != null ? payload.conversation_id : '',
+            payload.from_user_id != null ? payload.from_user_id : '',
+            payload.sdp ? 'sdp' : '',
+            payload.candidate ? 'ice' : '',
+            payload.enabled != null ? String(payload.enabled) : '',
+            payload.reason || ''
+        ].join('|');
+    }
+
+    function isDuplicateSignal(payload) {
+        var key = signalSignature(payload);
+        if (!key) return false;
+        var now = Date.now();
+        var entry = seenSignalKeys[key];
+        if (entry && (now - entry) < 5000) {
+            return true;
+        }
+        seenSignalKeys[key] = now;
+        // Keep the map small.
+        Object.keys(seenSignalKeys).forEach(function (k) {
+            if (now - seenSignalKeys[k] > 30000) {
+                delete seenSignalKeys[k];
+            }
+        });
+        return false;
+    }
+
     function flushPendingSignals() {
         if (!pendingSignals.length) return;
         if (!window.CommsWebRTC || typeof window.CommsWebRTC.handleSignal !== 'function') return;
@@ -490,6 +548,7 @@ import { createClient } from '@supabase/supabase-js';
     function handleIncomingSignal(raw) {
         var payload = unwrapBroadcast(raw);
         if (!payload || isOwnSignal(payload)) return;
+        if (isDuplicateSignal(payload)) return;
         deliverSignal(payload);
     }
 
@@ -550,45 +609,95 @@ import { createClient } from '@supabase/supabase-js';
             })
             .subscribe();
 
-        if (signalChannel) {
-            sb.removeChannel(signalChannel);
-            signalChannel = null;
+        // One channel per topic: the conversation channel and the call channel
+        // share the "comms-signal-{id}" topic and must not be created twice.
+        var previousTopic = previousConversationTopic;
+        previousConversationTopic = 'comms-signal-' + conversationId;
+        signalChannel = acquireTopicChannel(previousConversationTopic, conversationId);
+        if (previousTopic && previousTopic !== previousConversationTopic) {
+            releaseTopicChannel(previousTopic);
+        }
+    }
+
+    /**
+     * Get (or create) the single channel for a topic and bind its handlers
+     * exactly once.
+     */
+    function acquireTopicChannel(topic, conversationId) {
+        var sb = ensureClient();
+        if (!sb || !topic) return null;
+
+        var entry = topicChannels[topic];
+        if (entry) {
+            entry.refs += 1;
+            return entry.channel;
         }
 
-        signalChannel = sb.channel('comms-signal-' + conversationId, {
-            config: { broadcast: { self: false } }
+        var channel = sb.channel(topic, {
+            config: { broadcast: { ack: true, self: false } }
+        });
+
+        channel.on('broadcast', { event: 'typing' }, function (raw) {
+            var data = (raw && raw.payload) ? raw.payload : (raw || {});
+            var cid = Number(data.conversation_id || conversationId || 0);
+            if (!cid) return;
+            if (data.user_id && Number(data.user_id) === myUserId()) return;
+
+            var pageMatch = Number(window.__COMMS_PAGE_ACTIVE_ID__) === cid;
+            var headerMatch = Number(window.__COMMS_HEADER_ACTIVE_ID__) === cid;
+            var chatMatch = window.CommsChat && typeof window.CommsChat.getActiveId === 'function'
+                && Number(window.CommsChat.getActiveId()) === cid;
+            if (!pageMatch && !headerMatch && !chatMatch) return;
+
+            clearTimeout(typingTimers[cid]);
+            if (data.state === 'stopped') {
+                applyTypingUi(cid, false);
+                return;
+            }
+            applyTypingUi(cid, true, { name: data.display_name || 'Someone', userId: data.user_id });
+            typingTimers[cid] = setTimeout(function () {
+                applyTypingUi(cid, false);
+            }, 4000);
         })
-            .on('broadcast', { event: 'typing' }, function (raw) {
-                var data = (raw && raw.payload) ? raw.payload : (raw || {});
-                var cid = Number(data.conversation_id || conversationId);
-                if (!cid) return;
-                if (data.user_id && Number(data.user_id) === myUserId()) return;
-
-                var pageMatch = Number(window.__COMMS_PAGE_ACTIVE_ID__) === cid;
-                var headerMatch = Number(window.__COMMS_HEADER_ACTIVE_ID__) === cid;
-                var chatMatch = window.CommsChat && typeof window.CommsChat.getActiveId === 'function'
-                    && Number(window.CommsChat.getActiveId()) === cid;
-                if (!pageMatch && !headerMatch && !chatMatch) return;
-
-                clearTimeout(typingTimers[cid]);
-                if (data.state === 'stopped') {
-                    applyTypingUi(cid, false);
-                    return;
-                }
-                applyTypingUi(cid, true, { name: data.display_name || 'Someone', userId: data.user_id });
-                typingTimers[cid] = setTimeout(function () {
-                    applyTypingUi(cid, false);
-                }, 4000);
-            })
             .on('broadcast', { event: 'webrtc' }, function (payload) {
                 handleIncomingSignal(payload);
             })
             .on('broadcast', { event: 'message' }, function (raw) {
-                var data = (raw && raw.payload) ? raw.payload : (raw || {});
+                var data = unwrapBroadcast(raw) || {};
                 var msg = data.message || data;
-                if (msg) deliverRealtimeInsert(msg);
+                if (msg && msg.id != null) {
+                    deliverRealtimeInsert(msg);
+                }
             })
             .subscribe();
+
+        topicChannels[topic] = { channel: channel, refs: 1 };
+
+        return channel;
+    }
+
+    /**
+     * Release a topic channel. It is only removed when nothing uses it any
+     * more, so a running call keeps its signaling channel alive.
+     */
+    function releaseTopicChannel(topic) {
+        if (!topic || !topicChannels[topic]) return;
+        var entry = topicChannels[topic];
+        entry.refs -= 1;
+        if (entry.refs > 0) return;
+
+        var sb = ensureClient();
+        try {
+            if (sb) sb.removeChannel(entry.channel);
+        } catch (e) { /* ignore */ }
+        delete topicChannels[topic];
+        if (signalChannel === entry.channel) {
+            signalChannel = null;
+        }
+        if (callChannel === entry.channel) {
+            callChannel = null;
+            callChannelId = null;
+        }
     }
 
     function conversationSignalChannel(conversationId) {
@@ -608,23 +717,11 @@ import { createClient } from '@supabase/supabase-js';
         if (conversationSignalChannel(conversationId)) {
             return Promise.resolve(conversationSignalChannel(conversationId));
         }
-        if (callChannel) {
-            try { sb.removeChannel(callChannel); } catch (e) { /* ignore */ }
-            callChannel = null;
-            callChannelId = null;
-        }
+
         callChannelId = conversationId;
-        callChannel = sb.channel('comms-signal-' + conversationId, {
-            config: { broadcast: { ack: true, self: false } }
-        })
-            .on('broadcast', { event: 'webrtc' }, function (payload) {
-                handleIncomingSignal(payload);
-            })
-            .on('broadcast', { event: 'message' }, function (raw) {
-                var data = unwrapBroadcast(raw) || {};
-                var msg = data.message || data;
-                if (msg && msg.id != null) deliverRealtimeInsert(msg);
-            });
+        // Reuse the topic channel when it already exists: a second channel on
+        // the same topic would deliver every broadcast twice.
+        callChannel = acquireTopicChannel('comms-signal-' + conversationId, conversationId);
 
         return new Promise(function (resolve) {
             var settled = false;
@@ -634,6 +731,10 @@ import { createClient } from '@supabase/supabase-js';
                 resolve(callChannel);
             };
             var timer = setTimeout(finish, 8000);
+            if (!callChannel) {
+                finish();
+                return;
+            }
             callChannel.subscribe(function (status) {
                 if (status !== 'SUBSCRIBED') return;
                 clearTimeout(timer);
@@ -645,10 +746,8 @@ import { createClient } from '@supabase/supabase-js';
     function teardownCallChannel(conversationId) {
         if (conversationId && String(callChannelId) !== String(conversationId)) return;
         if (!callChannel) return;
-        var sb = ensureClient();
-        try {
-            if (sb) sb.removeChannel(callChannel);
-        } catch (e) { /* ignore */ }
+        var topic = 'comms-signal-' + callChannelId;
+        releaseTopicChannel(topic);
         callChannel = null;
         callChannelId = null;
     }
@@ -662,6 +761,15 @@ import { createClient } from '@supabase/supabase-js';
         if (!sb || !channelName) return Promise.resolve();
 
         var packet = { type: 'broadcast', event: eventName || 'webrtc', payload: payload };
+
+        // Reuse the live channel for this topic when we already have one:
+        // creating a second channel on the same topic makes the client
+        // receive every broadcast twice.
+        var entry = topicChannels[channelName];
+        if (entry && entry.channel) {
+            return entry.channel.send(packet).catch(function () {});
+        }
+
         var prior = typeof sb.getChannels === 'function' ? sb.getChannels().slice() : [];
         var ch = sb.channel(channelName, {
             config: { broadcast: { ack: true, self: false } }
@@ -798,8 +906,16 @@ import { createClient } from '@supabase/supabase-js';
         var userId = root.dataset.currentUserId;
         var routes = bootRoutes();
 
+        var lastPresencePost = 0;
+
         function postPresence(online) {
             if (!routes.presence || !window.Comms || typeof window.Comms.api !== 'function') return;
+            // Presence is a heartbeat: never send it more often than every 10
+            // seconds. Visibility changes and the periodic heartbeat would
+            // otherwise saturate the endpoint rate limit.
+            var now = Date.now();
+            if (now - lastPresencePost < 10000) return;
+            lastPresencePost = now;
             window.Comms.api(routes.presence, {
                 method: 'POST',
                 body: JSON.stringify({ online: !!online }),
@@ -1063,22 +1179,28 @@ import { createClient } from '@supabase/supabase-js';
     }
 
     refreshUnread();
-    // Keep unread badge fresh even when broadcast is delayed.
-    setInterval(refreshUnread, enabled ? 12000 : 8000);
+    // Keep unread badge fresh even when broadcast is delayed. The interval is
+    // deliberately generous: realtime pushes the updates, this is only a
+    // safety net and must not trigger rate limiting.
+    setInterval(refreshUnread, enabled ? 30000 : 20000);
 
     // Cleanup Supabase subscriptions on page unload
     window.addEventListener('beforeunload', function () {
         var sb = ensureClient();
         if (!sb) return;
-        
+
         try {
             // Remove all channels explicitly for proper cleanup
+            Object.keys(topicChannels).forEach(function (topic) {
+                try { sb.removeChannel(topicChannels[topic].channel); } catch (e) { /* ignore */ }
+                delete topicChannels[topic];
+            });
             if (messageChannel) sb.removeChannel(messageChannel);
             if (signalChannel) sb.removeChannel(signalChannel);
             if (presenceChannel) sb.removeChannel(presenceChannel);
             if (inboxChannel) sb.removeChannel(inboxChannel);
             if (callChannel) sb.removeChannel(callChannel);
-            
+
             // Note: Supabase client disconnect is automatic on page unload,
             // but explicit channel removal is good practice
         } catch (e) {

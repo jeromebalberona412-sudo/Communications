@@ -2,7 +2,15 @@
     <div class="comms-call-stage">
         <div class="comms-remote-grid" id="commsRemoteGrid" hidden></div>
         <video id="commsRemoteVideo" class="comms-remote-video" autoplay playsinline muted></video>
+        <div class="comms-video-off comms-video-off--remote" id="commsRemoteVideoOff" hidden aria-hidden="true">
+            <span class="comms-video-off-avatar" id="commsRemoteVideoOffAvatar">U</span>
+            <span class="comms-video-off-label">Camera off</span>
+        </div>
         <video id="commsLocalVideo" class="comms-local-video" autoplay playsinline muted></video>
+        <div class="comms-video-off comms-video-off--local" id="commsLocalVideoOff" hidden aria-hidden="true">
+            <span class="comms-video-off-avatar" id="commsLocalVideoOffAvatar">U</span>
+            <span class="comms-video-off-label">Camera off</span>
+        </div>
         <audio id="commsRemoteAudio" class="comms-remote-audio" autoplay playsinline></audio>
 
         <div class="comms-call-center" id="commsCallCenter">

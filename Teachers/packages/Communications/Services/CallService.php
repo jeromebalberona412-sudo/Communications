@@ -15,10 +15,14 @@ use Illuminate\Support\Facades\Log;
 class CallService
 {
     /** Unanswered rings older than this are treated as missed. */
-    protected const STALE_RINGING_SECONDS = 90;
+    protected const STALE_RINGING_SECONDS = 60;
 
-    /** Accepted calls with no recent activity are treated as ended (tab close / crash). */
-    protected const STALE_ACCEPTED_MINUTES = 45;
+    /**
+     * Accepted calls that stopped sending heartbeats for this long are treated
+     * as ended (tab closed / browser crashed). The client heartbeats every
+     * 30s while connected, so three missed beats mean the call is really dead.
+     */
+    protected const STALE_ACCEPTED_SECONDS = 180;
 
     protected ?Message $lastCallNotice = null;
 
@@ -171,9 +175,57 @@ class CallService
         $peerName = method_exists($caller, 'displayName')
             ? (string) $caller->displayName()
             : (string) ($caller->name ?? 'Incoming caller');
-        $this->realtimeNotifier->notifyIncoming($call, $peerName !== '' ? $peerName : 'Incoming caller');
+        $extraReceivers = [];
+        if ($isGroupCall) {
+            $extraReceivers = ConversationParticipant::query()
+                ->where('conversation_id', $conversation->id)
+                ->where('user_id', '!=', $callerId)
+                ->get(['user_id', 'user_type'])
+                ->map(fn (ConversationParticipant $row) => [
+                    'id' => (int) $row->user_id,
+                    'type' => (string) $row->user_type,
+                ])
+                ->values()
+                ->all();
+        }
+        $this->realtimeNotifier->notifyIncoming(
+            $call,
+            $peerName !== '' ? $peerName : 'Incoming caller',
+            $extraReceivers,
+            $this->callerProfile($caller)
+        );
 
         return $call;
+    }
+
+    /**
+     * Identity of the caller, broadcast with the invitation so the incoming
+     * modal can show the real name and photo without another round trip.
+     *
+     * @return array<string, mixed>
+     */
+    public function callerProfile(Authenticatable $caller): array
+    {
+        $name = method_exists($caller, 'displayName')
+            ? (string) $caller->displayName()
+            : (string) ($caller->name ?? 'Incoming caller');
+
+        $serialized = null;
+        try {
+            $serialized = $this->conversations->serializeUser(
+                $caller instanceof User ? $caller : null,
+                $this->types->portalType()
+            );
+        } catch (\Throwable $e) {
+            report($e);
+        }
+
+        return [
+            'name' => $name !== '' ? $name : 'Incoming caller',
+            'profile_image_url' => (string) ($serialized['profile_image_url'] ?? ''),
+            'user_type' => (string) $this->types->portalType(),
+            'user_id' => (int) $caller->id,
+        ];
     }
 
     /**
@@ -200,9 +252,7 @@ class CallService
             foreach ($active as $call) {
                 $call->status = Call::STATUS_ENDED;
                 $call->ended_at = now();
-                if ($call->started_at) {
-                    $call->duration_seconds = max(0, (int) $call->ended_at->getTimestamp() - (int) $call->started_at->getTimestamp());
-                }
+                $call->duration_seconds = $this->durationBetween($call, $call->ended_at);
                 $call->save();
                 $this->postCallMessage($call, $user, ($call->call_type === Call::TYPE_VIDEO ? 'Video call' : 'Voice call').' ended');
                 $ended[] = $call;
@@ -248,12 +298,90 @@ class CallService
 
         Call::query()
             ->where('status', Call::STATUS_ACCEPTED)
-            ->where('updated_at', '<', $now->copy()->subMinutes(self::STALE_ACCEPTED_MINUTES))
-            ->update([
-                'status' => Call::STATUS_ENDED,
-                'ended_at' => $now,
-                'updated_at' => $now,
-            ]);
+            ->where('updated_at', '<', $now->copy()->subSeconds(self::STALE_ACCEPTED_SECONDS))
+            ->get()
+            ->each(function (Call $call) use ($now): void {
+                // Reconcile the dead call with a real terminal row so the
+                // duration is preserved instead of silently lost.
+                $call->status = Call::STATUS_ENDED;
+                $call->ended_at = $now;
+                $call->duration_seconds = $this->durationBetween($call, $now);
+                $call->save();
+            });
+    }
+
+    /**
+     * Authoritative call duration in seconds.
+     *
+     * Uses the persisted connection timestamps (started_at / answered_at) and
+     * the terminal timestamp, never a client-side timer.
+     */
+    public function durationBetween(Call $call, ?\DateTimeInterface $end = null): ?int
+    {
+        $start = $call->started_at ?: $call->answered_at;
+        if (! $start) {
+            return null;
+        }
+
+        $endTs = $end ? $end->getTimestamp() : ($call->ended_at ? $call->ended_at->getTimestamp() : null);
+        if ($endTs === null) {
+            return null;
+        }
+
+        return max(0, (int) $endTs - (int) $start->getTimestamp());
+    }
+
+    /**
+     * Keep an active call alive while the browser is connected.
+     *
+     * Terminal calls are never revived — a completed call must not lock the
+     * participant out of future calls.
+     */
+    public function heartbeat(Call $call, Authenticatable $user): Call
+    {
+        $this->assertCanActOnCall($call, $user);
+
+        if (! in_array($call->status, Call::ACTIVE_STATUSES, true) || $call->ended_at !== null) {
+            return $call;
+        }
+
+        $call->forceFill(['updated_at' => now()])->save();
+
+        return $call;
+    }
+
+    /**
+     * The one call the user is currently in, according to the database.
+     *
+     * Only `ringing` and `accepted` rows without `ended_at` count as active;
+     * declined / cancelled / missed / failed / ended calls never do.
+     */
+    public function activeCallForUser(Authenticatable $user): ?Call
+    {
+        $userId = (int) $user->id;
+        if ($userId <= 0) {
+            return null;
+        }
+
+        $this->releaseStaleActiveCalls();
+
+        $types = $this->types->equivalentTypes($this->types->portalType());
+        if ($types === []) {
+            $types = [$this->types->portalType()];
+        }
+
+        return Call::query()
+            ->whereIn('status', Call::ACTIVE_STATUSES)
+            ->whereNull('ended_at')
+            ->where(function ($q) use ($userId, $types) {
+                $q->where(function ($inner) use ($userId, $types) {
+                    $inner->where('caller_id', $userId)->whereIn('caller_type', $types);
+                })->orWhere(function ($inner) use ($userId, $types) {
+                    $inner->where('receiver_id', $userId)->whereIn('receiver_type', $types);
+                });
+            })
+            ->orderByDesc('id')
+            ->first();
     }
 
     /**
@@ -277,6 +405,7 @@ class CallService
     {
         $active = Call::query()
             ->whereIn('status', Call::ACTIVE_STATUSES)
+            ->whereNull('ended_at')
             ->where(function ($q) use ($callerId, $receiverId) {
                 $q->where('caller_id', $callerId)
                     ->orWhere('receiver_id', $callerId);
@@ -290,15 +419,42 @@ class CallService
             ->lockForUpdate()
             ->get();
 
-        // Re-filter after lock: only genuine active statuses (not terminal).
-        $active = $active->filter(function (Call $call) {
-            return in_array($call->status, Call::ACTIVE_STATUSES, true)
-                && $call->ended_at === null;
+        // Re-filter after lock: ignore terminal rows and group-placeholder ringing
+        // (caller_id == receiver_id) which must not permanently lock the host out.
+        $active = $active->filter(function (Call $call) use ($callerId) {
+            if (! in_array($call->status, Call::ACTIVE_STATUSES, true) || $call->ended_at !== null) {
+                return false;
+            }
+            if ($this->isGroupCall($call) && $call->status === Call::STATUS_RINGING
+                && (int) $call->caller_id === $callerId
+            ) {
+                return false;
+            }
+
+            return true;
         })->values();
 
         foreach ($active as $call) {
-            $callerBusy = (int) $call->caller_id === $callerId || (int) $call->receiver_id === $callerId;
-            if ($callerBusy) {
+            $isGroupStub = $this->isGroupCall($call);
+            $callIsCaller = (int) $call->caller_id === $callerId;
+            $callIsReceiver = ! $isGroupStub && (int) $call->receiver_id === $callerId;
+
+            // An *accepted* call means both sides are really connected.
+            // A *ringing* call only means the caller is busy — being the
+            // callee of an unanswered ring must never block the callee.
+            $userIsBusy = $call->status === Call::STATUS_ACCEPTED
+                ? ($callIsCaller || $callIsReceiver)
+                : $callIsCaller;
+
+            if (! $userIsBusy && $call->status === Call::STATUS_ACCEPTED && $isGroupStub) {
+                // Accepted group call: every member of the room is busy.
+                $userIsBusy = ConversationParticipant::query()
+                    ->where('conversation_id', $call->conversation_id)
+                    ->where('user_id', $callerId)
+                    ->exists();
+            }
+
+            if ($userIsBusy) {
                 Log::info('CALL VALIDATION', [
                     'user' => $callerId,
                     'recipient' => $receiverId,
@@ -317,19 +473,26 @@ class CallService
             if ($receiverId !== null && $receiverId > 0
                 && ((int) $call->caller_id === $receiverId || (int) $call->receiver_id === $receiverId)
             ) {
-                Log::info('CALL VALIDATION', [
-                    'user' => $callerId,
-                    'recipient' => $receiverId,
-                    'existing_active_call' => $call->id,
-                    'caller_id' => $call->caller_id,
-                    'receiver_id' => $call->receiver_id,
-                    'status' => $call->status,
-                    'created_at' => (string) $call->created_at,
-                    'updated_at' => (string) $call->updated_at,
-                    'result' => 'REJECT',
-                    'reason' => 'recipient_busy',
-                ]);
-                abort(409, 'This person is currently on another call. Please wait.');
+                // The target is only busy when they are connected or placing
+                // their own outbound ring.
+                $targetBusy = $call->status === Call::STATUS_ACCEPTED
+                    || (int) $call->caller_id === $receiverId;
+
+                if ($targetBusy) {
+                    Log::info('CALL VALIDATION', [
+                        'user' => $callerId,
+                        'recipient' => $receiverId,
+                        'existing_active_call' => $call->id,
+                        'caller_id' => $call->caller_id,
+                        'receiver_id' => $call->receiver_id,
+                        'status' => $call->status,
+                        'created_at' => (string) $call->created_at,
+                        'updated_at' => (string) $call->updated_at,
+                        'result' => 'REJECT',
+                        'reason' => 'recipient_busy',
+                    ]);
+                    abort(409, 'This person is currently on another call. Please wait.');
+                }
             }
         }
 
@@ -400,9 +563,10 @@ class CallService
             }
 
             $call->ended_at = now();
-            if ($status === Call::STATUS_ENDED && $call->started_at) {
-                $call->duration_seconds = max(0, (int) $call->ended_at->getTimestamp() - (int) $call->started_at->getTimestamp());
-            } elseif ($status !== Call::STATUS_ENDED) {
+            if ($status === Call::STATUS_ENDED) {
+                // Authoritative duration from the persisted connection timestamps.
+                $call->duration_seconds = $this->durationBetween($call, $call->ended_at);
+            } else {
                 $call->duration_seconds = null;
             }
         }
@@ -464,7 +628,7 @@ class CallService
             $types = [$userType];
         }
 
-        return Call::query()
+        $direct = Call::query()
             ->where('status', Call::STATUS_RINGING)
             ->where('receiver_id', $userId)
             ->whereIn('receiver_type', $types)
@@ -472,7 +636,35 @@ class CallService
             ->with(['caller', 'receiver', 'conversation'])
             ->orderByDesc('id')
             ->limit(5)
-            ->get()
+            ->get();
+
+        // Group mesh rings store receiver_id = caller_id. Include rooms where this user
+        // is a participant (not the host) so Answer/Decline can appear without a refresh.
+        $memberConversationIds = ConversationParticipant::query()
+            ->where('user_id', $userId)
+            ->pluck('conversation_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        $group = collect();
+        if ($memberConversationIds !== []) {
+            $group = Call::query()
+                ->where('status', Call::STATUS_RINGING)
+                ->whereIn('conversation_id', $memberConversationIds)
+                ->whereColumn('caller_id', '=', 'receiver_id')
+                ->where('caller_id', '!=', $userId)
+                ->with(['caller', 'receiver', 'conversation'])
+                ->orderByDesc('id')
+                ->limit(5)
+                ->get();
+        }
+
+        return $direct->concat($group)
+            ->unique('id')
+            ->sortByDesc('id')
+            ->take(5)
+            ->values()
             ->map(fn (Call $call) => $this->serialize($call, $user));
     }
 
@@ -534,6 +726,9 @@ class CallService
             'direction' => $isCaller ? 'outgoing' : 'incoming',
             'peer' => $peerPayload,
             'created_at' => optional($call->created_at)?->toIso8601String(),
+            // Server clock reference: the browser uses it to correct its own
+            // clock so both participants show the same call duration.
+            'server_time' => now()->toIso8601String(),
         ];
     }
 

@@ -1,6 +1,7 @@
 <div class="comms-modal" id="commsIncomingCall" hidden role="dialog" aria-modal="true" aria-labelledby="commsIncomingTitle">
     <div class="comms-modal-card comms-modal-card--call">
         <div class="comms-call-pulse" aria-hidden="true"></div>
+        <div class="comms-incoming-avatar" id="commsIncomingAvatar" aria-hidden="true"></div>
         <h2 id="commsIncomingTitle">Incoming call</h2>
         <p class="comms-modal-peer" id="commsIncomingPeer"></p>
         <p class="comms-modal-type" id="commsIncomingType"></p>
@@ -23,6 +24,10 @@
         <div class="comms-ended-avatar" id="commsCallEndedAvatar" aria-hidden="true"></div>
         <p class="comms-ended-name" id="commsCallEndedPeer"></p>
         <h2 id="commsCallEndedTitle">Call ended</h2>
+        <p class="comms-ended-meta" id="commsCallEndedType" hidden></p>
+        <p class="comms-ended-meta" id="commsCallEndedStatus" hidden></p>
+        <p class="comms-ended-meta" id="commsCallEndedStarted" hidden></p>
+        <p class="comms-ended-meta" id="commsCallEndedAt" hidden></p>
         <p class="comms-ended-duration" id="commsCallEndedDuration" hidden></p>
         <p class="visually-hidden" id="commsCallEndedReason">The call has ended.</p>
         <button type="button" class="comms-btn comms-btn--success" id="commsCallEndedRedial" hidden tabindex="-1" aria-hidden="true">Redial</button>

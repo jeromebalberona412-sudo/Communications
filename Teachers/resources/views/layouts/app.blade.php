@@ -15,6 +15,9 @@
             url: @json(rtrim((string) (env('VITE_SUPABASE_URL') ?: env('SUPABASE_URL') ?: ''), '/')),
             key: @json((string) (env('VITE_SUPABASE_PUBLISHABLE_KEY') ?: env('SUPABASE_PUBLISHABLE_KEY') ?: ''))
         };
+        window.__COMMS_CALL_POLL_MS__ = @json((int) config('communications.call_poll_interval_ms', 8000));
+        window.__COMMS_CALL_HEARTBEAT__ = @json((int) config('communications.call_heartbeat_seconds', 30));
+        window.__COMMS_CALL_RING_TTL__ = @json((int) config('communications.call_ring_timeout_seconds', 60));
     </script>
     @vite(['resources/css/app.css', 'resources/js/app.js', 'resources/js/communications.js'])
 </head>
@@ -28,6 +31,8 @@
             'unreadCount' => route('api.communications.unread-count'),
             'startCall' => url('/api/communications/conversations/__ID__/calls'),
             'callStatus' => url('/api/communications/calls/__ID__/status'),
+            'callShow' => url('/api/communications/calls/__ID__'),
+            'callHeartbeat' => url('/api/communications/calls/__ID__/heartbeat'),
             'calls' => route('api.communications.calls.index'),
             'ringingCalls' => route('api.communications.calls.ringing'),
             'presence' => route('api.communications.presence'),

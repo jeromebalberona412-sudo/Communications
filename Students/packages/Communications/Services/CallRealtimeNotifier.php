@@ -12,8 +12,16 @@ use Illuminate\Support\Facades\Log;
  */
 class CallRealtimeNotifier
 {
-    public function notifyIncoming(Call $call, string $peerName = 'Incoming caller'): void
-    {
+    /**
+     * @param  list<array{id:int,type:string}>  $extraReceivers  Group invitees (id + portal type).
+     * @param  array<string, mixed>  $callerProfile  Caller identity for the incoming modal.
+     */
+    public function notifyIncoming(
+        Call $call,
+        string $peerName = 'Incoming caller',
+        array $extraReceivers = [],
+        array $callerProfile = []
+    ): void {
         $url = rtrim((string) (env('SUPABASE_URL') ?: env('VITE_SUPABASE_URL') ?: ''), '/');
         $key = (string) (env('SUPABASE_SECRET_KEY')
             ?: env('SUPABASE_SERVICE_ROLE_KEY')
@@ -25,8 +33,18 @@ class CallRealtimeNotifier
             return;
         }
 
+        $isGroup = (int) $call->caller_id === (int) $call->receiver_id
+            && (string) $call->caller_type === (string) $call->receiver_type;
+
+        $callerProfile = array_merge([
+            'name' => $peerName,
+            'profile_image_url' => '',
+            'user_type' => (string) $call->caller_type,
+            'user_id' => (int) $call->caller_id,
+        ], $callerProfile);
+
         $payload = [
-            'type' => 'incoming-call',
+            'type' => $isGroup ? 'group-invite' : 'incoming-call',
             'call_id' => (int) $call->id,
             'conversation_id' => (int) $call->conversation_id,
             'call_type' => (string) $call->call_type,
@@ -34,17 +52,41 @@ class CallRealtimeNotifier
             'caller_type' => (string) $call->caller_type,
             'receiver_id' => (int) $call->receiver_id,
             'receiver_type' => (string) $call->receiver_type,
+            'is_group_call' => $isGroup,
             'peer_name' => $peerName,
             'from_name' => $peerName,
             'from_user_id' => (int) $call->caller_id,
             'from_user_type' => (string) $call->caller_type,
+            'caller_profile' => $callerProfile,
+            // The receiver must ignore invitations that already expired.
+            'created_at' => optional($call->created_at)?->toIso8601String(),
+            'expires_at' => optional($call->created_at)?->copy()
+                ->addSeconds((int) config('communications.call_ring_timeout_seconds', 60))
+                ->toIso8601String(),
         ];
 
-        $topics = $this->inboxTopics((string) $call->receiver_type, (int) $call->receiver_id);
+        $topics = [];
+        if ($isGroup) {
+            foreach ($extraReceivers as $receiver) {
+                $id = (int) ($receiver['id'] ?? 0);
+                $type = (string) ($receiver['type'] ?? '');
+                if ($id <= 0) {
+                    continue;
+                }
+                $topics[] = $this->primaryInboxTopic($type, $id);
+            }
+        } else {
+            $topics[] = $this->primaryInboxTopic((string) $call->receiver_type, (int) $call->receiver_id);
+        }
+
         if ($call->conversation_id) {
             $topics[] = 'comms-signal-'.(int) $call->conversation_id;
         }
         $topics = array_values(array_unique(array_filter($topics)));
+
+        if ($topics === []) {
+            return;
+        }
 
         $endpoint = $url.'/realtime/v1/api/broadcast';
         // Publish once per topic (no realtime: duplicate). Client-side shownIncomingIds
@@ -72,6 +114,27 @@ class CallRealtimeNotifier
                 'message' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * The single inbox topic a receiver listens on.
+     *
+     * The client subscribes to its portal inbox topic, so publishing the
+     * invitation once keeps the delivery fast and avoids the same event
+     * arriving several times.
+     */
+    protected function primaryInboxTopic(string $receiverType, int $receiverId): string
+    {
+        if ($receiverId <= 0) {
+            return '';
+        }
+
+        $type = strtolower(trim((string) $receiverType));
+        if ($type === '') {
+            return '';
+        }
+
+        return 'comms-inbox-'.$type.'-'.$receiverId;
     }
 
     /**

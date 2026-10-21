@@ -30,6 +30,30 @@ class Call extends Model
         self::STATUS_ACCEPTED,
     ];
 
+    /**
+     * Terminal states. A call in one of these states is never active again,
+     * so it must never block a new call.
+     *
+     * @var list<string>
+     */
+    public const TERMINAL_STATUSES = [
+        self::STATUS_REJECTED,
+        self::STATUS_MISSED,
+        self::STATUS_CANCELLED,
+        self::STATUS_ENDED,
+    ];
+
+    public function isActive(): bool
+    {
+        return in_array((string) $this->status, self::ACTIVE_STATUSES, true)
+            && $this->ended_at === null;
+    }
+
+    public function isTerminal(): bool
+    {
+        return in_array((string) $this->status, self::TERMINAL_STATUSES, true);
+    }
+
     protected $table = 'calls';
 
     protected $fillable = [

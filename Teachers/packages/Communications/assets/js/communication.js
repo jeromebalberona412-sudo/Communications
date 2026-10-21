@@ -66,6 +66,11 @@
     }
 
     var inflight = Object.create(null);
+    var rateLimitUntil = 0;
+
+    function rateLimitedState() {
+        return Date.now() < rateLimitUntil;
+    }
 
     function api(url, options) {
         options = options || {};
@@ -93,7 +98,8 @@
             method: method,
             headers: headers,
             credentials: 'same-origin',
-            body: options.body || undefined
+            body: options.body || undefined,
+            signal: options.signal || undefined
         }).then(async function (res) {
             var data = null;
             var text = await res.text();
@@ -109,6 +115,18 @@
                 var err = new Error(msg);
                 err.status = res.status;
                 err.data = data;
+                if (res.status === 429) {
+                    var retryAfter = Number(res.headers && res.headers.get
+                        ? res.headers.get('Retry-After')
+                        : 0);
+                    err.isRateLimited = true;
+                    err.retryAfter = isNaN(retryAfter) || retryAfter <= 0
+                        ? 5
+                        : Math.min(60, Math.max(1, retryAfter));
+                    // Back off briefly so a burst does not keep the limiter saturated.
+                    rateLimitUntil = Date.now() + (err.retryAfter * 1000);
+                    window.__COMMS_RATE_LIMITED_UNTIL__ = rateLimitUntil;
+                }
                 throw err;
             }
             return data;
@@ -120,6 +138,30 @@
             inflight[key] = promise;
         }
         return promise;
+    }
+
+    /**
+     * Debounce helper used to keep keystroke-driven requests (user search)
+     * from flooding the API and tripping the rate limiter.
+     */
+    function debounce(fn, wait) {
+        var timer = null;
+        var delay = wait || 300;
+        function wrapped() {
+            var args = arguments;
+            var self = this;
+            if (timer) clearTimeout(timer);
+            timer = setTimeout(function () {
+                timer = null;
+                fn.apply(self, args);
+            }, delay);
+        }
+        wrapped.cancel = function () {
+            if (timer) clearTimeout(timer);
+            timer = null;
+        };
+        wrapped.pending = function () { return !!timer; };
+        return wrapped;
     }
 
     function showToast(message, type) {
@@ -1087,6 +1129,8 @@
         paintTypingEl: paintTypingEl,
         route: route,
         api: api,
+        debounce: debounce,
+        rateLimitedState: rateLimitedState,
         showToast: showToast,
         playReactionSound: playReactionSound,
         ensureReactionAudio: ensureReactionAudio,

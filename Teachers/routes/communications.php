@@ -69,9 +69,10 @@ Route::get('/api/communications/users/{user_type}/{user_id}/profile', [Directory
     ->name('api.communications.users.profile');
 
 Route::get('/api/communications/calls', [CallController::class, 'index'])
+    ->middleware('throttle:60,1')
     ->name('api.communications.calls.index');
 Route::get('/api/communications/calls/ringing', [CallController::class, 'ringing'])
-    ->middleware('throttle:90,1')
+    ->middleware('throttle:45,1')
     ->name('api.communications.calls.ringing');
 Route::post('/api/communications/conversations/{conversation}/calls', [CallController::class, 'store'])
     ->middleware('throttle:20,1')
@@ -79,6 +80,12 @@ Route::post('/api/communications/conversations/{conversation}/calls', [CallContr
 Route::post('/api/communications/calls/{call}/status', [CallController::class, 'updateStatus'])
     ->middleware('throttle:60,1')
     ->name('api.communications.calls.status');
+Route::get('/api/communications/calls/{call}', [CallController::class, 'show'])
+    ->middleware('throttle:60,1')
+    ->name('api.communications.calls.show');
+Route::post('/api/communications/calls/{call}/heartbeat', [CallController::class, 'heartbeat'])
+    ->middleware('throttle:30,1')
+    ->name('api.communications.calls.heartbeat');
 
 Route::post('/api/communications/presence', [PresenceController::class, 'heartbeat'])
     ->middleware('throttle:30,1')

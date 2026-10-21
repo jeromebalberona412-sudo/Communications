@@ -435,7 +435,12 @@ import {
         setStatus(statusText || 'Calling group…');
         if (e.muteBtn) e.muteBtn.hidden = false;
         if (e.cameraBtn) e.cameraBtn.hidden = false;
-        if (e.localVideo) e.localVideo.hidden = !(meshWantsVideo || meshCameraOn);
+        if (e.localVideo) {
+            e.localVideo.hidden = false;
+            e.localVideo.classList.toggle('is-camera-off', !meshCameraOn);
+        }
+        var off = document.getElementById('commsLocalVideoOff');
+        if (off) off.hidden = !!meshCameraOn;
     }
 
     async function cleanupMesh(opts) {
@@ -666,32 +671,111 @@ import {
         return false;
     }
 
-    async function setCameraEnabled(enabled) {
+    /**
+     * Toggle the camera of a group call.
+     *
+     * Same contract as the one-to-one call: the track is only disabled (never
+     * stopped) when the camera goes off, a dead track is replaced instead of
+     * reused, and rapid clicks are serialised so the last intent wins.
+     */
+    var meshCameraChain = Promise.resolve();
+    var meshCameraPending = null;
+
+    function setCameraEnabled(enabled) {
+        meshCameraPending = !!enabled;
+        meshCameraChain = meshCameraChain
+            .then(function () {
+                return applyMeshCameraState(meshCameraPending);
+            })
+            .catch(function (err) {
+                toast((err && err.message) || 'Unable to toggle camera.', 'error');
+            })
+            .then(function () {
+                if (meshCameraPending !== null && meshCameraPending !== meshCameraOn) {
+                    return setCameraEnabled(meshCameraPending);
+                }
+                return null;
+            });
+        return meshCameraChain;
+    }
+
+    async function applyMeshCameraState(enabled) {
         if (!meshLocalStream) return;
         enabled = !!enabled;
+
         var videoTracks = meshLocalStream.getVideoTracks();
-        if (enabled) {
-            if (!videoTracks.length || videoTracks.every(function (t) { return t.readyState === 'ended'; })) {
-                var cam = await navigator.mediaDevices.getUserMedia(videoOnlyConstraints());
-                await prepareLocalStream(cam);
-                var newTrack = cam.getVideoTracks()[0];
-                if (!newTrack) throw new Error('No camera found.');
-                meshLocalStream.addTrack(newTrack);
-                Object.keys(meshPeers).forEach(function (key) {
-                    var pc = meshPeers[key].pc;
-                    var sender = pc.getSenders().find(function (s) { return s.track && s.track.kind === 'video'; });
-                    if (sender) sender.replaceTrack(newTrack);
-                    else pc.addTrack(newTrack, meshLocalStream);
-                });
-                var e = els();
-                if (e.localVideo) e.localVideo.srcObject = meshLocalStream;
-            } else {
-                videoTracks.forEach(function (t) { t.enabled = true; });
-            }
-            meshCameraOn = true;
-        } else {
+        var live = videoTracks.filter(function (t) { return t.readyState === 'live'; });
+
+        if (!enabled) {
             videoTracks.forEach(function (t) { t.enabled = false; });
             meshCameraOn = false;
+            syncMeshCameraUi();
+            return;
+        }
+
+        if (!live.length) {
+            // The previous track died (device removed, permission revoked):
+            // acquire a new one and install it on every peer connection.
+            var cam = await navigator.mediaDevices.getUserMedia(videoOnlyConstraints());
+            await prepareLocalStream(cam);
+            var newTrack = cam.getVideoTracks()[0];
+            if (!newTrack) throw new Error('No camera found.');
+
+            // Drop dead tracks so the stream never accumulates duplicates.
+            videoTracks.forEach(function (t) {
+                if (t.readyState === 'ended') {
+                    try { meshLocalStream.removeTrack(t); } catch (e) {}
+                    try { t.stop(); } catch (e2) {}
+                }
+            });
+            cam.getVideoTracks().forEach(function (t) {
+                if (t !== newTrack) {
+                    try { t.stop(); } catch (e3) {}
+                }
+            });
+
+            meshLocalStream.addTrack(newTrack);
+            Object.keys(meshPeers).forEach(function (key) {
+                var pc = meshPeers[key].pc;
+                var sender = pc.getSenders().find(function (s) { return s.track && s.track.kind === 'video'; });
+                if (sender) {
+                    sender.replaceTrack(newTrack);
+                } else {
+                    pc.addTrack(newTrack, meshLocalStream);
+                }
+            });
+            var e = els();
+            if (e.localVideo) {
+                e.localVideo.srcObject = meshLocalStream;
+                try {
+                    var lp = e.localVideo.play();
+                    if (lp && typeof lp.catch === 'function') lp.catch(function () {});
+                } catch (ePlay) { /* ignore */ }
+            }
+        } else {
+            live.forEach(function (t) { t.enabled = true; });
+        }
+
+        meshCameraOn = true;
+        syncMeshCameraUi();
+    }
+
+    /**
+     * Keep the self-view and the camera-off placeholder in sync.
+     */
+    function syncMeshCameraUi() {
+        var e = els();
+        if (e.localVideo) {
+            // The element stays mounted; the placeholder covers it.
+            e.localVideo.hidden = false;
+            e.localVideo.classList.toggle('is-camera-off', !meshCameraOn);
+        }
+        var off = document.getElementById('commsLocalVideoOff');
+        if (off) {
+            off.hidden = !!meshCameraOn;
+        }
+        if (e.inCall) {
+            e.inCall.classList.toggle('is-local-camera-off', !meshCameraOn);
         }
     }
 

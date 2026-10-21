@@ -98,20 +98,8 @@
         renameForm: document.getElementById('commsRenameForm'),
         renameInput: document.getElementById('commsRenameInput'),
         renameSubmit: document.getElementById('commsRenameSubmit'),
-        newGroupBtn: document.getElementById('commsNewGroupBtn'),
-        newGroupModal: document.getElementById('commsNewGroupModal'),
-        newGroupForm: document.getElementById('commsNewGroupForm'),
-        newGroupName: document.getElementById('commsNewGroupName'),
-        newGroupSearch: document.getElementById('commsNewGroupSearch'),
-        newGroupResults: document.getElementById('commsNewGroupResults'),
-        newGroupSelected: document.getElementById('commsNewGroupSelected'),
-        newGroupSubmit: document.getElementById('commsNewGroupSubmit'),
         peerAvatarWrap: document.getElementById('commsPeerAvatarWrap') || document.querySelector('.comms-peer-avatar-wrap'),
         peerAvatarStack: document.getElementById('commsPeerAvatarStack')
-    };
-
-    var newGroupDraft = {
-        selected: Object.create(null)
     };
 
     function isGroupConversation(conversation) {
@@ -198,105 +186,8 @@
     function closeGroupModals() {
         if (els.groupModal) els.groupModal.hidden = true;
         if (els.renameModal) els.renameModal.hidden = true;
-        if (els.newGroupModal) els.newGroupModal.hidden = true;
         if (els.threadMenu) els.threadMenu.hidden = true;
         if (els.threadMenuBtn) els.threadMenuBtn.setAttribute('aria-expanded', 'false');
-    }
-
-    function selectedNewGroupIds() {
-        return Object.keys(newGroupDraft.selected).map(Number).filter(Boolean);
-    }
-
-    function renderNewGroupSelected() {
-        if (!els.newGroupSelected) return;
-        var ids = selectedNewGroupIds();
-        if (!ids.length) {
-            els.newGroupSelected.innerHTML = '<p class="comms-muted">Select at least one person.</p>';
-            return;
-        }
-        els.newGroupSelected.innerHTML = ids.map(function (id) {
-            var u = newGroupDraft.selected[id];
-            return '<button type="button" class="comms-new-group-chip" data-remove-user="' + id + '">' +
-                Comms.escapeHtml((u && u.name) || ('User ' + id)) +
-                ' <span aria-hidden="true">&times;</span></button>';
-        }).join('');
-    }
-
-    function openNewGroupModal() {
-        if (!els.newGroupModal) return;
-        newGroupDraft.selected = Object.create(null);
-        if (els.newGroupName) els.newGroupName.value = '';
-        if (els.newGroupSearch) els.newGroupSearch.value = '';
-        if (els.newGroupResults) {
-            els.newGroupResults.innerHTML = '';
-            els.newGroupResults.hidden = true;
-        }
-        renderNewGroupSelected();
-        els.newGroupModal.hidden = false;
-        if (els.newGroupSearch) els.newGroupSearch.focus();
-    }
-
-    function searchNewGroupUsers(q) {
-        if (!els.newGroupResults || !routes.searchUsers) return;
-        var query = String(q || '').trim();
-        if (query.length < 1) {
-            els.newGroupResults.hidden = true;
-            els.newGroupResults.innerHTML = '';
-            return;
-        }
-        Comms.api(routes.searchUsers + '?q=' + encodeURIComponent(query)).then(function (data) {
-            var me = Number(root.dataset.currentUserId || 0);
-            var users = (data.users || []).filter(function (u) {
-                return Number(u.id) !== me && !newGroupDraft.selected[Number(u.id)];
-            });
-            if (!users.length) {
-                els.newGroupResults.innerHTML = '<div class="comms-search-item"><span>No people found</span></div>';
-                els.newGroupResults.hidden = false;
-                return;
-            }
-            els.newGroupResults.innerHTML = users.map(function (u) {
-                return '<button type="button" class="comms-search-item" data-add-user-id="' + u.id + '"' +
-                    ' data-add-user-name="' + Comms.escapeHtml(u.name || '') + '">' +
-                    '<strong>' + Comms.escapeHtml(u.name) + '</strong>' +
-                    '<span>' + Comms.escapeHtml(u.user_type_label || u.role || '') + '</span></button>';
-            }).join('');
-            els.newGroupResults.hidden = false;
-        }).catch(function (err) {
-            Comms.showToast(err.message || 'Search failed.', 'error');
-        });
-    }
-
-    function createNewGroup() {
-        if (!routes.storeConversation) return;
-        var ids = selectedNewGroupIds();
-        if (ids.length < 1) {
-            Comms.showToast('Add at least one person to the group.', 'error');
-            return;
-        }
-        var name = els.newGroupName ? String(els.newGroupName.value || '').trim() : '';
-        if (els.newGroupSubmit) {
-            els.newGroupSubmit.disabled = true;
-            els.newGroupSubmit.textContent = 'Creating…';
-        }
-        Comms.api(routes.storeConversation, {
-            method: 'POST',
-            body: JSON.stringify({ is_group: true, user_ids: ids, name: name || null }),
-            dedupe: false
-        }).then(function (data) {
-            closeGroupModals();
-            return loadConversations().then(function () {
-                if (data && data.conversation && data.conversation.id) {
-                    return openConversation(data.conversation.id);
-                }
-            });
-        }).catch(function (err) {
-            Comms.showToast(err.message || 'Unable to create group.', 'error');
-        }).finally(function () {
-            if (els.newGroupSubmit) {
-                els.newGroupSubmit.disabled = false;
-                els.newGroupSubmit.textContent = 'Create group';
-            }
-        });
     }
 
     function memberAvatarHtml(member) {
@@ -2342,29 +2233,76 @@
         });
     }
 
+    var searchAbort = null;
+    var searchCache = Object.create(null);
+
+    /**
+     * Keystroke-driven search.
+     *
+     * Requests are debounced upstream, aborted when a newer keystroke
+     * arrives, cached for a short window and skipped entirely while the API
+     * is rate limited. This keeps the search endpoint far below its
+     * throttle and removes the "429 Too Many Attempts" errors.
+     */
     function searchUsers(q) {
         if (!els.searchResults) return;
-        if (!q || q.length < 1) {
+        var query = String(q || '').trim();
+        if (query.length < 2) {
             els.searchResults.hidden = true;
             els.searchResults.innerHTML = '';
             return;
         }
-        Comms.api(routes.searchUsers + '?q=' + encodeURIComponent(q)).then(function (data) {
+        if (Comms.rateLimitedState && Comms.rateLimitedState()) {
+            return;
+        }
+
+        var key = query.toLowerCase();
+        var cached = searchCache[key];
+        if (cached && (Date.now() - cached.at) < 30000) {
+            renderUserSearchResults(cached.users);
+            return;
+        }
+
+        if (searchAbort) {
+            try { searchAbort.abort(); } catch (e) {}
+            searchAbort = null;
+        }
+        var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+        searchAbort = controller;
+
+        Comms.api(routes.searchUsers + '?q=' + encodeURIComponent(query), {
+            method: 'GET',
+            dedupe: false,
+            signal: controller ? controller.signal : undefined
+        }).then(function (data) {
+            if (searchAbort === controller) searchAbort = null;
             var users = data.users || [];
-            if (!users.length) {
-                els.searchResults.innerHTML = '<div class="comms-search-item"><span>No users found</span></div>';
-                els.searchResults.hidden = false;
+            searchCache[key] = { at: Date.now(), users: users };
+            renderUserSearchResults(users);
+        }).catch(function (err) {
+            if (searchAbort === controller) searchAbort = null;
+            if (err && (err.name === 'AbortError' || err.code === 20)) return;
+            if (err && err.isRateLimited) {
+                Comms.showToast('Too many requests. Please wait a moment and try again.', 'error');
                 return;
             }
-            els.searchResults.innerHTML = users.map(function (u) {
-                return '<button type="button" class="comms-search-item" data-user-id="' + u.id + '">' +
-                    '<strong>' + Comms.escapeHtml(u.name) + '</strong>' +
-                    '<span>' + Comms.escapeHtml(u.user_type_label || u.role) + '</span></button>';
-            }).join('');
-            els.searchResults.hidden = false;
-        }).catch(function (err) {
             Comms.showToast(err.message || 'Search failed.', 'error');
         });
+    }
+
+    function renderUserSearchResults(users) {
+        if (!els.searchResults) return;
+        if (!users || !users.length) {
+            els.searchResults.innerHTML = '<div class="comms-search-item"><span>No users found</span></div>';
+            els.searchResults.hidden = false;
+            return;
+        }
+        els.searchResults.innerHTML = users.map(function (u) {
+            return '<button type="button" class="comms-search-item" data-user-id="' + u.id + '">' +
+                '<strong>' + Comms.escapeHtml(u.name) + '</strong>' +
+                '<span>' + Comms.escapeHtml(u.user_type_label || u.role) + '</span></button>';
+        }).join('');
+        els.searchResults.hidden = false;
     }
 
     var markAllBtn = document.getElementById('commsMarkAllRead');
@@ -2961,56 +2899,8 @@
             openGroupInfoModal('info');
         });
     }
-    if (els.newGroupBtn) {
-        els.newGroupBtn.addEventListener('click', function () {
-            openNewGroupModal();
-        });
-    }
-    if (els.newGroupForm) {
-        els.newGroupForm.addEventListener('submit', function (e) {
-            e.preventDefault();
-            createNewGroup();
-        });
-    }
-    if (els.newGroupSearch) {
-        var newGroupSearchTimer = null;
-        els.newGroupSearch.addEventListener('input', function () {
-            clearTimeout(newGroupSearchTimer);
-            var q = els.newGroupSearch.value;
-            newGroupSearchTimer = setTimeout(function () { searchNewGroupUsers(q); }, 220);
-        });
-    }
-    if (els.newGroupResults) {
-        els.newGroupResults.addEventListener('click', function (e) {
-            var btn = e.target.closest('[data-add-user-id]');
-            if (!btn) return;
-            var id = Number(btn.getAttribute('data-add-user-id') || 0);
-            if (!id) return;
-            newGroupDraft.selected[id] = {
-                id: id,
-                name: btn.getAttribute('data-add-user-name') || ('User ' + id)
-            };
-            renderNewGroupSelected();
-            if (els.newGroupSearch) {
-                els.newGroupSearch.value = '';
-                els.newGroupSearch.focus();
-            }
-            els.newGroupResults.hidden = true;
-            els.newGroupResults.innerHTML = '';
-        });
-    }
-    if (els.newGroupSelected) {
-        els.newGroupSelected.addEventListener('click', function (e) {
-            var chip = e.target.closest('[data-remove-user]');
-            if (!chip) return;
-            var id = Number(chip.getAttribute('data-remove-user') || 0);
-            if (id) delete newGroupDraft.selected[id];
-            renderNewGroupSelected();
-        });
-    }
-    document.querySelectorAll('[data-comms-new-group-close]').forEach(function (el) {
-        el.addEventListener('click', closeGroupModals);
-    });
+    // Students/Teachers: the shared "Capstone 2" group is the only group.
+    // There is no create-group UI and no code path that can create one.
     if (els.renameForm) {
         els.renameForm.addEventListener('submit', function (e) {
             e.preventDefault();

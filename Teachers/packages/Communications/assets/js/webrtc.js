@@ -23,6 +23,8 @@ import {
     var pc = null;
     var localStream = null;
     var currentCall = null;
+    var incomingCall = null;
+    var incomingCallId = null;
     var lastCallContext = null;
     var callTimer = null;
     var callStartedAt = null;
@@ -45,6 +47,14 @@ import {
     var remoteStream = null;
     var audioUnlockCtx = null;
     var negotiating = false;
+    var callHeartbeatTimer = null;
+    var summaryShownFor = Object.create(null);
+    var answeredCall = null;
+    var cameraBusy = false;
+    var cameraPending = null;
+    var cameraChain = Promise.resolve();
+    var remoteCameraEnabled = true;
+    var clockOffsetMs = 0;
 
     var ringCtx = null;
     var ringTimer = null;
@@ -83,7 +93,9 @@ import {
         endedClose: document.getElementById('commsCallEndedClose'),
         endedRedial: document.getElementById('commsCallEndedRedial'),
         callAvatar: document.getElementById('commsCallPeerAvatar'),
-        callCenter: document.getElementById('commsCallCenter')
+        callCenter: document.getElementById('commsCallCenter'),
+        localVideoOff: document.getElementById('commsLocalVideoOff'),
+        remoteVideoOff: document.getElementById('commsRemoteVideoOff')
     };
 
     function mountCallUiToBody() {
@@ -361,12 +373,22 @@ import {
         ringTimer = setInterval(scheduleCycle, incoming ? 2800 : 3600);
     }
 
-    function armRingTimeout() {
+    /**
+     * Ring timeout.
+     *
+     * The caller gives up after 30 seconds. The receiver keeps the
+     * invitation on screen for as long as the server considers it valid, so
+     * the modal never disappears while the call could still be answered.
+     */
+    function armRingTimeout(incoming) {
         clearRingTimeout();
+        var ttl = incoming
+            ? Math.max(RING_TIMEOUT_MS, (Number(window.__COMMS_CALL_RING_TTL__) || 60) * 1000)
+            : RING_TIMEOUT_MS;
         ringTimeout = setTimeout(function () {
             if (!currentCall || callConnected) return;
             finishUnanswered('missed');
-        }, RING_TIMEOUT_MS);
+        }, ttl);
     }
 
     function clearConnectionTimeout() {
@@ -385,6 +407,33 @@ import {
             toast('Call could not connect in time.', 'error');
             endCall();
         }, CONNECTION_TIMEOUT_MS);
+    }
+
+    /**
+     * Report a live call to the server so a dead tab can be told apart from a
+     * real call. Without this the server has to guess and long calls get
+     * force-ended (or keep blocking new calls).
+     */
+    function startCallHeartbeat() {
+        stopCallHeartbeat();
+        var intervalMs = Math.max(10000, (Number(window.__COMMS_CALL_HEARTBEAT__) || 30) * 1000);
+        callHeartbeatTimer = setInterval(function () {
+            if (!currentCall || !currentCall.id || !callConnected) return;
+            var r = routes();
+            if (!r.callHeartbeat || !window.Comms || typeof window.Comms.api !== 'function') return;
+            window.Comms.api(window.Comms.route(r.callHeartbeat, currentCall.id), {
+                method: 'POST',
+                body: '{}',
+                dedupe: true
+            }).catch(function () { /* ignore */ });
+        }, intervalMs);
+    }
+
+    function stopCallHeartbeat() {
+        if (callHeartbeatTimer) {
+            clearInterval(callHeartbeatTimer);
+            callHeartbeatTimer = null;
+        }
     }
 
     function endedCopy(reason, endedByRole) {
@@ -483,6 +532,10 @@ import {
     function setCallPeerAvatar(call) {
         var peer = (call && call.peer) || {};
         paintAvatar(els.callAvatar, peer.name, peer.profile_image_url || peer.avatar_url || '');
+        var remoteOffAvatar = document.getElementById('commsRemoteVideoOffAvatar');
+        if (remoteOffAvatar) {
+            remoteOffAvatar.textContent = String(peer.name || 'U').trim().charAt(0).toUpperCase() || 'U';
+        }
     }
 
     function hideEnded() {
@@ -493,15 +546,51 @@ import {
         if (els.ended) els.ended.hidden = true;
     }
 
-    function showCallEnded(reason, peerName, callId, endedByRole) {
-        if (callId != null && Number(callId) === Number(lastEndedCallId)) {
+    function formatClockTime(iso) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        if (isNaN(d.getTime())) return '';
+        try {
+            return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        } catch (e) {
+            return '';
+        }
+    }
+
+    /**
+     * Authoritative duration in milliseconds.
+     *
+     * Prefers the server timestamps (started_at / ended_at / duration_seconds)
+     * and only falls back to the local timer when the server has not answered.
+     */
+    function authoritativeDurationMs(callPayload) {
+        if (!callPayload) return null;
+        var seconds = callPayload.duration_seconds;
+        if (seconds !== null && seconds !== undefined && !isNaN(Number(seconds))) {
+            return Math.max(0, Number(seconds)) * 1000;
+        }
+        var started = callPayload.started_at ? Date.parse(callPayload.started_at) : NaN;
+        var ended = callPayload.ended_at ? Date.parse(callPayload.ended_at) : NaN;
+        if (!isNaN(started) && !isNaN(ended)) {
+            return Math.max(0, ended - started);
+        }
+        return null;
+    }
+
+    function showCallEnded(reason, peerName, callId, endedByRole, callPayload) {
+        var callKey = callId != null ? String(callId) : '';
+        if (callKey && summaryShownFor[callKey]) {
+            return;
+        }
+        if (callId != null && Number(callId) === Number(lastEndedCallId) && !callPayload) {
             return;
         }
         if (callId != null) lastEndedCallId = callId;
+        if (callKey) summaryShownFor[callKey] = true;
 
         // Group calls end without cleanupMediaOnly(), so the timer may still be running here.
         if (callStartedAt) {
-            lastCallDurationMs = Date.now() - callStartedAt;
+            lastCallDurationMs = callElapsedMs();
             clearInterval(callTimer);
             callTimer = null;
             callStartedAt = null;
@@ -511,15 +600,48 @@ import {
         if (els.inCall) els.inCall.hidden = true;
         clearRingTimeout();
         stopRingtone();
+        stopCallHeartbeat();
 
-        var copy = endedCopy(reason || 'ended', endedByRole);
+        var statusKey = String(reason || 'ended');
+        var serverStatus = callPayload && callPayload.status
+            ? String(callPayload.status).toLowerCase()
+            : '';
+        if (serverStatus) {
+            statusKey = serverStatus;
+        }
+        var copy = endedCopy(statusKey, endedByRole);
         var displayName = peerName
             || (lastCallContext && lastCallContext.peerName)
             || (currentCall && currentCall.peer && currentCall.peer.name)
-            || '';
+            || ((callPayload && callPayload.peer && callPayload.peer.name) || '');
         var avatarSrc = (lastCallContext && (!peerName || peerName === lastCallContext.peerName))
             ? (lastCallContext.peerAvatar || '')
             : '';
+        if (!avatarSrc && callPayload && callPayload.peer) {
+            avatarSrc = callPayload.peer.profile_image_url || callPayload.peer.avatar_url || '';
+        }
+        var callType = (lastCallContext && lastCallContext.callType)
+            || (currentCall && currentCall.call_type)
+            || (callPayload && callPayload.call_type)
+            || 'voice';
+        var typeLabel = String(callType) === 'video' ? 'Video call' : 'Voice call';
+
+        var serverDuration = authoritativeDurationMs(callPayload);
+        var connected = serverDuration !== null
+            ? serverDuration >= 500
+            : (lastCallDurationMs >= 1000);
+
+        var statusLabel = ({
+            ended: connected ? 'Completed' : 'Failed',
+            completed: 'Completed',
+            missed: 'Missed',
+            rejected: 'Declined',
+            cancelled: 'Cancelled',
+            canceled: 'Cancelled',
+            offline: 'Failed',
+            failed: 'Failed'
+        })[statusKey] || copy.title || 'Ended';
+
         if (els.endedTitle) els.endedTitle.textContent = copy.title;
         if (els.endedReason) els.endedReason.textContent = copy.reason;
         if (els.endedPeer) {
@@ -527,12 +649,44 @@ import {
             els.endedPeer.hidden = !displayName;
         }
         paintAvatar(els.endedAvatar, displayName, avatarSrc);
+        var endedType = document.getElementById('commsCallEndedType');
+        if (endedType) {
+            endedType.textContent = typeLabel;
+            endedType.hidden = false;
+        }
+        var endedStatus = document.getElementById('commsCallEndedStatus');
+        if (endedStatus) {
+            endedStatus.textContent = statusLabel;
+            endedStatus.hidden = false;
+        }
+        var durationMs = serverDuration !== null ? serverDuration : lastCallDurationMs;
         if (els.endedDuration) {
-            var hasDuration = lastCallDurationMs >= 1000;
-            els.endedDuration.textContent = hasDuration ? formatDuration(lastCallDurationMs) : '';
-            els.endedDuration.hidden = !hasDuration;
+            // A completed-call summary only makes sense for a call that connected.
+            var showDuration = connected && (statusKey === 'ended' || statusKey === 'completed');
+            els.endedDuration.textContent = showDuration ? ('Duration: ' + formatDuration(durationMs)) : '';
+            els.endedDuration.hidden = !showDuration;
+        }
+        var endedStarted = document.getElementById('commsCallEndedStarted');
+        if (endedStarted) {
+            var startedAt = (callPayload && callPayload.started_at)
+                || (callPayload && callPayload.answered_at)
+                || '';
+            var startedText = formatClockTime(startedAt);
+            endedStarted.textContent = startedText ? ('Started: ' + startedText) : '';
+            endedStarted.hidden = !startedText;
+        }
+        var endedAt = document.getElementById('commsCallEndedAt');
+        if (endedAt) {
+            var endText = formatClockTime((callPayload && callPayload.ended_at) || '');
+            endedAt.textContent = endText ? ('Ended: ' + endText) : '';
+            endedAt.hidden = !endText;
         }
         lastCallDurationMs = 0;
+        role = null;
+        currentCall = null;
+        incomingCall = null;
+        incomingCallId = null;
+        answeredCall = null;
 
         if (els.ended) els.ended.hidden = false;
         if (els.endedClose) {
@@ -626,16 +780,16 @@ import {
     function updateCameraUi() {
         if (els.cameraBtn) {
             els.cameraBtn.hidden = false;
-            setCameraUi(!!cameraEnabled);
         }
-        if (els.localVideo) {
-            els.localVideo.hidden = !cameraEnabled;
-        }
+        // The self-view element is never hidden: the camera-off placeholder is
+        // layered on top of it so the video element and its stream stay intact.
+        syncCameraUi();
         var remoteVideoLive = hasLiveRemoteVideo();
+        var isVideoCall = isVideoCallType();
         if (els.inCall) {
             els.inCall.classList.toggle('is-connected', !!callConnected);
             els.inCall.classList.toggle('has-remote-video', remoteVideoLive);
-            els.inCall.classList.toggle('is-video-call', !!cameraEnabled || remoteVideoLive);
+            els.inCall.classList.toggle('is-video-call', isVideoCall || remoteVideoLive);
         }
         if (els.callCenter) {
             els.callCenter.hidden = false;
@@ -643,6 +797,21 @@ import {
             els.callCenter.classList.toggle('is-compact', !!callConnected && remoteVideoLive);
         }
         syncLocalPipLayout();
+    }
+
+    /**
+     * A call is a video call when it was started as one or when the peer is
+     * sending video. The local camera state never controls this: switching the
+     * camera off must not collapse the remote video layout.
+     */
+    function isVideoCallType() {
+        if (currentCall && currentCall.call_type) {
+            return String(currentCall.call_type) === 'video';
+        }
+        if (lastCallContext && lastCallContext.callType) {
+            return String(lastCallContext.callType) === 'video';
+        }
+        return !!wantsVideo;
     }
 
     function syncLocalPipLayout() {
@@ -867,12 +1036,21 @@ import {
     var answeredCallIds = Object.create(null);
     var shownIncomingIds = Object.create(null);
 
+    function rememberCallId(map, id) {
+        var key = String(id);
+        map[key] = true;
+        var keys = Object.keys(map);
+        if (keys.length > 200) {
+            delete map[keys[0]];
+        }
+    }
+
     function markCallTerminal(callId) {
         var id = callId != null ? Number(callId) : 0;
         if (!id) return;
-        dismissedRingIds[id] = true;
-        answeredCallIds[id] = true;
-        shownIncomingIds[id] = true;
+        rememberCallId(dismissedRingIds, id);
+        rememberCallId(answeredCallIds, id);
+        rememberCallId(shownIncomingIds, id);
         lastEndedCallId = id;
     }
 
@@ -880,7 +1058,25 @@ import {
         var id = callId != null ? Number(callId) : 0;
         if (!id) return false;
         if (dismissedRingIds[id] || answeredCallIds[id]) return true;
+        if (shownIncomingIds[id] && incomingCallId !== id) return true;
         if (lastEndedCallId != null && Number(lastEndedCallId) === id) return true;
+        return false;
+    }
+
+    /**
+     * A broadcast invitation can arrive long after the ring expired.
+     * Terminal invitations must never open the modal again.
+     */
+    function isInvitationExpired(call) {
+        if (!call) return true;
+        if (call.status && String(call.status) !== 'ringing') return true;
+        var expiresAt = call.expires_at ? Date.parse(call.expires_at) : NaN;
+        if (!isNaN(expiresAt) && expiresAt <= Date.now()) return true;
+        var createdAt = call.created_at ? Date.parse(call.created_at) : NaN;
+        if (isNaN(expiresAt) && !isNaN(createdAt)) {
+            var ttl = (Number(window.__COMMS_CALL_RING_TTL__) || 90) * 1000;
+            if (createdAt + ttl <= Date.now()) return true;
+        }
         return false;
     }
 
@@ -900,11 +1096,29 @@ import {
         if (startingCall || pendingStart) return true;
         if (callConnected) return true;
         if (els.inCall && !els.inCall.hidden) return true;
-        return !!(currentCall && currentCall.id && !isCallAlreadyHandled(currentCall.id));
+        // Stale currentCall with hidden UI must not block ringing poll forever.
+        if (currentCall && currentCall.id && !isCallAlreadyHandled(currentCall.id)) {
+            if (els.inCall && els.inCall.hidden && (!els.incoming || els.incoming.hidden) && !callConnected) {
+                markCallTerminal(currentCall.id);
+                currentCall = null;
+                role = null;
+                return false;
+            }
+            return true;
+        }
+        return false;
     }
 
     function resetCallerRoleIfIdle() {
         if (role === 'caller' && !isOutboundCallerBusy()) {
+            role = null;
+        }
+        if (!callConnected && !startingCall && !pendingStart
+            && (!els.inCall || els.inCall.hidden)
+            && (!els.incoming || els.incoming.hidden)
+            && currentCall && currentCall.id) {
+            markCallTerminal(currentCall.id);
+            currentCall = null;
             role = null;
         }
     }
@@ -912,14 +1126,34 @@ import {
     function showIncoming(call) {
         if (!call) return;
         var callId = call.id != null ? Number(call.id) : null;
-        if (callId && isCallAlreadyHandled(callId)) return;
-        if (callId && isActivelyInCall(callId)) {
-            if (call._remoteOffer && currentCall) {
+        if (!callId) return;
+
+        // Expired / already-terminal invitations are dropped silently.
+        if (isInvitationExpired(call)) {
+            markCallTerminal(callId);
+            stopRingtone();
+            hideIncoming();
+            return;
+        }
+
+        if (isCallAlreadyHandled(callId)) return;
+
+        // One modal at a time. A different call never replaces the one on screen.
+        if (incomingCallId !== null && incomingCallId !== callId) {
+            if (els.incoming && !els.incoming.hidden) {
+                return;
+            }
+            incomingCallId = null;
+            incomingCall = null;
+        }
+
+        if (isActivelyInCall(callId)) {
+            if (call._remoteOffer && currentCall && Number(currentCall.id) === callId) {
                 currentCall._remoteOffer = call._remoteOffer;
             }
             return;
         }
-        // Never interrupt an active call with a stale ring for another/same id.
+        // Never interrupt a connected call with a stale ring.
         if (isActivelyInCall(null) && callConnected) return;
 
         if (!els.incoming) {
@@ -937,24 +1171,17 @@ import {
         els.accept = document.getElementById('commsAcceptCall') || els.accept;
         els.reject = document.getElementById('commsRejectCall') || els.reject;
 
-        // One modal per call_id — even when currentCall is null (group invite path).
-        if (callId && shownIncomingIds[callId] && els.incoming && !els.incoming.hidden) {
+        // The same invitation may arrive twice (server broadcast + peer
+        // signal + recovery poll). Keep exactly one modal.
+        if (incomingCallId === callId && els.incoming && !els.incoming.hidden) {
             if (call._remoteOffer && currentCall && Number(currentCall.id) === callId) {
                 currentCall._remoteOffer = call._remoteOffer;
             }
             return;
         }
-        if (callId && callId === Number(lastIncomingCallId)
-            && els.incoming && !els.incoming.hidden) {
-            if (call._remoteOffer && currentCall && Number(currentCall.id) === callId) {
-                currentCall._remoteOffer = call._remoteOffer;
-            }
-            return;
-        }
-        if (callId) {
-            lastIncomingCallId = callId;
-            shownIncomingIds[callId] = true;
-        }
+
+        lastIncomingCallId = callId;
+        rememberCallId(shownIncomingIds, callId);
 
         role = 'callee';
         // Do not clear callConnected if we somehow got here during an active call.
@@ -971,11 +1198,22 @@ import {
         if (call.caller_profile) {
             call.peer = Object.assign({}, call.peer || {}, call.caller_profile);
         }
+        var incomingName = (call.peer && call.peer.name)
+            || call.peer_name
+            || call.from_name
+            || 'Incoming caller';
         if (els.incomingPeer) {
-            els.incomingPeer.textContent = (call.peer && call.peer.name)
-                || call.peer_name
-                || call.from_name
-                || 'Incoming caller';
+            els.incomingPeer.textContent = incomingName;
+        }
+        var incomingAvatarEl = document.getElementById('commsIncomingAvatar');
+        if (incomingAvatarEl) {
+            var avatarSrc = (call.peer && (call.peer.profile_image_url || call.peer.avatar_url))
+                || call.caller_avatar
+                || '';
+            if (!avatarSrc && window.Comms && typeof window.Comms.defaultAvatar === 'function') {
+                avatarSrc = window.Comms.defaultAvatar(incomingName);
+            }
+            paintAvatar(incomingAvatarEl, incomingName, avatarSrc);
         }
         var titleEl = document.getElementById('commsIncomingTitle');
         var isVideo = String(call.call_type || '') === 'video';
@@ -992,6 +1230,10 @@ import {
         }
         if (els.accept) els.accept.textContent = 'Answer';
         if (els.reject) els.reject.textContent = 'Decline';
+
+        incomingCall = call;
+        incomingCallId = callId;
+
         if (call.is_group_call || call._groupInvite) {
             window.__commsPendingGroupInvite = call._groupInvite || {
                 call_id: call.id,
@@ -1017,12 +1259,22 @@ import {
             }, RING_TIMEOUT_MS);
             return;
         }
-        currentCall = Object.assign({}, currentCall || {}, call);
-        rememberCallContext(currentCall);
+        // An outgoing call that is still ringing owns currentCall. A new
+        // invitation is kept aside instead of hijacking that session.
+        var outgoingPending = !!(role === 'caller'
+            && currentCall
+            && currentCall.id != null
+            && !callConnected
+            && !isCallAlreadyHandled(Number(currentCall.id)));
+
+        if (!outgoingPending) {
+            currentCall = Object.assign({}, currentCall || {}, call);
+            rememberCallContext(currentCall);
+        }
         els.incoming.hidden = false;
         els.incoming.removeAttribute('hidden');
         startRingtone('incoming');
-        armRingTimeout();
+        armRingTimeout(true);
     }
 
     function hideIncoming() {
@@ -1047,30 +1299,61 @@ import {
         return h > 0 ? h + ':' + String(m).padStart(2, '0') + ':' + s : m + ':' + s;
     }
 
-    function startTimer(serverStartedAt) {
+    /**
+     * Start (or realign) the call timer.
+     *
+     * The duration is always derived from a timestamp, never from counting
+     * interval ticks, so a throttled background tab cannot drift. The server
+     * timestamp is the shared source of truth for both participants and the
+     * server clock offset removes any difference between the two devices.
+     */
+    function startTimer(serverStartedAt, serverTime) {
+        applyServerClock(serverTime);
+
         if (serverStartedAt) {
             var parsed = Date.parse(serverStartedAt);
             if (!isNaN(parsed)) {
                 callStartedAt = parsed;
             }
         }
+
         if (callTimer) {
-            if (els.timer && callStartedAt) {
-                els.timer.textContent = formatTimer(Date.now() - callStartedAt);
-            }
+            renderTimer();
             return;
         }
         if (!callStartedAt) {
-            callStartedAt = Date.now();
+            callStartedAt = Date.now() + clockOffsetMs;
         }
-        if (els.timer) {
-            els.timer.textContent = formatTimer(Date.now() - callStartedAt);
-        }
+        renderTimer();
         callTimer = setInterval(function () {
-            if (els.timer && callStartedAt) {
-                els.timer.textContent = formatTimer(Date.now() - callStartedAt);
-            }
+            renderTimer();
         }, 250);
+    }
+
+    /**
+     * Estimate the difference between the server clock and this device.
+     */
+    function applyServerClock(serverTime) {
+        if (!serverTime) return;
+        var parsed = Date.parse(serverTime);
+        if (isNaN(parsed)) return;
+        var offset = parsed - Date.now();
+        // Ignore absurd offsets (the value is usually wrong, not the clock).
+        if (Math.abs(offset) > 24 * 60 * 60 * 1000) return;
+        clockOffsetMs = offset;
+    }
+
+    /**
+     * Elapsed call time in milliseconds, based on timestamps.
+     */
+    function callElapsedMs() {
+        if (!callStartedAt) return 0;
+        return Math.max(0, (Date.now() + clockOffsetMs) - callStartedAt);
+    }
+
+    function renderTimer() {
+        if (!els.timer || !callStartedAt) return;
+        els.timer.textContent = formatTimer(callElapsedMs());
     }
 
     async function ensurePeerConnection(videoEnabled) {
@@ -1160,81 +1443,229 @@ import {
         return pc;
     }
 
-    async function setCameraEnabled(enabled) {
-        if (!pc || !localStream) return;
-        enabled = !!enabled;
+    /**
+     * Toggle the camera without destroying the call.
+     *
+     * - Turning the camera off only disables the video track. The track, the
+     *   MediaStream, the RTCRtpSender and the peer connection stay alive, so
+     *   the microphone and the call are never interrupted.
+     * - Turning the camera on re-enables the existing track. When the track
+     *   was ended (device removed, permission revoked) a fresh track is
+     *   acquired and installed with replaceTrack() instead of reusing the
+     *   dead one.
+     * - Rapid clicks are serialised: the last requested state always wins and
+     *   only one camera stream exists at a time.
+     */
+    function setCameraEnabled(enabled) {
+        var target = !!enabled;
+        cameraPending = target;
 
-        var videoTracks = localStream.getVideoTracks();
-        if (enabled) {
-            var needsRenegotiate = false;
-            if (!videoTracks.length || videoTracks.every(function (t) { return t.readyState === 'ended'; })) {
-                var devices = assertMediaReady();
-                var camStream = await devices.getUserMedia(videoOnlyConstraints());
-                await prepareLocalStream(camStream);
-                var newTrack = camStream.getVideoTracks()[0];
-                if (!newTrack) {
-                    throw new Error('No camera was found on this device.');
-                }
-                if (!localStream.getVideoTracks().some(function (t) { return t.id === newTrack.id; })) {
-                    localStream.addTrack(newTrack);
-                }
-                var sender = pc.getSenders().find(function (s) {
-                    return s.track && s.track.kind === 'video';
+        cameraChain = cameraChain.then(function () {
+            // A newer click arrived while we were working: honour the latest.
+            var wanted = cameraPending;
+            return applyCameraState(wanted);
+        }).catch(function (err) {
+            toast((err && err.message) || 'Unable to toggle camera.', 'error');
+            syncCameraUi();
+        }).then(function () {
+            if (cameraPending !== null && cameraPending !== cameraEnabled) {
+                return setCameraEnabled(cameraPending);
+            }
+            // Tell the peer so it can show the camera-off placeholder.
+            if (currentCall) {
+                signalPeer({
+                    type: 'camera',
+                    call_id: currentCall.id,
+                    conversation_id: currentCall.conversation_id,
+                    enabled: !!cameraEnabled
                 });
-                if (sender) {
-                    await sender.replaceTrack(newTrack);
-                    needsRenegotiate = true;
-                } else {
-                    var videoTx = pc.getTransceivers().find(function (t) {
-                        return (t.receiver && t.receiver.track && t.receiver.track.kind === 'video')
-                            || (t.sender && (!t.sender.track || t.sender.track.kind === 'video'));
-                    });
-                    if (videoTx && videoTx.sender) {
-                        await videoTx.sender.replaceTrack(newTrack);
-                        try { videoTx.direction = 'sendrecv'; } catch (eDir) { /* ignore */ }
-                        needsRenegotiate = true;
-                    } else {
-                        pc.addTrack(newTrack, localStream);
-                        needsRenegotiate = true;
-                    }
-                }
-                if (els.localVideo) {
-                    els.localVideo.srcObject = localStream;
-                    els.localVideo.hidden = false;
-                    try {
-                        var lp = els.localVideo.play();
-                        if (lp && typeof lp.catch === 'function') lp.catch(function () {});
-                    } catch (ePlay) { /* ignore */ }
-                }
-            } else {
-                videoTracks.forEach(function (t) { t.enabled = true; });
-                if (els.localVideo) {
-                    els.localVideo.srcObject = localStream;
-                    els.localVideo.hidden = false;
-                    try {
-                        var lp2 = els.localVideo.play();
-                        if (lp2 && typeof lp2.catch === 'function') lp2.catch(function () {});
-                    } catch (ePlay2) { /* ignore */ }
-                }
             }
-            cameraEnabled = true;
-            updateCameraUi();
-            if (needsRenegotiate) {
-                await renegotiateForCamera();
-            }
-        } else {
-            videoTracks.forEach(function (t) { t.enabled = false; });
-            cameraEnabled = false;
-            updateCameraUi();
+            return null;
+        });
+
+        return cameraChain;
+    }
+
+    async function applyCameraState(enabled) {
+        if (!pc || !localStream) {
+            return;
         }
 
-        if (currentCall) {
-            signalPeer({
-                type: 'camera',
-                call_id: currentCall.id,
-                conversation_id: currentCall.conversation_id,
-                enabled: cameraEnabled
+        cameraBusy = true;
+        syncCameraUi();
+
+        try {
+            var liveTrack = findLiveVideoTrack();
+            var needsRenegotiate = false;
+
+            if (!enabled) {
+                // Keep the track (and the sender) in place; only mute it.
+                localStream.getVideoTracks().forEach(function (track) {
+                    track.enabled = false;
+                });
+                cameraEnabled = false;
+                syncCameraUi();
+                return;
+            }
+
+            if (liveTrack) {
+                // Fast path: the original camera track is still usable.
+                localStream.getVideoTracks().forEach(function (track) {
+                    track.enabled = true;
+                });
+                liveTrack.enabled = true;
+                await attachVideoTrackToSender(liveTrack);
+                cameraEnabled = true;
+                syncCameraUi();
+                return;
+            }
+
+            // Slow path: the track was ended. Acquire a new one and replace it.
+            var devices = assertMediaReady();
+            var camStream = await devices.getUserMedia(videoOnlyConstraints());
+            await prepareLocalStream(camStream);
+            var newTrack = camStream.getVideoTracks()[0];
+            if (!newTrack) {
+                throw new Error('No camera was found on this device.');
+            }
+
+            // Drop dead tracks so the stream never accumulates duplicates.
+            localStream.getVideoTracks().forEach(function (track) {
+                if (track !== newTrack && track.readyState === 'ended') {
+                    try { localStream.removeTrack(track); } catch (e) {}
+                    try { track.stop(); } catch (e2) {}
+                }
             });
+            if (!localStream.getVideoTracks().some(function (t) { return t.id === newTrack.id; })) {
+                localStream.addTrack(newTrack);
+            }
+            // Stop any extra camera track the device handed us.
+            camStream.getVideoTracks().forEach(function (track) {
+                if (track !== newTrack) {
+                    try { track.stop(); } catch (e3) {}
+                }
+            });
+
+            newTrack.enabled = true;
+            needsRenegotiate = await attachVideoTrackToSender(newTrack);
+            cameraEnabled = true;
+            syncCameraUi();
+            attachLocalVideo();
+        } finally {
+            cameraBusy = false;
+            syncCameraUi();
+        }
+
+        if (needsRenegotiate) {
+            await renegotiateForCamera();
+        }
+    }
+
+    function findLiveVideoTrack() {
+        if (!localStream || typeof localStream.getVideoTracks !== 'function') return null;
+        var tracks = localStream.getVideoTracks();
+        for (var i = 0; i < tracks.length; i += 1) {
+            if (tracks[i] && tracks[i].readyState === 'live') {
+                return tracks[i];
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Make sure the peer connection sends exactly this video track.
+     *
+     * @return {Promise<boolean>} true when the peer connection must renegotiate.
+     */
+    async function attachVideoTrackToSender(track) {
+        if (!pc || !track) return false;
+
+        var sender = pc.getSenders().find(function (s) {
+            return s && s.track && s.track.kind === 'video';
+        });
+
+        if (sender) {
+            // Replacing a video track with another video track does not need
+            // a new offer: the transceiver already negotiated video.
+            if (sender.track !== track) {
+                await sender.replaceTrack(track);
+            }
+            return false;
+        }
+
+        var videoTx = pc.getTransceivers().find(function (t) {
+            return (t.receiver && t.receiver.track && t.receiver.track.kind === 'video')
+                || (t.sender && (!t.sender.track || t.sender.track.kind === 'video'));
+        });
+
+        if (videoTx && videoTx.sender) {
+            await videoTx.sender.replaceTrack(track);
+            try { videoTx.direction = 'sendrecv'; } catch (eDir) { /* ignore */ }
+            return true;
+        }
+
+        // No video sender yet: add the track and let the offer carry it.
+        pc.addTrack(track, localStream);
+        return true;
+    }
+
+    /**
+     * Attach the local stream to the self-view element.
+     *
+     * The element is never removed or hidden: when the camera is off the
+     * track simply produces no frames and the camera-off placeholder is
+     * shown on top of it.
+     */
+    function attachLocalVideo() {
+        if (!els.localVideo || !localStream) return;
+        if (els.localVideo.srcObject !== localStream) {
+            els.localVideo.srcObject = localStream;
+        }
+        els.localVideo.hidden = false;
+        els.localVideo.classList.toggle('is-camera-off', !cameraEnabled);
+        try {
+            var lp = els.localVideo.play();
+            if (lp && typeof lp.catch === 'function') {
+                lp.catch(function () {});
+            }
+        } catch (ePlay) { /* ignore */ }
+        syncLocalPipLayout();
+    }
+
+    /**
+     * Keep the camera button, the self-view and the placeholder in sync with
+     * the real media state.
+     */
+    function syncCameraUi() {
+        var on = !!cameraEnabled;
+        setCameraUi(on);
+        if (els.cameraBtn) {
+            els.cameraBtn.classList.toggle('is-busy', !!cameraBusy);
+            els.cameraBtn.setAttribute('aria-busy', cameraBusy ? 'true' : 'false');
+        }
+        if (els.localVideo) {
+            // The self-view stays mounted; only its state class changes.
+            els.localVideo.classList.toggle('is-camera-off', !on);
+            els.localVideo.classList.toggle('is-camera-on', on);
+        }
+        if (els.localVideoOff) {
+            els.localVideoOff.hidden = on;
+            var localOffAvatar = document.getElementById('commsLocalVideoOffAvatar');
+            if (localOffAvatar) {
+                var me = myIdentity();
+                var parts = String(me.name || 'You').trim().split(/\s+/).filter(Boolean);
+                var initials = parts.slice(0, 2).map(function (part) {
+                    return part.charAt(0).toUpperCase();
+                }).join('');
+                localOffAvatar.textContent = initials || 'U';
+            }
+        }
+        if (els.remoteVideoOff) {
+            els.remoteVideoOff.hidden = remoteCameraEnabled;
+        }
+        if (els.inCall) {
+            els.inCall.classList.toggle('is-remote-camera-off', !remoteCameraEnabled);
+            els.inCall.classList.toggle('is-local-camera-off', !on);
         }
     }
 
@@ -1273,8 +1704,15 @@ import {
         }
         setCallPeerAvatar(call);
         setCallStatus(statusText || (callConnected ? 'Connected' : 'Calling...'));
-        // Always reset timer display to 00:00 at start of call UI
-        if (els.timer) els.timer.textContent = '00:00';
+        // The timer is never reset by a UI update: it is only initialised when
+        // the call actually connects.
+        if (els.timer) {
+            if (callStartedAt) {
+                renderTimer();
+            } else {
+                els.timer.textContent = '00:00';
+            }
+        }
         if (callConnected && !callStartedAt) {
             startTimer();
         }
@@ -1288,10 +1726,11 @@ import {
         clearPendingStart();
         clearRingTimeout();
         clearConnectionTimeout();
+        stopCallHeartbeat();
         if (ringTimer || ringCtx) stopRingtone();
         clearInterval(callTimer);
         callTimer = null;
-        lastCallDurationMs = callStartedAt ? Date.now() - callStartedAt : 0;
+        lastCallDurationMs = callElapsedMs();
         callStartedAt = null;
         cameraEnabled = false;
         wantsVideo = false;
@@ -1422,12 +1861,12 @@ import {
         });
         currentCall = null;
         await cleanupMediaOnly();
-        showCallEnded(status, peerName, callSnapshot.id);
+        var serverCall = callSnapshot.id
+            ? await withTimeout(updateCallStatus(callSnapshot.id, status), 4000)
+            : null;
+        showCallEnded(status, peerName, callSnapshot.id, null, serverCall);
         refreshCallChat(callSnapshot.conversation_id);
-        Promise.all([
-            signalPromise.catch(function () {}),
-            callSnapshot.id ? updateCallStatus(callSnapshot.id, status).catch(function () {}) : Promise.resolve()
-        ]);
+        signalPromise.catch(function () {});
     }
 
     function clearPendingStart() {
@@ -1717,74 +2156,101 @@ import {
                 return;
             }
         }
-        if (!currentCall || startingCall) return;
+
+        // Answer must apply to the exact call id shown in the modal.
+        var modalCallId = incomingCallId != null ? Number(incomingCallId) : null;
+        var source = (modalCallId != null && incomingCall && Number(incomingCall.id) === modalCallId)
+            ? incomingCall
+            : currentCall;
+        if (!source || startingCall) return;
+        if (modalCallId != null && Number(source.id) !== modalCallId) {
+            // The modal belongs to a different call — never answer the wrong one.
+            return;
+        }
+        if (modalCallId != null && answeredCallIds[modalCallId]) return;
+
+        // From here on the call object is the one the user accepted.
+        var call = Object.assign({}, currentCall || {}, source);
+        currentCall = call;
+
         startingCall = true;
-        var acceptedCallId = currentCall.id != null ? Number(currentCall.id) : null;
+        var acceptedCallId = call.id != null ? Number(call.id) : null;
         if (acceptedCallId) markCallTerminal(acceptedCallId);
+        if (acceptedCallId) rememberCallId(answeredCallIds, acceptedCallId);
+        answeredCall = call;
 
         // Ensure timer is fully reset before starting new call (REVIEW FIX #1)
         clearInterval(callTimer);
         callTimer = null;
         callStartedAt = null;
-        
+
         clearRingTimeout();
         stopRingtone();
         hideIncoming();
         try {
             assertMediaReady();
-            await subscribeCallChannel(currentCall.conversation_id);
+            await subscribeCallChannel(call.conversation_id);
             callConnected = true;
-            showInCall(currentCall, 'Connecting...');
+            showInCall(call, 'Connecting...');
             unlockRemotePlayback();
             armConnectionTimeout();
             signalPeer({
                 type: 'call-accepted',
-                call_id: currentCall.id,
-                conversation_id: currentCall.conversation_id,
-                caller_id: currentCall.caller_id,
-                caller_type: currentCall.caller_type,
-                receiver_id: currentCall.receiver_id,
-                receiver_type: currentCall.receiver_type
+                call_id: call.id,
+                conversation_id: call.conversation_id,
+                caller_id: call.caller_id,
+                caller_type: call.caller_type,
+                receiver_id: call.receiver_id,
+                receiver_type: call.receiver_type
             });
-            updateCallStatus(currentCall.id, 'accepted').then(function (accepted) {
+            updateCallStatus(call.id, 'accepted').then(function (accepted) {
                 if (accepted && currentCall && Number(currentCall.id) === Number(accepted.id)) {
                     currentCall = Object.assign({}, currentCall, accepted);
+                    answeredCall = currentCall;
                     if (accepted.started_at || accepted.answered_at) {
-                        startTimer(accepted.started_at || accepted.answered_at);
+                        startTimer(accepted.started_at || accepted.answered_at, accepted.server_time);
                     }
                 }
             }).catch(function () {});
-            wantsVideo = currentCall.call_type === 'video';
+            wantsVideo = call.call_type === 'video';
             await ensurePeerConnection(wantsVideo);
-            if (!currentCall._remoteOffer) {
+            if (!call._remoteOffer) {
                 await waitForRemoteOffer(8000);
             }
-            if (currentCall._remoteOffer) {
-                await pc.setRemoteDescription(currentCall._remoteOffer);
+            if (call._remoteOffer) {
+                await pc.setRemoteDescription(call._remoteOffer);
                 var answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
                 await signalPeer({
                     type: 'answer',
-                    call_id: currentCall.id,
-                    conversation_id: currentCall.conversation_id,
+                    call_id: call.id,
+                    conversation_id: call.conversation_id,
                     sdp: answer,
-                    caller_id: currentCall.caller_id,
-                    caller_type: currentCall.caller_type,
-                    receiver_id: currentCall.receiver_id,
-                    receiver_type: currentCall.receiver_type
+                    caller_id: call.caller_id,
+                    caller_type: call.caller_type,
+                    receiver_id: call.receiver_id,
+                    receiver_type: call.receiver_type,
+                    // Shared timing reference so the caller shows the same
+                    // duration as the callee.
+                    started_at: call.started_at || call.answered_at || null,
+                    server_time: call.server_time || null
                 });
                 while (iceQueue.length) {
                     await pc.addIceCandidate(iceQueue.shift());
                 }
                 setCallStatus('Connected');
-                startTimer(currentCall && (currentCall.started_at || currentCall.answered_at));
-                refreshCallChat(currentCall.conversation_id);
+                startTimer(
+                    call.started_at || call.answered_at,
+                    call.server_time
+                );
+                startCallHeartbeat();
+                refreshCallChat(call.conversation_id);
             } else {
                 toast('Call signal was incomplete. Ask the caller to try again.', 'error');
-                await updateCallStatus(currentCall.id, 'ended');
-                var peerName = (currentCall.peer && currentCall.peer.name) || '';
-                var incompleteId = currentCall.id;
-                var incompleteConv = currentCall.conversation_id;
+                await updateCallStatus(call.id, 'ended');
+                var peerName = (call.peer && call.peer.name) || '';
+                var incompleteId = call.id;
+                var incompleteConv = call.conversation_id;
                 currentCall = null;
                 await cleanupMediaOnly();
                 showCallEnded('ended', peerName, incompleteId);
@@ -1792,12 +2258,12 @@ import {
             }
         } catch (err) {
             toast(err.message || 'Unable to accept call.', 'error');
-            if (currentCall && currentCall.id) {
-                try { await updateCallStatus(currentCall.id, 'rejected'); } catch (e) { /* ignore */ }
+            if (call && call.id) {
+                try { await updateCallStatus(call.id, 'rejected'); } catch (e) { /* ignore */ }
             }
-            var peer = (currentCall && currentCall.peer && currentCall.peer.name) || '';
-            var failId = currentCall && currentCall.id;
-            var failConv = currentCall && currentCall.conversation_id;
+            var peer = (call && call.peer && call.peer.name) || '';
+            var failId = call && call.id;
+            var failConv = call && call.conversation_id;
             currentCall = null;
             await cleanupMediaOnly();
             showCallEnded('rejected', peer, failId);
@@ -1820,9 +2286,60 @@ import {
                 }
             } catch (e) { /* fall through */ }
         }
-        if (!currentCall) return;
+        // Decline must update the exact call session shown in the modal.
+        var modalCallId = incomingCallId != null ? Number(incomingCallId) : null;
+        var source = (modalCallId != null && incomingCall && Number(incomingCall.id) === modalCallId)
+            ? incomingCall
+            : currentCall;
+        if (!source) return;
+        if (modalCallId != null && Number(source.id) !== modalCallId) {
+            return;
+        }
+        currentCall = Object.assign({}, currentCall || {}, source);
         if (currentCall.id != null) markCallTerminal(currentCall.id);
         await finishUnanswered('rejected');
+    }
+
+    /**
+     * Ask the server for the terminal state of a call, but never block the UI
+     * for long. The server owns the authoritative duration.
+     */
+    function withTimeout(promise, ms) {
+        return new Promise(function (resolve) {
+            var settled = false;
+            var timer = setTimeout(function () {
+                if (settled) return;
+                settled = true;
+                resolve(null);
+            }, ms);
+            Promise.resolve(promise).then(function (value) {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                resolve(value);
+            }).catch(function () {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timer);
+                resolve(null);
+            });
+        });
+    }
+
+    /**
+     * Authoritative call state (status, started_at, ended_at, duration).
+     */
+    function fetchCallState(callId) {
+        var r = routes();
+        if (!r.callShow || !callId || !window.Comms || typeof window.Comms.api !== 'function') {
+            return Promise.resolve(null);
+        }
+        return window.Comms.api(window.Comms.route(r.callShow, callId), {
+            method: 'GET',
+            dedupe: false
+        }).then(function (data) {
+            return (data && data.call) || null;
+        }).catch(function () { return null; });
     }
 
     async function endCall() {
@@ -1868,12 +2385,11 @@ import {
         });
         currentCall = null;
         await cleanupMediaOnly();
-        showCallEnded('ended', peerName, callSnapshot.id);
+        // The server owns the end timestamp and the duration.
+        var serverCall = await withTimeout(updateCallStatus(callSnapshot.id, 'ended'), 4000);
+        showCallEnded('ended', peerName, callSnapshot.id, role, serverCall);
         refreshCallChat(callSnapshot.conversation_id);
-        Promise.all([
-            signalPromise.catch(function () {}),
-            updateCallStatus(callSnapshot.id, 'ended').catch(function () {})
-        ]);
+        signalPromise.catch(function () {});
     }
 
     function sameCall(payload) {
@@ -1995,14 +2511,23 @@ import {
             var peerName = (currentCall && currentCall.peer && currentCall.peer.name) || '';
             var hangupId = (currentCall && currentCall.id) || payload.call_id;
             var hangupConv = (currentCall && currentCall.conversation_id) || payload.conversation_id;
+            if (hangupId != null) markCallTerminal(hangupId);
             currentCall = null;
+            role = null;
             await cleanupMediaOnly();
-            showCallEnded(reason, peerName, hangupId, payload.ended_by_role);
+            // The peer already ended the call server-side: read the
+            // authoritative timestamps and duration from the server.
+            var serverState = await withTimeout(fetchCallState(hangupId), 4000);
+            showCallEnded(reason, peerName, hangupId, payload.ended_by_role, serverState);
             refreshCallChat(hangupConv);
             return;
         }
 
         if (payload.type === 'camera') {
+            // The peer switched their camera: show the placeholder instead of
+            // a frozen/black frame, but keep the remote element and its
+            // stream mounted so it recovers instantly.
+            remoteCameraEnabled = payload.enabled !== false;
             if (remoteStream) {
                 bindRemoteMedia(remoteStream);
             }
@@ -2037,7 +2562,25 @@ import {
             if (role !== 'caller') return;
             applyPeerAnswered();
             setCallStatus('Connected');
-            startTimer(currentCall && (currentCall.started_at || currentCall.answered_at));
+            // The peer sends the authoritative start timestamp so both sides
+            // show the same duration.
+            var answerStartedAt = payload.started_at
+                || (currentCall && (currentCall.started_at || currentCall.answered_at));
+            var answerServerTime = payload.server_time
+                || (currentCall && currentCall.server_time)
+                || null;
+            if (answerStartedAt) {
+                startTimer(answerStartedAt, answerServerTime);
+            } else {
+                // Fall back to the server record when the peer did not send it.
+                fetchCallState(currentCall && currentCall.id).then(function (state) {
+                    if (state && (state.started_at || state.answered_at)) {
+                        startTimer(state.started_at || state.answered_at, state.server_time);
+                    }
+                });
+            }
+            // The caller also keeps the call alive on the server.
+            startCallHeartbeat();
             refreshCallChat(currentCall && currentCall.conversation_id);
             return;
         }
@@ -2057,10 +2600,16 @@ import {
         if (!row) return;
         var isReceiver = isMeOnCallRow(row, true);
         var isCaller = isMeOnCallRow(row, false);
-        if (!isReceiver && !isCaller) return;
+        var isGroupRow = !!(row.is_group_call)
+            || (Number(row.caller_id) === Number(row.receiver_id)
+                && String(row.caller_type || '') === String(row.receiver_type || ''));
 
-        if (row.is_group_call && row.status === 'ringing' && !isCaller
+        // Group invitees are neither caller nor receiver on the DB row (placeholder self-receiver).
+        if (!isReceiver && !isCaller && !(isGroupRow && row.status === 'ringing')) return;
+
+        if (isGroupRow && row.status === 'ringing' && !isCaller
             && typeof window.CommsWebRTC.__showIncomingGroup === 'function') {
+            if (row.id != null && isCallAlreadyHandled(row.id)) return;
             window.CommsWebRTC.__showIncomingGroup({
                 call_id: row.id,
                 conversation_id: row.conversation_id,
@@ -2069,12 +2618,13 @@ import {
                 caller_type: row.caller_type,
                 peer_name: (row.peer && row.peer.name) || 'Group call',
                 invitees: row.invitees || [],
-                call_max_participants: row.call_max_participants
+                call_max_participants: row.call_max_participants,
+                is_group_call: true
             });
             return;
         }
 
-        if (row.status === 'ringing' && isReceiver) {
+        if (row.status === 'ringing' && isReceiver && !isGroupRow) {
             if (row.id != null && (isCallAlreadyHandled(row.id) || isActivelyInCall(row.id))) return;
             role = 'callee';
             currentCall = Object.assign({}, currentCall || {}, {
@@ -2144,8 +2694,11 @@ import {
     }
 
     /**
-     * Fallback when chat shows "Video call started" but inbox/call-row missed the ring.
-     * Uses the lightweight /calls/ringing endpoint when available.
+     * Fallback when the realtime invitation was missed (tab was closed, the
+     * socket dropped, the broadcast arrived before the subscription).
+     *
+     * The endpoint also returns `active_call`, the authoritative answer to
+     * "am I in a call right now?" — stale local state is reconciled with it.
      */
     function syncIncomingFromServer(conversationId) {
         resetCallerRoleIfIdle();
@@ -2162,6 +2715,7 @@ import {
             if (isOutboundCallerBusy()) return;
             if (isActivelyInCall(null) && callConnected) return;
             window.Comms.api(url, { method: 'GET', dedupe: true }).then(function (data) {
+                reconcileWithServerState(data);
                 resetCallerRoleIfIdle();
                 if (isOutboundCallerBusy()) return;
                 if (els.incoming && !els.incoming.hidden) return;
@@ -2173,9 +2727,32 @@ import {
                     var c = list[i];
                     if (!c || String(c.status) !== 'ringing') continue;
                     if (c.id != null && isCallAlreadyHandled(c.id)) continue;
+                    if (conversationId && Number(c.conversation_id) !== Number(conversationId)) continue;
+                    var groupRing = !!(c.is_group_call)
+                        || (Number(c.caller_id) === Number(c.receiver_id)
+                            && String(c.caller_type || '') === String(c.receiver_type || ''));
+                    if (groupRing) {
+                        var iAmHost = Number(c.caller_id) === me.id
+                            && (!c.caller_type || !me.type || portalTypesMatch(c.caller_type, me.type));
+                        if (iAmHost) continue;
+                        if (typeof window.CommsWebRTC.__showIncomingGroup === 'function') {
+                            window.CommsWebRTC.__showIncomingGroup({
+                                call_id: c.id,
+                                conversation_id: c.conversation_id,
+                                call_type: c.call_type,
+                                caller_id: c.caller_id,
+                                caller_type: c.caller_type,
+                                peer_name: (c.peer && c.peer.name) || 'Group call',
+                                invitees: c.invitees || [],
+                                call_max_participants: c.call_max_participants,
+                                is_group_call: true
+                            });
+                            return;
+                        }
+                        continue;
+                    }
                     if (Number(c.receiver_id) !== me.id) continue;
                     if (c.receiver_type && me.type && !portalTypesMatch(c.receiver_type, me.type)) continue;
-                    if (conversationId && Number(c.conversation_id) !== Number(conversationId)) continue;
                     ringing = c;
                     break;
                 }
@@ -2186,6 +2763,7 @@ import {
                         if (row.id != null && isCallAlreadyHandled(row.id)) continue;
                         if (Number(row.receiver_id) !== me.id) continue;
                         if (conversationId && Number(row.conversation_id) !== Number(conversationId)) continue;
+                        if (Number(row.caller_id) === Number(row.receiver_id)) continue;
                         ringing = row;
                         break;
                     }
@@ -2199,7 +2777,52 @@ import {
         }, 50);
     }
 
+    /**
+     * Reconcile the local call state with the server's authoritative answer.
+     *
+     * The server never keeps a terminal call active, so a call that the server
+     * does not know about any more must be released locally. This is what
+     * removes the false "You are currently on another call" warning.
+     */
+    function reconcileWithServerState(data) {
+        if (!data) return;
+        var active = data.active_call || null;
+        var activeId = active && active.id != null ? Number(active.id) : null;
+
+        // The server says we are not in a call: release any local call state.
+        if (!activeId) {
+            if (currentCall && currentCall.id) {
+                var staleId = Number(currentCall.id);
+                if (staleId !== lastEndedCallId && !isCallAlreadyHandled(staleId)) {
+                    // Only release when the server really has no active call.
+                    if (!callConnected) {
+                        markCallTerminal(staleId);
+                        currentCall = null;
+                        role = null;
+                        if (els.inCall) els.inCall.hidden = true;
+                    }
+                }
+            }
+            return;
+        }
+
+        // The server reports an active call we did not know about (for example
+        // after a reconnect). Adopt it instead of claiming a busy state.
+        if (!currentCall && !callConnected && activeId !== lastEndedCallId
+            && !isCallAlreadyHandled(activeId)) {
+            currentCall = Object.assign({}, active);
+            role = (active.direction === 'outgoing') ? 'caller' : 'callee';
+        }
+    }
+
     var ringingPollTimer = null;
+
+    function ringingPollIntervalMs() {
+        // The realtime broadcast is the primary delivery path; this poll is only
+        // a safety net and must stay well below the API rate limit.
+        var ms = Number(window.__COMMS_CALL_POLL_MS__) || 8000;
+        return Math.max(4000, ms);
+    }
 
     function startRingingPoll() {
         if (ringingPollTimer) return;
@@ -2211,7 +2834,7 @@ import {
             if (els.incoming && !els.incoming.hidden) return;
             if (isActivelyInCall(null) && callConnected) return;
             syncIncomingFromServer(null);
-        }, 1500);
+        }, ringingPollIntervalMs());
     }
 
     function presenceOnlineKey(userId, portalType) {
@@ -2304,11 +2927,23 @@ import {
                 setMuteUi(nextMuted);
                 return;
             }
-            if (!localStream) return;
-            localStream.getAudioTracks().forEach(function (t) {
-                t.enabled = !t.enabled;
-                setMuteUi(!t.enabled);
+            if (!localStream) {
+                toast('The call is not connected yet.', 'error');
+                return;
+            }
+            // Muting only touches the audio tracks: the camera and the peer
+            // connection are never affected.
+            var audioTracks = localStream.getAudioTracks();
+            if (!audioTracks.length) {
+                toast('No microphone is available for this call.', 'error');
+                return;
+            }
+            var currentlyEnabled = audioTracks.some(function (t) { return t.enabled; });
+            var nextEnabled = !currentlyEnabled;
+            audioTracks.forEach(function (t) {
+                t.enabled = nextEnabled;
             });
+            setMuteUi(!nextEnabled);
         });
     }
     if (els.cameraBtn) {
@@ -2326,9 +2961,18 @@ import {
                 }
                 return;
             }
-            if (!localStream || !pc) return;
-            setCameraEnabled(!cameraEnabled).catch(function (err) {
+            if (!localStream || !pc) {
+                toast('The call is not connected yet.', 'error');
+                return;
+            }
+            // The desired state is derived from the real media state, so the
+            // button always reflects reality even after a failed toggle.
+            var next = !cameraEnabled;
+            cameraPending = next;
+            syncCameraUi();
+            setCameraEnabled(next).catch(function (err) {
                 toast((err && err.message) || 'Unable to toggle camera.', 'error');
+                syncCameraUi();
             });
         });
     }

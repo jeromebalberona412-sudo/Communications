@@ -104,6 +104,10 @@ class ConversationService
      */
     public function createGroup(Authenticatable $authUser, array $memberUserIds, ?string $name = null): Conversation
     {
+        if ($this->defaultGroups->isLmsPortal()) {
+            abort(403, 'Creating additional groups is not allowed. Use the shared Capstone 2 group.');
+        }
+
         $authType = $this->types->portalType();
         $authId = (int) $authUser->id;
         $maxMembers = max(3, (int) config('communications.custom_group_max_members', 50));
@@ -358,6 +362,7 @@ class ConversationService
         return match ((string) $conversation->default_group_type) {
             DefaultGroupChatService::TYPE_SK_OFFICIALS => 'SK Officials group',
             DefaultGroupChatService::TYPE_SK_FEDERATIONS => 'SK Federations group',
+            DefaultGroupChatService::TYPE_CAPSTONE => 'Shared class group',
             default => 'Group chat',
         };
     }
@@ -375,6 +380,25 @@ class ConversationService
             $groupName = trim((string) ($conversation->name ?: 'Group chat'));
             $avatar = $this->defaultGroups->groupAvatarUrl($conversation);
 
+            $owner = null;
+            if ($this->defaultGroups->isCapstoneGroup($conversation)) {
+                $admin = $conversation->participants->first(
+                    fn (ConversationParticipant $p) => ($p->participant_role ?? '') === ConversationParticipant::ROLE_ADMIN
+                );
+                if (! $admin) {
+                    $admin = $conversation->participants->first(
+                        fn (ConversationParticipant $p) => in_array(
+                            strtolower((string) $p->user_type),
+                            ['teachers', 'teacher', 'sk_official'],
+                            true
+                        )
+                    );
+                }
+                if ($admin) {
+                    $owner = $this->serializeUser($admin->user, $admin->user_type);
+                }
+            }
+
             return [
                 'id' => $conversation->id,
                 'conversation_type' => $conversation->conversation_type,
@@ -383,10 +407,13 @@ class ConversationService
                 'max_members' => $max ?: null,
                 'member_count' => $memberCount,
                 'is_default_group' => $conversation->isDefaultGroup(),
+                'is_capstone_group' => $this->defaultGroups->isCapstoneGroup($conversation),
                 'can_rename' => $this->defaultGroups->canRename($conversation, $user),
                 'can_change_avatar' => $this->defaultGroups->canChangeAvatar($conversation, $user),
                 'call_max_participants' => (int) config('communications.call_max_participants', 8),
                 'avatar_url' => $avatar,
+                'created_at' => optional($conversation->created_at)?->toIso8601String(),
+                'owner' => $owner,
                 'member_previews' => $conversation->participants
                     ->take(4)
                     ->map(function (ConversationParticipant $p) {
@@ -450,9 +477,15 @@ class ConversationService
 
         $payload = ['last_read_at' => now()];
         if (SchemaCache::hasColumn('conversation_participants', 'last_read_message_id') && $latestMessageId > 0) {
-            $payload['last_read_message_id'] = DB::raw(
-                'GREATEST(COALESCE(last_read_message_id, 0), '.(int) $latestMessageId.')'
-            );
+            // The read cursor never moves backwards. It is resolved in PHP so
+            // the statement stays portable across database drivers.
+            $current = (int) (ConversationParticipant::query()
+                ->where('conversation_id', $conversation->id)
+                ->where('user_id', $userId)
+                ->whereIn('user_type', $types)
+                ->max('last_read_message_id') ?? 0);
+
+            $payload['last_read_message_id'] = max($current, $latestMessageId);
         }
 
         ConversationParticipant::query()
@@ -1007,10 +1040,12 @@ class ConversationService
         $pgsql = DB::connection()->getDriverName() === 'pgsql';
 
         DB::transaction(function () use ($hasCursor, $pgsql, $placeholders, $bindings, $now, $userId, $types): void {
+            // GREATEST() is not available on every driver, MAX() with two
+            // arguments works on SQLite and MySQL as well.
             $cursorSql = $hasCursor
                 ? ($pgsql
                     ? ', last_read_message_id = GREATEST(COALESCE(cp.last_read_message_id, 0), COALESCE(latest.max_id, 0))'
-                    : ', cp.last_read_message_id = GREATEST(COALESCE(cp.last_read_message_id, 0), latest.max_id)')
+                    : ', cp.last_read_message_id = MAX(COALESCE(cp.last_read_message_id, 0), COALESCE(latest.max_id, 0))')
                 : '';
 
             if ($pgsql) {

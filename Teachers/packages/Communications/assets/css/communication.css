@@ -2166,6 +2166,76 @@ button.comms-bubble-image {
 .comms-local-video[hidden] {
     display: none !important;
 }
+/* Camera-off placeholder: the video element and its stream stay mounted, the
+   placeholder is layered on top so nothing has to be re-acquired. */
+.comms-video-off {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    background: #111827;
+    color: #e5e7eb;
+    text-align: center;
+}
+.comms-video-off[hidden] {
+    display: none !important;
+}
+.comms-video-off--remote {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background: radial-gradient(circle at 50% 38%, #1f2937 0%, #0b0b0b 68%);
+}
+.comms-video-off--local {
+    position: absolute;
+    right: max(0.75rem, env(safe-area-inset-right, 0px));
+    bottom: max(6.75rem, calc(env(safe-area-inset-bottom, 0px) + 5.75rem));
+    top: auto;
+    z-index: 4;
+    width: min(32vw, 118px);
+    max-width: min(42vw, 220px);
+    max-height: 36vh;
+    aspect-ratio: 3 / 4;
+    border-radius: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    transform: scaleX(-1);
+}
+.comms-video-off--local.is-cam-landscape,
+.comms-call-overlay.is-desktop-call .comms-video-off--local {
+    width: min(18vw, 220px);
+    max-height: 34vh;
+    bottom: max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.5rem));
+}
+.comms-video-off-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: #374151;
+    color: #f9fafb;
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+.comms-video-off-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9ca3af;
+}
+.comms-call-ctrl.is-busy {
+    opacity: 0.65;
+    cursor: progress;
+}
+/* The camera track is genuinely disabled in JS (track.enabled = false) and the
+   element keeps its MediaStream; this only avoids painting the frozen last
+   frame behind the camera-off placeholder. */
+.comms-local-video.is-camera-off {
+    visibility: hidden;
+}
 .comms-local-video.is-cam-landscape {
     aspect-ratio: 16 / 9;
     width: min(40vw, 160px);

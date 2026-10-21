@@ -28,8 +28,40 @@ class CallController extends Controller
 
     public function ringing(): JsonResponse
     {
+        $viewer = Auth::user();
+        $active = $this->calls->activeCallForUser($viewer);
+
         return response()->json([
-            'calls' => $this->calls->ringingForUser(Auth::user()),
+            'calls' => $this->calls->ringingForUser($viewer),
+            // Authoritative "am I in a call right now?" answer. The client
+            // uses it to clear stale local state instead of guessing.
+            'active_call' => $active
+                ? $this->calls->serialize($active->load(['caller', 'receiver', 'conversation']), $viewer)
+                : null,
+        ]);
+    }
+
+    /**
+     * Authoritative state of a single call (used by the call-ended summary).
+     */
+    public function show(Call $call): JsonResponse
+    {
+        $viewer = Auth::user();
+
+        return response()->json([
+            'call' => $this->calls->serialize($call->load(['caller', 'receiver', 'conversation']), $viewer),
+        ]);
+    }
+
+    /**
+     * Keep an active call alive. Terminal calls are never revived.
+     */
+    public function heartbeat(Call $call): JsonResponse
+    {
+        $call = $this->calls->heartbeat($call, Auth::user());
+
+        return response()->json([
+            'call' => $this->calls->serialize($call->load(['caller', 'receiver', 'conversation']), Auth::user()),
         ]);
     }
 
