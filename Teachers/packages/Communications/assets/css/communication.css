@@ -292,6 +292,113 @@
     text-overflow: ellipsis;
 }
 
+.comms-conv-preview.is-unread {
+    color: var(--comms-text);
+    font-weight: 600;
+}
+
+.comms-conv-item.has-unread .comms-conv-name {
+    font-weight: 700;
+}
+
+.comms-avatar-stack {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    width: 44px;
+    height: 40px;
+    flex: 0 0 auto;
+}
+
+.comms-avatar-stack-item {
+    position: absolute;
+    top: 2px;
+    width: 28px;
+    height: 28px;
+    border-radius: 999px;
+    object-fit: cover;
+    border: 2px solid #fff;
+    background: #e4e6eb;
+}
+
+.comms-avatar-stack-item:nth-child(1) { left: 0; }
+.comms-avatar-stack-item:nth-child(2) { left: 12px; }
+.comms-avatar-stack-item:nth-child(3) { left: 24px; }
+
+.comms-avatar-stack-more {
+    position: absolute;
+    right: -2px;
+    bottom: 0;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #0039A8;
+    color: #fff;
+    font-size: 0.62rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid #fff;
+    z-index: 12;
+}
+
+.comms-peer-avatar-wrap.is-group {
+    width: 48px;
+    cursor: pointer;
+}
+
+.comms-peer-avatar-wrap .comms-avatar-stack {
+    width: 48px;
+}
+
+.comms-peer-meta.is-clickable {
+    cursor: pointer;
+    text-decoration: underline;
+    text-decoration-color: transparent;
+}
+
+.comms-peer-meta.is-clickable:hover,
+.comms-peer-meta.is-clickable:focus-visible {
+    text-decoration-color: currentColor;
+    color: var(--comms-accent);
+}
+
+.comms-new-group-results {
+    margin-top: 0.5rem;
+    max-height: 180px;
+    overflow: auto;
+    border: 1px solid var(--comms-border);
+    border-radius: 10px;
+}
+
+.comms-new-group-selected {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.75rem;
+    min-height: 2rem;
+}
+
+.comms-new-group-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 0;
+    border-radius: 999px;
+    background: #e8eefc;
+    color: #0039A8;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.3rem 0.65rem;
+    cursor: pointer;
+}
+
+.comms-new-group-chip:hover {
+    background: #d7e2fb;
+}
+
 .comms-conv-meta {
     display: grid;
     justify-items: end;
@@ -1923,6 +2030,12 @@ button.comms-bubble-image {
     opacity: 1;
     transform: none;
 }
+
+/* Fill the stage when live video is present so faces read clearly. */
+.comms-call-overlay.has-remote-video:not(.is-group-call) .comms-remote-video,
+.comms-call-overlay.is-video-call.has-remote-video:not(.is-group-call) .comms-remote-video {
+    object-fit: cover;
+}
 .comms-remote-audio {
     position: absolute;
     width: 1px;
@@ -1967,21 +2080,29 @@ button.comms-bubble-image {
 
 .comms-remote-tile {
     position: relative;
-    min-height: 120px;
-    max-height: min(42vh, 320px);
+    min-height: 140px;
+    max-height: min(48vh, 380px);
     border-radius: 14px;
     overflow: hidden;
     background: #1e293b;
     border: 1px solid rgba(255, 255, 255, 0.18);
+    aspect-ratio: 4 / 3;
 }
 
 .comms-remote-tile video {
     width: 100%;
     height: 100%;
-    object-fit: contain;
+    object-fit: cover;
     object-position: center center;
     background: #0f172a;
     transform: none;
+}
+
+.comms-remote-grid[data-count="1"] .comms-remote-tile {
+    max-height: min(72vh, 560px);
+    aspect-ratio: 16 / 10;
+    width: min(100%, 920px);
+    justify-self: center;
 }
 
 .comms-remote-tile-label {
@@ -2008,10 +2129,17 @@ button.comms-bubble-image {
 }
 .comms-call-overlay.is-group-call .comms-local-video {
     z-index: 4;
+    object-fit: cover;
 }
 .comms-call-overlay.is-group-call.has-remote-video .comms-call-center {
     top: 1.25rem;
     transform: translate(-50%, 0);
+}
+.comms-call-overlay.has-remote-video .comms-call-center.is-compact .comms-call-avatar {
+    display: none;
+}
+.comms-call-overlay.has-remote-video:not(.is-group-call) .comms-local-video {
+    object-fit: cover;
 }
 
 .comms-local-video {

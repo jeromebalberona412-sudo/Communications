@@ -30,17 +30,38 @@ class ConversationController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        $user = Auth::user();
+        abort_if($user === null, 401);
+
+        if ($request->filled('user_ids') || $request->boolean('is_group')) {
+            $validated = $request->validate([
+                'user_ids' => ['required', 'array', 'min:1', 'max:49'],
+                'user_ids.*' => ['integer', 'distinct', 'exists:users,id'],
+                'name' => ['nullable', 'string', 'max:120'],
+            ]);
+
+            $conversation = $this->conversations->createGroup(
+                $user,
+                array_map('intval', $validated['user_ids']),
+                $validated['name'] ?? null
+            );
+
+            return response()->json([
+                'conversation' => $this->conversations->showPayload($conversation, $user),
+            ], 201);
+        }
+
         $validated = $request->validate([
             'user_id' => ['required', 'integer', 'exists:users,id'],
         ]);
 
         $conversation = $this->conversations->findOrCreatePrivate(
-            Auth::user(),
+            $user,
             (int) $validated['user_id']
         );
 
         return response()->json([
-            'conversation' => $this->conversations->showPayload($conversation, Auth::user()),
+            'conversation' => $this->conversations->showPayload($conversation, $user),
         ], 201);
     }
 
@@ -81,7 +102,9 @@ class ConversationController extends Controller
         $user = Auth::user();
         if (! $user || ! $this->defaultGroups->canRename($conversation, $user)) {
             return response()->json([
-                'message' => 'Only the SK Federation President or Vice President can rename this group.',
+                'message' => $conversation->isDefaultGroup()
+                    ? 'Only the SK Federation President or Vice President can rename this group.'
+                    : 'Only a group admin can rename this group.',
             ], 403);
         }
 
@@ -105,7 +128,9 @@ class ConversationController extends Controller
         $user = Auth::user();
         if (! $user || ! $this->defaultGroups->canChangeAvatar($conversation, $user)) {
             return response()->json([
-                'message' => 'Only the SK Federation President can change this group photo.',
+                'message' => $conversation->isDefaultGroup()
+                    ? 'Only the SK Federation President can change this group photo.'
+                    : 'Only a group admin can change this group photo.',
             ], 403);
         }
 

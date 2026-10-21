@@ -865,12 +865,15 @@ import {
 
     var dismissedRingIds = Object.create(null);
     var answeredCallIds = Object.create(null);
+    var shownIncomingIds = Object.create(null);
 
     function markCallTerminal(callId) {
         var id = callId != null ? Number(callId) : 0;
         if (!id) return;
         dismissedRingIds[id] = true;
         answeredCallIds[id] = true;
+        shownIncomingIds[id] = true;
+        lastEndedCallId = id;
     }
 
     function isCallAlreadyHandled(callId) {
@@ -882,12 +885,28 @@ import {
     }
 
     function isActivelyInCall(callId) {
-        if (!currentCall) return false;
-        if (callId != null && Number(currentCall.id) !== Number(callId)) return false;
+        if (!currentCall && !(els.incoming && !els.incoming.hidden)) return false;
+        if (callId != null && currentCall && Number(currentCall.id) !== Number(callId)) return false;
         if (callConnected) return true;
         if (startingCall) return true;
         if (els.inCall && !els.inCall.hidden) return true;
+        if (els.incoming && !els.incoming.hidden) return true;
         return false;
+    }
+
+    /** True only while this tab is placing/holding an outbound ring (not after hangup). */
+    function isOutboundCallerBusy() {
+        if (role !== 'caller') return false;
+        if (startingCall || pendingStart) return true;
+        if (callConnected) return true;
+        if (els.inCall && !els.inCall.hidden) return true;
+        return !!(currentCall && currentCall.id && !isCallAlreadyHandled(currentCall.id));
+    }
+
+    function resetCallerRoleIfIdle() {
+        if (role === 'caller' && !isOutboundCallerBusy()) {
+            role = null;
+        }
     }
 
     function showIncoming(call) {
@@ -918,15 +937,24 @@ import {
         els.accept = document.getElementById('commsAcceptCall') || els.accept;
         els.reject = document.getElementById('commsRejectCall') || els.reject;
 
-        if (callId && callId === Number(lastIncomingCallId)
-            && els.incoming && !els.incoming.hidden
-            && currentCall && Number(currentCall.id) === callId) {
-            if (call._remoteOffer && currentCall) {
+        // One modal per call_id — even when currentCall is null (group invite path).
+        if (callId && shownIncomingIds[callId] && els.incoming && !els.incoming.hidden) {
+            if (call._remoteOffer && currentCall && Number(currentCall.id) === callId) {
                 currentCall._remoteOffer = call._remoteOffer;
             }
             return;
         }
-        if (callId) lastIncomingCallId = callId;
+        if (callId && callId === Number(lastIncomingCallId)
+            && els.incoming && !els.incoming.hidden) {
+            if (call._remoteOffer && currentCall && Number(currentCall.id) === callId) {
+                currentCall._remoteOffer = call._remoteOffer;
+            }
+            return;
+        }
+        if (callId) {
+            lastIncomingCallId = callId;
+            shownIncomingIds[callId] = true;
+        }
 
         role = 'callee';
         // Do not clear callConnected if we somehow got here during an active call.
@@ -1268,6 +1296,9 @@ import {
         cameraEnabled = false;
         wantsVideo = false;
         callConnected = false;
+        // Critical: stale role=caller blocked ringing poll / syncIncomingFromServer.
+        role = null;
+        startingCall = false;
         if (els.endBtn) setCtrlLabel(els.endBtn, 'End');
         if (els.muteBtn) {
             els.muteBtn.hidden = false;
@@ -1499,8 +1530,8 @@ import {
     function isPeerCallableOnline(peer) {
         peer = peer || {};
         var peerId = Number(peer.id || 0);
-        var presence = window.__COMMS_PRESENCE_ONLINE_IDS__ || {};
-        if (peerId && presence[peerId]) {
+        var portal = peer.user_type || peer.type || peer.portal || '';
+        if (peerId && isPresenceOnline(peerId, portal)) {
             return true;
         }
         var status = String(peer.online_status || '').toLowerCase().trim();
@@ -1871,10 +1902,14 @@ import {
             if (iAmOfferCaller) return;
 
             var signalCallId = payload.call_id != null ? Number(payload.call_id) : null;
-            if (signalCallId && isCallAlreadyHandled(signalCallId)
-                && !(payload.type === 'offer' && payload.sdp && isActivelyInCall(signalCallId))) {
-                // Already answered/declined — ignore stale rings; offers for active calls handled below.
-                if (payload.type === 'incoming-call') return;
+            // Terminal calls: ignore BOTH stale incoming-call AND late offers (except renegotiation
+            // while actively in that same call). Late offers after Decline used to re-open the modal.
+            if (signalCallId && isCallAlreadyHandled(signalCallId)) {
+                if (payload.type === 'offer' && payload.sdp && isActivelyInCall(signalCallId) && callConnected) {
+                    // fall through to renegotiation block below
+                } else {
+                    return;
+                }
             }
             if (signalCallId && isActivelyInCall(signalCallId) && payload.type === 'incoming-call') {
                 return;
@@ -2113,20 +2148,24 @@ import {
      * Uses the lightweight /calls/ringing endpoint when available.
      */
     function syncIncomingFromServer(conversationId) {
-        if (role === 'caller') return;
+        resetCallerRoleIfIdle();
+        if (isOutboundCallerBusy()) return;
         if (els.incoming && !els.incoming.hidden) return;
-        if (isActivelyInCall(null)) return;
+        if (isActivelyInCall(null) && callConnected) return;
         var r = routes();
         var url = r.ringingCalls || r.calls;
         if (!url || !window.Comms || typeof window.Comms.api !== 'function') return;
 
         window.clearTimeout(incomingSyncTimer);
         incomingSyncTimer = window.setTimeout(function () {
-            if (isActivelyInCall(null)) return;
+            resetCallerRoleIfIdle();
+            if (isOutboundCallerBusy()) return;
+            if (isActivelyInCall(null) && callConnected) return;
             window.Comms.api(url, { method: 'GET', dedupe: true }).then(function (data) {
-                if (role === 'caller') return;
+                resetCallerRoleIfIdle();
+                if (isOutboundCallerBusy()) return;
                 if (els.incoming && !els.incoming.hidden) return;
-                if (isActivelyInCall(null)) return;
+                if (isActivelyInCall(null) && callConnected) return;
                 var me = myIdentity();
                 var list = (data && data.calls) || [];
                 var ringing = null;
@@ -2167,11 +2206,28 @@ import {
         syncIncomingFromServer(null);
         ringingPollTimer = window.setInterval(function () {
             if (document.visibilityState === 'hidden') return;
-            if (role === 'caller') return;
+            resetCallerRoleIfIdle();
+            if (isOutboundCallerBusy()) return;
             if (els.incoming && !els.incoming.hidden) return;
-            if (isActivelyInCall(null)) return;
+            if (isActivelyInCall(null) && callConnected) return;
             syncIncomingFromServer(null);
         }, 1500);
+    }
+
+    function presenceOnlineKey(userId, portalType) {
+        var id = Number(userId || 0);
+        if (!id) return '';
+        var portal = String(portalType || '').trim().toLowerCase();
+        return portal ? (portal + ':' + id) : String(id);
+    }
+
+    function isPresenceOnline(userId, portalType) {
+        var map = window.__COMMS_PRESENCE_ONLINE_IDS__ || {};
+        var typed = presenceOnlineKey(userId, portalType);
+        if (typed && map[typed]) return true;
+        // Legacy numeric-only keys (older clients).
+        var id = Number(userId || 0);
+        return !!(id && map[id] && !portalType);
     }
 
     function showSecureContextBanner() {

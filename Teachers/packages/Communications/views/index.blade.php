@@ -62,6 +62,16 @@
                 <div class="comms-sidebar-title-row">
                     <h1>Messages</h1>
                     <div class="comms-sidebar-actions">
+                        <button type="button" class="comms-sidebar-icon-btn" id="commsNewGroupBtn" title="New group" aria-label="New group">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                <line x1="19" y1="8" x2="19" y2="14"/>
+                                <line x1="22" y1="11" x2="16" y2="11"/>
+                            </svg>
+                        </button>
                         <a href="{{ route('communications.automations') }}" class="comms-sidebar-icon-btn" title="Chat Automations" aria-label="Chat Automations">
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
@@ -109,8 +119,9 @@
                     <button type="button" class="comms-back-btn" id="commsBackBtn" aria-label="Back to conversations">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
                     </button>
-                    <div class="comms-peer-avatar-wrap">
+                    <div class="comms-peer-avatar-wrap" id="commsPeerAvatarWrap">
                         <img src="" alt="" class="comms-avatar" id="commsPeerAvatar" width="40" height="40">
+                        <span class="comms-avatar-stack" id="commsPeerAvatarStack" hidden aria-hidden="true"></span>
                         <span class="comms-peer-status-dot" id="commsPeerStatusDot" data-status="offline" aria-hidden="true"></span>
                     </div>
                     <div class="comms-thread-peer">
@@ -216,6 +227,28 @@
                 <div class="comms-modal-actions">
                     <button type="button" class="comms-btn-secondary" data-comms-rename-close>Cancel</button>
                     <button type="submit" class="comms-btn-primary" id="commsRenameSubmit">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="comms-modal" id="commsNewGroupModal" hidden>
+        <div class="comms-modal-backdrop" data-comms-new-group-close></div>
+        <div class="comms-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="commsNewGroupModalTitle">
+            <header class="comms-modal-header">
+                <h2 id="commsNewGroupModalTitle">New group</h2>
+                <button type="button" class="comms-icon-btn" data-comms-new-group-close aria-label="Close">&times;</button>
+            </header>
+            <form class="comms-modal-body" id="commsNewGroupForm">
+                <label class="comms-field-label" for="commsNewGroupName">Group name (optional)</label>
+                <input type="text" id="commsNewGroupName" class="comms-field-input" maxlength="120" autocomplete="off" placeholder="e.g. Capstone Team">
+                <label class="comms-field-label" for="commsNewGroupSearch">Add people</label>
+                <input type="search" id="commsNewGroupSearch" class="comms-field-input" placeholder="Search people" autocomplete="off">
+                <div class="comms-new-group-results" id="commsNewGroupResults" hidden></div>
+                <div class="comms-new-group-selected" id="commsNewGroupSelected"></div>
+                <div class="comms-modal-actions">
+                    <button type="button" class="comms-btn-secondary" data-comms-new-group-close>Cancel</button>
+                    <button type="submit" class="comms-btn-primary" id="commsNewGroupSubmit">Create group</button>
                 </div>
             </form>
         </div>

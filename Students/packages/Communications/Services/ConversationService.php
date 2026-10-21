@@ -98,6 +98,95 @@ class ConversationService
         });
     }
 
+    /**
+     * Create a custom (non-default) group chat with the given members.
+     *
+     * @param  list<int>  $memberUserIds
+     */
+    public function createGroup(Authenticatable $authUser, array $memberUserIds, ?string $name = null): Conversation
+    {
+        $authType = $this->types->portalType();
+        $authId = (int) $authUser->id;
+        $maxMembers = max(3, (int) config('communications.custom_group_max_members', 50));
+
+        $uniqueIds = collect($memberUserIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0 && $id !== $authId)
+            ->unique()
+            ->values();
+
+        if ($uniqueIds->count() < 1) {
+            abort(422, 'Add at least one other person to create a group.');
+        }
+
+        if ($uniqueIds->count() + 1 > $maxMembers) {
+            abort(422, 'Groups can have at most '.$maxMembers.' members.');
+        }
+
+        $members = User::query()->whereIn('id', $uniqueIds->all())->get()->keyBy('id');
+        if ($members->count() !== $uniqueIds->count()) {
+            abort(422, 'One or more selected users were not found.');
+        }
+
+        foreach ($members as $member) {
+            if (! $this->canMessage($authUser, $member)) {
+                abort(403, 'You are not allowed to add '.$member->name.' to a group.');
+            }
+        }
+
+        $groupName = trim(preg_replace('/\s+/u', ' ', (string) $name) ?? '');
+        if ($groupName === '') {
+            $labels = $members->take(3)->map(fn (User $u) => trim((string) $u->name))->filter()->values();
+            $groupName = $labels->isEmpty()
+                ? 'Group chat'
+                : ($labels->implode(', ').($members->count() > 3 ? '…' : ''));
+        }
+        if (mb_strlen($groupName) > 120) {
+            $groupName = mb_substr($groupName, 0, 120);
+        }
+
+        $tenantId = (int) ($authUser->tenant_id ?? 0);
+
+        return DB::transaction(function () use ($authUser, $authType, $authId, $members, $groupName, $maxMembers, $tenantId) {
+            $payload = [
+                'conversation_type' => Conversation::TYPE_GROUP,
+                'name' => $groupName,
+                'max_members' => $maxMembers,
+            ];
+            if (SchemaCache::hasColumn('conversations', 'tenant_id') && $tenantId > 0) {
+                $payload['tenant_id'] = $tenantId;
+            }
+
+            $conversation = Conversation::query()->create($payload);
+
+            $creatorRow = [
+                'conversation_id' => $conversation->id,
+                'user_id' => $authId,
+                'user_type' => $authType,
+                'joined_at' => now(),
+            ];
+            if (SchemaCache::hasColumn('conversation_participants', 'participant_role')) {
+                $creatorRow['participant_role'] = ConversationParticipant::ROLE_ADMIN;
+            }
+            ConversationParticipant::query()->create($creatorRow);
+
+            foreach ($members as $member) {
+                $row = [
+                    'conversation_id' => $conversation->id,
+                    'user_id' => (int) $member->id,
+                    'user_type' => $this->types->fromUser($member),
+                    'joined_at' => now(),
+                ];
+                if (SchemaCache::hasColumn('conversation_participants', 'participant_role')) {
+                    $row['participant_role'] = ConversationParticipant::ROLE_MEMBER;
+                }
+                ConversationParticipant::query()->create($row);
+            }
+
+            return $conversation->fresh(['participants.user']);
+        });
+    }
+
     public function listForUser(Authenticatable $user, ?string $search = null): Collection
     {
         if (! SchemaCache::hasTable('conversations')
@@ -174,12 +263,9 @@ class ConversationService
                 'max_members' => $conversation->max_members,
                 'member_count' => $conversation->participants->count(),
                 'is_default_group' => $conversation->isDefaultGroup(),
-                'can_rename' => $conversation->isDefaultGroup()
-                    ? $this->defaultGroups->canRename($conversation, $user)
-                    : false,
-                'can_change_avatar' => $conversation->isDefaultGroup()
-                    ? $this->defaultGroups->canChangeAvatar($conversation, $user)
-                    : false,
+                'can_rename' => false,
+                'can_change_avatar' => false,
+                'member_previews' => [],
                 'other_user' => null,
                 'last_message' => $last ? [
                     'id' => $last->id,
@@ -199,6 +285,21 @@ class ConversationService
                 $count = (int) $payload['member_count'];
                 $avatar = $this->defaultGroups->groupAvatarUrl($conversation);
                 $payload['avatar_url'] = $avatar;
+                $payload['can_rename'] = $this->defaultGroups->canRename($conversation, $user);
+                $payload['can_change_avatar'] = $this->defaultGroups->canChangeAvatar($conversation, $user);
+                $payload['member_previews'] = $conversation->participants
+                    ->take(4)
+                    ->map(function (ConversationParticipant $p) {
+                        $serialized = $this->serializeUser($p->user, $p->user_type);
+
+                        return [
+                            'id' => (int) $p->user_id,
+                            'name' => (string) ($serialized['name'] ?? $p->user?->name ?? 'User'),
+                            'profile_image_url' => (string) ($serialized['profile_image_url'] ?? ''),
+                        ];
+                    })
+                    ->values()
+                    ->all();
                 $payload['other_user'] = [
                     'id' => null,
                     'name' => $groupName,
@@ -287,6 +388,19 @@ class ConversationService
                 'can_change_avatar' => $this->defaultGroups->canChangeAvatar($conversation, $user),
                 'call_max_participants' => (int) config('communications.call_max_participants', 8),
                 'avatar_url' => $avatar,
+                'member_previews' => $conversation->participants
+                    ->take(4)
+                    ->map(function (ConversationParticipant $p) {
+                        $serialized = $this->serializeUser($p->user, $p->user_type);
+
+                        return [
+                            'id' => (int) $p->user_id,
+                            'name' => (string) ($serialized['name'] ?? $p->user?->name ?? 'User'),
+                            'profile_image_url' => (string) ($serialized['profile_image_url'] ?? ''),
+                        ];
+                    })
+                    ->values()
+                    ->all(),
                 'other_user' => [
                     'id' => null,
                     'name' => $groupName,

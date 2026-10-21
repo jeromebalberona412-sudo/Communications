@@ -97,7 +97,21 @@
         renameModal: document.getElementById('commsRenameModal'),
         renameForm: document.getElementById('commsRenameForm'),
         renameInput: document.getElementById('commsRenameInput'),
-        renameSubmit: document.getElementById('commsRenameSubmit')
+        renameSubmit: document.getElementById('commsRenameSubmit'),
+        newGroupBtn: document.getElementById('commsNewGroupBtn'),
+        newGroupModal: document.getElementById('commsNewGroupModal'),
+        newGroupForm: document.getElementById('commsNewGroupForm'),
+        newGroupName: document.getElementById('commsNewGroupName'),
+        newGroupSearch: document.getElementById('commsNewGroupSearch'),
+        newGroupResults: document.getElementById('commsNewGroupResults'),
+        newGroupSelected: document.getElementById('commsNewGroupSelected'),
+        newGroupSubmit: document.getElementById('commsNewGroupSubmit'),
+        peerAvatarWrap: document.getElementById('commsPeerAvatarWrap') || document.querySelector('.comms-peer-avatar-wrap'),
+        peerAvatarStack: document.getElementById('commsPeerAvatarStack')
+    };
+
+    var newGroupDraft = {
+        selected: Object.create(null)
     };
 
     function isGroupConversation(conversation) {
@@ -184,8 +198,105 @@
     function closeGroupModals() {
         if (els.groupModal) els.groupModal.hidden = true;
         if (els.renameModal) els.renameModal.hidden = true;
+        if (els.newGroupModal) els.newGroupModal.hidden = true;
         if (els.threadMenu) els.threadMenu.hidden = true;
         if (els.threadMenuBtn) els.threadMenuBtn.setAttribute('aria-expanded', 'false');
+    }
+
+    function selectedNewGroupIds() {
+        return Object.keys(newGroupDraft.selected).map(Number).filter(Boolean);
+    }
+
+    function renderNewGroupSelected() {
+        if (!els.newGroupSelected) return;
+        var ids = selectedNewGroupIds();
+        if (!ids.length) {
+            els.newGroupSelected.innerHTML = '<p class="comms-muted">Select at least one person.</p>';
+            return;
+        }
+        els.newGroupSelected.innerHTML = ids.map(function (id) {
+            var u = newGroupDraft.selected[id];
+            return '<button type="button" class="comms-new-group-chip" data-remove-user="' + id + '">' +
+                Comms.escapeHtml((u && u.name) || ('User ' + id)) +
+                ' <span aria-hidden="true">&times;</span></button>';
+        }).join('');
+    }
+
+    function openNewGroupModal() {
+        if (!els.newGroupModal) return;
+        newGroupDraft.selected = Object.create(null);
+        if (els.newGroupName) els.newGroupName.value = '';
+        if (els.newGroupSearch) els.newGroupSearch.value = '';
+        if (els.newGroupResults) {
+            els.newGroupResults.innerHTML = '';
+            els.newGroupResults.hidden = true;
+        }
+        renderNewGroupSelected();
+        els.newGroupModal.hidden = false;
+        if (els.newGroupSearch) els.newGroupSearch.focus();
+    }
+
+    function searchNewGroupUsers(q) {
+        if (!els.newGroupResults || !routes.searchUsers) return;
+        var query = String(q || '').trim();
+        if (query.length < 1) {
+            els.newGroupResults.hidden = true;
+            els.newGroupResults.innerHTML = '';
+            return;
+        }
+        Comms.api(routes.searchUsers + '?q=' + encodeURIComponent(query)).then(function (data) {
+            var me = Number(root.dataset.currentUserId || 0);
+            var users = (data.users || []).filter(function (u) {
+                return Number(u.id) !== me && !newGroupDraft.selected[Number(u.id)];
+            });
+            if (!users.length) {
+                els.newGroupResults.innerHTML = '<div class="comms-search-item"><span>No people found</span></div>';
+                els.newGroupResults.hidden = false;
+                return;
+            }
+            els.newGroupResults.innerHTML = users.map(function (u) {
+                return '<button type="button" class="comms-search-item" data-add-user-id="' + u.id + '"' +
+                    ' data-add-user-name="' + Comms.escapeHtml(u.name || '') + '">' +
+                    '<strong>' + Comms.escapeHtml(u.name) + '</strong>' +
+                    '<span>' + Comms.escapeHtml(u.user_type_label || u.role || '') + '</span></button>';
+            }).join('');
+            els.newGroupResults.hidden = false;
+        }).catch(function (err) {
+            Comms.showToast(err.message || 'Search failed.', 'error');
+        });
+    }
+
+    function createNewGroup() {
+        if (!routes.storeConversation) return;
+        var ids = selectedNewGroupIds();
+        if (ids.length < 1) {
+            Comms.showToast('Add at least one person to the group.', 'error');
+            return;
+        }
+        var name = els.newGroupName ? String(els.newGroupName.value || '').trim() : '';
+        if (els.newGroupSubmit) {
+            els.newGroupSubmit.disabled = true;
+            els.newGroupSubmit.textContent = 'Creating…';
+        }
+        Comms.api(routes.storeConversation, {
+            method: 'POST',
+            body: JSON.stringify({ is_group: true, user_ids: ids, name: name || null }),
+            dedupe: false
+        }).then(function (data) {
+            closeGroupModals();
+            return loadConversations().then(function () {
+                if (data && data.conversation && data.conversation.id) {
+                    return openConversation(data.conversation.id);
+                }
+            });
+        }).catch(function (err) {
+            Comms.showToast(err.message || 'Unable to create group.', 'error');
+        }).finally(function () {
+            if (els.newGroupSubmit) {
+                els.newGroupSubmit.disabled = false;
+                els.newGroupSubmit.textContent = 'Create group';
+            }
+        });
     }
 
     function memberAvatarHtml(member) {
@@ -368,34 +479,60 @@
             var avatar = isGroup
                 ? (peer.profile_image_url || c.avatar_url || Comms.defaultAvatar(fullName))
                 : resolvePeerAvatar(peer);
-            var liveOnline = !isGroup && peer.id && (window.__COMMS_PRESENCE_ONLINE_IDS__ || {})[Number(peer.id)];
+            var liveMap = window.__COMMS_PRESENCE_ONLINE_IDS__ || {};
+            var peerPortal = String(peer.user_type || peer.type || peer.portal || '').trim().toLowerCase();
+            var liveOnline = !isGroup && peer.id && (
+                (peerPortal && liveMap[peerPortal + ':' + Number(peer.id)])
+                || liveMap[Number(peer.id)]
+            );
             var online = isGroup
                 ? 'offline'
                 : (liveOnline || String(peer.online_status || '').toLowerCase() === 'online' ? 'online' : 'offline');
             if (!isGroup && peer && online === 'online') peer.online_status = 'online';
             var memberHint = '';
+            var avatarHtml = '<img class="comms-avatar" src="' + Comms.escapeHtml(avatar) + '" alt="" onerror="this.onerror=null;this.src=\'' + Comms.escapeHtml(Comms.defaultAvatar(displayName)) + '\'">';
             if (isGroup) {
                 var max = Number(c.max_members || 0);
                 var count = Number(c.member_count || 0);
                 memberHint = max > 0
                     ? ('<div class="comms-conv-limit">' + count + ' / ' + max + ' members</div>')
                     : (count > 0 ? ('<div class="comms-conv-limit">' + count + ' members</div>') : '');
+                var previews = Array.isArray(c.member_previews) ? c.member_previews.slice(0, 3) : [];
+                if (previews.length >= 2) {
+                    avatarHtml = '<span class="comms-avatar-stack" aria-hidden="true">' +
+                        previews.map(function (p, idx) {
+                            var src = (p && p.profile_image_url) || Comms.defaultAvatar((p && p.name) || 'U');
+                            var nm = (p && p.name) || 'U';
+                            return '<img class="comms-avatar-stack-item" style="z-index:' + (10 - idx) + '" src="' +
+                                Comms.escapeHtml(src) + '" alt="" title="' + Comms.escapeHtml(nm) + '"' +
+                                ' onerror="this.onerror=null;this.src=\'' + Comms.escapeHtml(Comms.defaultAvatar(nm)) + '\'">';
+                        }).join('') +
+                        (count > previews.length
+                            ? ('<span class="comms-avatar-stack-more">+' + (count - previews.length) + '</span>')
+                            : '') +
+                        '</span>';
+                }
             }
-            return '<button type="button" class="comms-conv-item' + (isGroup ? ' is-group' : '') + active + '" data-id="' + c.id + '"' +
+            var unreadBadge = unread > 0
+                ? ('<span class="comms-unread" aria-label="' + unread + ' unread">' + (unread > 99 ? '99+' : unread) + '</span>')
+                : '';
+            return '<button type="button" class="comms-conv-item' + (isGroup ? ' is-group' : '') + (unread > 0 ? ' has-unread' : '') + active + '" data-id="' + c.id + '"' +
                 ' data-peer-name="' + Comms.escapeHtml(fullName) + '"' +
                 ' title="' + Comms.escapeHtml(fullName) + '"' +
                 ' data-peer-avatar="' + Comms.escapeHtml(avatar) + '"' +
                 ' data-peer-status="' + online + '"' +
                 ' data-is-group="' + (isGroup ? '1' : '0') + '"' +
+                ' data-member-count="' + Number(c.member_count || 0) + '"' +
                 ' role="listitem">' +
-                '<img class="comms-avatar" src="' + Comms.escapeHtml(avatar) + '" alt="" onerror="this.onerror=null;this.src=\'' + Comms.escapeHtml(Comms.defaultAvatar(displayName)) + '\'">' +
+                avatarHtml +
                 '<div class="comms-conv-main">' +
                 '<div class="comms-conv-name" title="' + Comms.escapeHtml(fullName) + '">' + Comms.escapeHtml(displayName) + '</div>' +
                 memberHint +
-                '<div class="comms-conv-preview">' + Comms.escapeHtml(preview) + '</div>' +
+                '<div class="comms-conv-preview' + (unread > 0 ? ' is-unread' : '') + '">' + Comms.escapeHtml(preview) + '</div>' +
                 '</div>' +
                 '<div class="comms-conv-meta">' +
                 '<span class="comms-conv-time">' + Comms.escapeHtml(Comms.formatTime(c.updated_at)) + '</span>' +
+                unreadBadge +
                 '</div></button>';
         }).join('');
     }
@@ -1378,6 +1515,42 @@
         return 'Offline';
     }
 
+    function renderPeerAvatarStack(conversation, fallbackName) {
+        var stack = els.peerAvatarStack;
+        var single = els.peerAvatar;
+        if (!stack) {
+            if (single) single.hidden = false;
+            return;
+        }
+        var previews = [];
+        if (conversation) {
+            if (Array.isArray(conversation.members) && conversation.members.length) {
+                previews = conversation.members.slice(0, 3);
+            } else if (Array.isArray(conversation.member_previews)) {
+                previews = conversation.member_previews.slice(0, 3);
+            }
+        }
+        var count = Number((conversation && conversation.member_count) || previews.length || 0);
+        if (previews.length < 2) {
+            stack.hidden = true;
+            stack.innerHTML = '';
+            if (single) single.hidden = false;
+            return;
+        }
+        if (single) single.hidden = true;
+        stack.hidden = false;
+        stack.innerHTML = previews.map(function (p, idx) {
+            var nm = (p && p.name) || 'U';
+            var src = (p && (p.profile_image_url || p.avatar_url)) || Comms.defaultAvatar(nm);
+            return '<img class="comms-avatar-stack-item" style="z-index:' + (10 - idx) + '" src="' +
+                Comms.escapeHtml(src) + '" alt="" title="' + Comms.escapeHtml(nm) + '"' +
+                ' onerror="this.onerror=null;this.src=\'' + Comms.escapeHtml(Comms.defaultAvatar(nm)) + '\'">';
+        }).join('') + (count > previews.length
+            ? ('<span class="comms-avatar-stack-more">+' + (count - previews.length) + '</span>')
+            : '');
+        stack.setAttribute('title', fallbackName || 'Group members');
+    }
+
     function updatePeerHeader(conversation) {
         var peer = (conversation && conversation.other_user) || {};
         var isGroup = isGroupConversation(conversation);
@@ -1393,7 +1566,17 @@
         if (isGroup) {
             var count = Number((conversation && conversation.member_count) || 0);
             var max = Number((conversation && conversation.max_members) || 0);
-            if (peer.user_type_label) statusBits.push(String(peer.user_type_label));
+            var members = Array.isArray(conversation && conversation.members)
+                ? conversation.members
+                : (Array.isArray(conversation && conversation.member_previews) ? conversation.member_previews : []);
+            var namePreview = members.slice(0, 3).map(function (m) {
+                return compactSenderLabel((m && m.name) || '');
+            }).filter(Boolean);
+            if (namePreview.length) {
+                statusBits.push(namePreview.join(', ') + (count > namePreview.length ? '…' : ''));
+            } else if (peer.user_type_label) {
+                statusBits.push(String(peer.user_type_label));
+            }
             statusBits.push(max > 0 ? (count + ' / ' + max + ' members') : (count + ' members'));
         } else {
             if (peer.user_type_label) statusBits.push(String(peer.user_type_label));
@@ -1401,7 +1584,13 @@
             if (peer.barangay_name) statusBits.push(String(peer.barangay_name));
             statusBits.push(formatPresenceLabel(peer));
         }
-        if (els.peerMeta) els.peerMeta.textContent = statusBits.filter(Boolean).join(' · ');
+        if (els.peerMeta) {
+            els.peerMeta.textContent = statusBits.filter(Boolean).join(' · ');
+            els.peerMeta.classList.toggle('is-clickable', !!isGroup);
+            els.peerMeta.setAttribute('role', isGroup ? 'button' : 'text');
+            els.peerMeta.tabIndex = isGroup ? 0 : -1;
+            els.peerMeta.title = isGroup ? 'View members' : '';
+        }
 
         var isOnline = !isGroup && String(peer.online_status || '').toLowerCase() === 'online';
         if (els.peerStatusDot) {
@@ -1410,11 +1599,24 @@
             els.peerStatusDot.title = isOnline ? 'Online' : 'Offline';
         }
 
-        if (els.peerAvatar) {
+        if (els.peerAvatarWrap) {
+            els.peerAvatarWrap.classList.toggle('is-group', !!isGroup);
+        }
+
+        if (isGroup) {
+            renderPeerAvatarStack(conversation, name);
+        } else if (els.peerAvatarStack) {
+            els.peerAvatarStack.hidden = true;
+            els.peerAvatarStack.innerHTML = '';
+            if (els.peerAvatar) els.peerAvatar.hidden = false;
+        }
+
+        if (els.peerAvatar && (!isGroup || !els.peerAvatarStack || els.peerAvatarStack.hidden)) {
             var avatarUrl = isGroup
                 ? ((conversation && conversation.avatar_url) || peer.profile_image_url || Comms.defaultAvatar(name))
                 : resolvePeerAvatar(peer);
             els.peerAvatar.alt = name;
+            els.peerAvatar.hidden = false;
             els.peerAvatar.onerror = function () {
                 els.peerAvatar.onerror = null;
                 els.peerAvatar.src = isGroup
@@ -1472,8 +1674,11 @@
             if (Number(state.activeId) !== Number(cid) || !data || !data.conversation) return;
             var live = window.__COMMS_PRESENCE_ONLINE_IDS__ || {};
             var peer = data.conversation.other_user;
-            if (peer && peer.id && live[Number(peer.id)]) {
-                peer.online_status = 'online';
+            if (peer && peer.id) {
+                var pType = String(peer.user_type || peer.type || peer.portal || '').trim().toLowerCase();
+                if ((pType && live[pType + ':' + Number(peer.id)]) || live[Number(peer.id)]) {
+                    peer.online_status = 'online';
+                }
             }
             state.activeConversation = data.conversation;
             updatePeerHeader(data.conversation);
@@ -1497,25 +1702,34 @@
         Object.keys(presenceMap).forEach(function (key) {
             var metas = presenceMap[key] || [];
             if (!metas.length) {
-                var keyId = Number(key || 0);
-                if (keyId) onlineIds[keyId] = true;
+                if (String(key).indexOf(':') !== -1) {
+                    onlineIds[String(key).toLowerCase()] = true;
+                }
                 return;
             }
             metas.forEach(function (meta) {
-                var uid = Number((meta && meta.user_id) || key || 0);
-                if (uid) onlineIds[uid] = true;
+                var uid = Number((meta && meta.user_id) || 0);
+                var portal = String((meta && (meta.portal || meta.user_type || meta.type)) || '').trim().toLowerCase();
+                if (!uid) {
+                    var parts = String(key || '').split(':');
+                    if (parts.length === 2) {
+                        portal = portal || String(parts[0] || '').toLowerCase();
+                        uid = Number(parts[1] || 0);
+                    }
+                }
+                if (!uid) return;
+                if (portal) onlineIds[portal + ':' + uid] = true;
+                else onlineIds[uid] = true;
             });
         });
-        window.__COMMS_PRESENCE_ONLINE_IDS__ = Object.assign(
-            {},
-            window.__COMMS_PRESENCE_ONLINE_IDS__ || {},
-            onlineIds
-        );
+        window.__COMMS_PRESENCE_ONLINE_IDS__ = onlineIds;
 
         state.conversations.forEach(function (c) {
             var peer = c.other_user;
             if (!peer || !peer.id) return;
-            var next = onlineIds[Number(peer.id)] ? 'online' : 'offline';
+            var pType = String(peer.user_type || peer.type || peer.portal || '').trim().toLowerCase();
+            var isOn = !!(pType && onlineIds[pType + ':' + Number(peer.id)]) || !!onlineIds[Number(peer.id)];
+            var next = isOn ? 'online' : 'offline';
             if (String(peer.online_status || '') === next) return;
             peer.online_status = next;
             if (next === 'offline') peer.last_seen = new Date().toISOString();
@@ -2192,12 +2406,19 @@
         if (!btn) return;
         // Instant header paint from list row while API loads.
         if (btn.dataset.peerName) {
+            var instantGroup = btn.dataset.isGroup === '1';
             updatePeerHeader({
                 id: btn.dataset.id,
+                conversation_type: instantGroup ? 'group' : 'private',
+                is_default_group: false,
+                name: btn.dataset.peerName,
+                member_count: Number(btn.dataset.memberCount || 0),
+                avatar_url: btn.dataset.peerAvatar || '',
                 other_user: {
                     name: btn.dataset.peerName,
                     profile_image_url: btn.dataset.peerAvatar || '',
-                    online_status: btn.dataset.peerStatus || 'offline'
+                    online_status: btn.dataset.peerStatus || 'offline',
+                    is_group: instantGroup
                 }
             });
         }
@@ -2722,6 +2943,74 @@
             openGroupInfoModal('info');
         });
     }
+    if (els.peerMeta) {
+        els.peerMeta.addEventListener('click', function () {
+            if (!isGroupConversation(state.activeConversation)) return;
+            openGroupInfoModal('members');
+        });
+        els.peerMeta.addEventListener('keydown', function (e) {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            if (!isGroupConversation(state.activeConversation)) return;
+            e.preventDefault();
+            openGroupInfoModal('members');
+        });
+    }
+    if (els.peerAvatarWrap) {
+        els.peerAvatarWrap.addEventListener('click', function () {
+            if (!isGroupConversation(state.activeConversation)) return;
+            openGroupInfoModal('info');
+        });
+    }
+    if (els.newGroupBtn) {
+        els.newGroupBtn.addEventListener('click', function () {
+            openNewGroupModal();
+        });
+    }
+    if (els.newGroupForm) {
+        els.newGroupForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            createNewGroup();
+        });
+    }
+    if (els.newGroupSearch) {
+        var newGroupSearchTimer = null;
+        els.newGroupSearch.addEventListener('input', function () {
+            clearTimeout(newGroupSearchTimer);
+            var q = els.newGroupSearch.value;
+            newGroupSearchTimer = setTimeout(function () { searchNewGroupUsers(q); }, 220);
+        });
+    }
+    if (els.newGroupResults) {
+        els.newGroupResults.addEventListener('click', function (e) {
+            var btn = e.target.closest('[data-add-user-id]');
+            if (!btn) return;
+            var id = Number(btn.getAttribute('data-add-user-id') || 0);
+            if (!id) return;
+            newGroupDraft.selected[id] = {
+                id: id,
+                name: btn.getAttribute('data-add-user-name') || ('User ' + id)
+            };
+            renderNewGroupSelected();
+            if (els.newGroupSearch) {
+                els.newGroupSearch.value = '';
+                els.newGroupSearch.focus();
+            }
+            els.newGroupResults.hidden = true;
+            els.newGroupResults.innerHTML = '';
+        });
+    }
+    if (els.newGroupSelected) {
+        els.newGroupSelected.addEventListener('click', function (e) {
+            var chip = e.target.closest('[data-remove-user]');
+            if (!chip) return;
+            var id = Number(chip.getAttribute('data-remove-user') || 0);
+            if (id) delete newGroupDraft.selected[id];
+            renderNewGroupSelected();
+        });
+    }
+    document.querySelectorAll('[data-comms-new-group-close]').forEach(function (el) {
+        el.addEventListener('click', closeGroupModals);
+    });
     if (els.renameForm) {
         els.renameForm.addEventListener('submit', function (e) {
             e.preventDefault();

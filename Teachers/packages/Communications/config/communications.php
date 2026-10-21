@@ -7,6 +7,7 @@ return [
     'messages_per_page' => 40,
     'search_limit' => 20,
     'call_max_participants' => 8,
+    'custom_group_max_members' => 50,
     'default_group_avatar' => null,
     'reaction_emojis' => ['👍', '❤️', '😂', '😮', '😢', '🙏'],
     'attachments' => [

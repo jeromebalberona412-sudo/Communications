@@ -47,6 +47,16 @@
                 <div class="comms-sidebar-title-row">
                     <h1>Messages</h1>
                     <div class="comms-sidebar-actions">
+                        <button type="button" class="comms-sidebar-icon-btn" id="commsNewGroupBtn" title="New group" aria-label="New group">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+                                <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                                <line x1="19" y1="8" x2="19" y2="14"/>
+                                <line x1="22" y1="11" x2="16" y2="11"/>
+                            </svg>
+                        </button>
                         <a href="{{ route('communications.calls') }}" class="comms-sidebar-icon-btn" title="Call history" aria-label="Call history">
                             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                                 <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
@@ -86,8 +96,9 @@
                     <button type="button" class="comms-back-btn" id="commsBackBtn" aria-label="Back to conversations">
                         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
                     </button>
-                    <div class="comms-peer-avatar-wrap">
+                    <div class="comms-peer-avatar-wrap" id="commsPeerAvatarWrap">
                         <img src="" alt="" class="comms-avatar" id="commsPeerAvatar" width="40" height="40">
+                        <span class="comms-avatar-stack" id="commsPeerAvatarStack" hidden aria-hidden="true"></span>
                         <span class="comms-peer-status-dot" id="commsPeerStatusDot" data-status="offline" aria-hidden="true"></span>
                     </div>
                     <div class="comms-thread-peer">
@@ -101,6 +112,17 @@
                         <button type="button" class="comms-icon-btn" id="commsVideoBtn" title="Video call" aria-label="Start video call">
                             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
                         </button>
+                        <div class="comms-thread-menu-wrap">
+                            <button type="button" class="comms-icon-btn" id="commsThreadMenuBtn" aria-label="Conversation actions" aria-expanded="false" aria-controls="commsThreadMenu" hidden>
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+                            </button>
+                            <div class="comms-thread-menu" id="commsThreadMenu" hidden role="menu">
+                                <button type="button" class="comms-thread-menu-item" id="commsRenameGroupBtn" role="menuitem" hidden>Rename Group</button>
+                                <button type="button" class="comms-thread-menu-item" id="commsChangeGroupPhotoBtn" role="menuitem" hidden>Change Group Photo</button>
+                                <button type="button" class="comms-thread-menu-item" id="commsViewMembersBtn" role="menuitem">View Members</button>
+                                <button type="button" class="comms-thread-menu-item" id="commsGroupInfoBtn" role="menuitem">Group Info</button>
+                            </div>
+                        </div>
                     </div>
                 </header>
 
@@ -148,6 +170,59 @@
             </div>
         </section>
     </div>
+
+    <div class="comms-modal" id="commsGroupModal" hidden>
+        <div class="comms-modal-backdrop" data-comms-group-close></div>
+        <div class="comms-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="commsGroupModalTitle">
+            <header class="comms-modal-header">
+                <h2 id="commsGroupModalTitle">Group</h2>
+                <button type="button" class="comms-icon-btn" data-comms-group-close aria-label="Close">&times;</button>
+            </header>
+            <div class="comms-modal-body" id="commsGroupModalBody"></div>
+        </div>
+    </div>
+
+    <div class="comms-modal" id="commsRenameModal" hidden>
+        <div class="comms-modal-backdrop" data-comms-rename-close></div>
+        <div class="comms-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="commsRenameModalTitle">
+            <header class="comms-modal-header">
+                <h2 id="commsRenameModalTitle">Rename Group</h2>
+                <button type="button" class="comms-icon-btn" data-comms-rename-close aria-label="Close">&times;</button>
+            </header>
+            <form class="comms-modal-body" id="commsRenameForm">
+                <label class="comms-field-label" for="commsRenameInput">Group name</label>
+                <input type="text" id="commsRenameInput" class="comms-field-input" maxlength="120" required autocomplete="off">
+                <div class="comms-modal-actions">
+                    <button type="button" class="comms-btn-secondary" data-comms-rename-close>Cancel</button>
+                    <button type="submit" class="comms-btn-primary" id="commsRenameSubmit">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div class="comms-modal" id="commsNewGroupModal" hidden>
+        <div class="comms-modal-backdrop" data-comms-new-group-close></div>
+        <div class="comms-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="commsNewGroupModalTitle">
+            <header class="comms-modal-header">
+                <h2 id="commsNewGroupModalTitle">New group</h2>
+                <button type="button" class="comms-icon-btn" data-comms-new-group-close aria-label="Close">&times;</button>
+            </header>
+            <form class="comms-modal-body" id="commsNewGroupForm">
+                <label class="comms-field-label" for="commsNewGroupName">Group name (optional)</label>
+                <input type="text" id="commsNewGroupName" class="comms-field-input" maxlength="120" autocomplete="off" placeholder="e.g. Capstone Team">
+                <label class="comms-field-label" for="commsNewGroupSearch">Add people</label>
+                <input type="search" id="commsNewGroupSearch" class="comms-field-input" placeholder="Search people" autocomplete="off">
+                <div class="comms-new-group-results" id="commsNewGroupResults" hidden></div>
+                <div class="comms-new-group-selected" id="commsNewGroupSelected"></div>
+                <div class="comms-modal-actions">
+                    <button type="button" class="comms-btn-secondary" data-comms-new-group-close>Cancel</button>
+                    <button type="submit" class="comms-btn-primary" id="commsNewGroupSubmit">Create group</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <input type="file" id="commsGroupAvatarInput" class="visually-hidden" accept="image/jpeg,image/png,image/webp,image/gif" aria-hidden="true" tabindex="-1">
 </div>
 </div>
 @endsection

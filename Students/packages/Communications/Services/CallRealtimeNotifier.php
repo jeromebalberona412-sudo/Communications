@@ -47,16 +47,12 @@ class CallRealtimeNotifier
         $topics = array_values(array_unique(array_filter($topics)));
 
         $endpoint = $url.'/realtime/v1/api/broadcast';
+        // Publish once per topic (no realtime: duplicate). Client-side shownIncomingIds
+        // also dedupes; double fan-out caused duplicate ring UI / ringtone restarts.
         $messages = [];
         foreach ($topics as $topic) {
             $messages[] = [
                 'topic' => $topic,
-                'event' => 'webrtc',
-                'payload' => $payload,
-            ];
-            // Some Realtime deployments expect the realtime: prefix.
-            $messages[] = [
-                'topic' => 'realtime:'.$topic,
                 'event' => 'webrtc',
                 'payload' => $payload,
             ];

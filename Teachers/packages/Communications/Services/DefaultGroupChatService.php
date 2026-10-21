@@ -370,6 +370,14 @@ class DefaultGroupChatService
 
     public function canRename(Conversation $conversation, Authenticatable $user): bool
     {
+        if (! $conversation->isGroup() || ! $this->isMember($conversation, $user)) {
+            return false;
+        }
+
+        if (! $conversation->isDefaultGroup()) {
+            return $this->isGroupAdmin($conversation, $user);
+        }
+
         return $this->hasFederationLeadershipPosition(
             $conversation,
             $user,
@@ -379,11 +387,33 @@ class DefaultGroupChatService
 
     public function canChangeAvatar(Conversation $conversation, Authenticatable $user): bool
     {
+        if (! $conversation->isGroup() || ! $this->isMember($conversation, $user)) {
+            return false;
+        }
+
+        if (! $conversation->isDefaultGroup()) {
+            return $this->isGroupAdmin($conversation, $user);
+        }
+
         return $this->hasFederationLeadershipPosition(
             $conversation,
             $user,
             ['President']
         );
+    }
+
+    public function isGroupAdmin(Conversation $conversation, Authenticatable $user): bool
+    {
+        if (! SchemaCache::hasColumn('conversation_participants', 'participant_role')) {
+            // Without roles, any member may manage a custom group.
+            return ! $conversation->isDefaultGroup() && $this->isMember($conversation, $user);
+        }
+
+        return ConversationParticipant::query()
+            ->where('conversation_id', $conversation->id)
+            ->where('user_id', (int) $user->id)
+            ->where('participant_role', ConversationParticipant::ROLE_ADMIN)
+            ->exists();
     }
 
     /**
@@ -467,7 +497,9 @@ class DefaultGroupChatService
     public function rename(Conversation $conversation, Authenticatable $user, string $name): Conversation
     {
         if (! $this->canRename($conversation, $user)) {
-            abort(403, 'Only the SK Federation President or Vice President can rename this group.');
+            abort(403, $conversation->isDefaultGroup()
+                ? 'Only the SK Federation President or Vice President can rename this group.'
+                : 'Only a group admin can rename this group.');
         }
 
         $name = trim(preg_replace('/\s+/u', ' ', $name) ?? '');
@@ -491,11 +523,13 @@ class DefaultGroupChatService
     public function updateAvatar(Conversation $conversation, Authenticatable $user, UploadedFile $file): Conversation
     {
         if (! $this->canChangeAvatar($conversation, $user)) {
-            abort(403, 'Only the SK Federation President can change this group photo.');
+            abort(403, $conversation->isDefaultGroup()
+                ? 'Only the SK Federation President can change this group photo.'
+                : 'Only a group admin can change this group photo.');
         }
 
-        if (! $conversation->isDefaultGroup()) {
-            abort(422, 'Only default group chats support a custom photo.');
+        if (! $conversation->isGroup()) {
+            abort(422, 'Only group chats support a custom photo.');
         }
 
         $cloudinary = app(CloudinaryService::class);

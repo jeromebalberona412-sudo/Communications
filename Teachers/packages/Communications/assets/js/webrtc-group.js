@@ -419,7 +419,8 @@ import {
         if (!e.inCall) return;
         if (e.incoming) e.incoming.hidden = true;
         e.inCall.hidden = false;
-        e.inCall.classList.add('is-group-call', 'is-video-call');
+        e.inCall.classList.add('is-group-call');
+        e.inCall.classList.toggle('is-video-call', !!meshWantsVideo || !!meshCameraOn);
         if (e.remoteGrid) e.remoteGrid.hidden = false;
         if (e.remoteVideo) e.remoteVideo.srcObject = null;
         if (e.peerName) e.peerName.textContent = (call.peer && call.peer.name) || 'Group call';
@@ -434,6 +435,7 @@ import {
         setStatus(statusText || 'Calling group…');
         if (e.muteBtn) e.muteBtn.hidden = false;
         if (e.cameraBtn) e.cameraBtn.hidden = false;
+        if (e.localVideo) e.localVideo.hidden = !(meshWantsVideo || meshCameraOn);
     }
 
     async function cleanupMesh(opts) {

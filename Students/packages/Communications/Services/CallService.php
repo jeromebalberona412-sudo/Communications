@@ -159,9 +159,10 @@ class CallService
                 'status' => $call->status,
             ]);
 
+            // Chat bubble while ringing — not "connected". Modal is the Answer/Decline UI.
             $label = $callType === Call::TYPE_VIDEO ? 'Video call' : 'Voice call';
             $prefix = $isGroupCall ? 'Group ' : '';
-            $this->postCallMessage($call, $caller, $prefix.$label.' started');
+            $this->postCallMessage($call, $caller, $prefix.$label.' ringing…');
 
             return $call;
         });

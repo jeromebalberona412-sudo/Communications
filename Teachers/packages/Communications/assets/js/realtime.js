@@ -808,17 +808,30 @@ import { createClient } from '@supabase/supabase-js';
         }
 
         function applyPresenceMap(stateMap) {
+            // Keys are "portal:userId" to avoid Students/Teachers numeric ID collisions.
             var onlineIds = {};
             Object.keys(stateMap || {}).forEach(function (key) {
                 var metas = stateMap[key] || [];
                 if (!metas.length) {
-                    var keyId = Number(key || 0);
-                    if (keyId) onlineIds[keyId] = true;
+                    if (String(key).indexOf(':') !== -1) {
+                        onlineIds[String(key).toLowerCase()] = true;
+                    }
                     return;
                 }
                 metas.forEach(function (meta) {
-                    var uid = Number((meta && meta.user_id) || key || 0);
-                    if (uid) onlineIds[uid] = true;
+                    var uid = Number((meta && meta.user_id) || 0);
+                    var portal = String((meta && (meta.portal || meta.user_type || meta.type)) || '').trim().toLowerCase();
+                    if (!uid) {
+                        var parts = String(key || '').split(':');
+                        if (parts.length === 2) {
+                            portal = portal || String(parts[0] || '').toLowerCase();
+                            uid = Number(parts[1] || 0);
+                        }
+                    }
+                    if (!uid) return;
+                    if (portal) onlineIds[portal + ':' + uid] = true;
+                    // Keep numeric fallback only when portal is unknown.
+                    else onlineIds[uid] = true;
                 });
             });
             window.__COMMS_PRESENCE_ONLINE_IDS__ = onlineIds;
@@ -831,8 +844,10 @@ import { createClient } from '@supabase/supabase-js';
         }
 
         if (sb) {
+            var portalKey = String(root.dataset.portalUserType || 'user').trim().toLowerCase();
+            var presenceKey = portalKey + ':' + String(userId);
             presenceChannel = sb.channel('comms-presence', {
-                config: { presence: { key: String(userId) } }
+                config: { presence: { key: presenceKey } }
             });
 
             presenceChannel
@@ -849,7 +864,8 @@ import { createClient } from '@supabase/supabase-js';
                     if (status === 'SUBSCRIBED') {
                         await presenceChannel.track({
                             user_id: Number(userId),
-                            portal: root.dataset.portalUserType,
+                            portal: portalKey,
+                            user_type: portalKey,
                             online_at: new Date().toISOString()
                         });
                     }
