@@ -9,6 +9,13 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    {{-- Publishable Supabase keys only (never service-role / sb_secret_*). Used by realtime.js for calls/chat. --}}
+    <script>
+        window.__COMMS_SUPABASE__ = {
+            url: @json(rtrim((string) (env('VITE_SUPABASE_URL') ?: env('SUPABASE_URL') ?: ''), '/')),
+            key: @json((string) (env('VITE_SUPABASE_PUBLISHABLE_KEY') ?: env('SUPABASE_PUBLISHABLE_KEY') ?: ''))
+        };
+    </script>
     @vite(['resources/css/app.css', 'resources/js/app.js', 'resources/js/communications.js'])
 </head>
 <body class="app-body" data-sidebar-storage-key="teachers.sidebar">

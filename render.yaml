@@ -49,6 +49,16 @@ services:
         value: sync
       - key: COMMS_PORTAL_USER_TYPE
         value: students
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
       - key: MIGRATE_ON_DEPLOY
         value: "false"
 
@@ -96,5 +106,15 @@ services:
         value: sync
       - key: COMMS_PORTAL_USER_TYPE
         value: teachers
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: VITE_SUPABASE_URL
+        sync: false
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        sync: false
       - key: MIGRATE_ON_DEPLOY
         value: "false"

@@ -46,9 +46,32 @@ SUPABASE_URL=...
 SUPABASE_PUBLISHABLE_KEY=...
 COMMS_PORTAL_USER_TYPE=teachers
 MIGRATE_ON_DEPLOY=false
+
+# Required for voice/video + realtime chat (publishable only in VITE_*)
+SUPABASE_URL=https://tcvjvihwntnhofflskhb.supabase.co
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+SUPABASE_SECRET_KEY=sb_secret_...
+VITE_SUPABASE_URL=https://tcvjvihwntnhofflskhb.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 ```
 
 Use a **different** `APP_KEY` and `SESSION_COOKIE` than Students.
+
+### Realtime / calls (“Realtime is not configured”)
+
+Vite embeds `VITE_*` at **Docker build** time. Also set the same keys as **runtime** env (Blade injects `window.__COMMS_SUPABASE__`).
+
+On Render Environment for **both** services, set at least:
+
+| Key | Notes |
+|-----|--------|
+| `VITE_SUPABASE_URL` | `https://….supabase.co` |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | `sb_publishable_…` only |
+| `SUPABASE_URL` | same URL |
+| `SUPABASE_PUBLISHABLE_KEY` | same publishable key |
+| `SUPABASE_SECRET_KEY` | server-only (`sb_secret_…`) — never `VITE_` |
+
+Then **Clear build cache & deploy** so Docker rebuilds assets with the keys.
 
 ### Verify Teachers
 

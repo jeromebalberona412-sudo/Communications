@@ -20,8 +20,11 @@ import { createClient } from '@supabase/supabase-js';
         return;
     }
 
-    var url = import.meta.env.VITE_SUPABASE_URL || '';
-    var key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '';
+    // Prefer runtime config from Blade (works on Render without Vite rebuild),
+    // then fall back to Vite build-time env (local `npm run build` / `npm run dev`).
+    var bootCfg = (typeof window !== 'undefined' && window.__COMMS_SUPABASE__) || {};
+    var url = String(bootCfg.url || import.meta.env.VITE_SUPABASE_URL || '').trim();
+    var key = String(bootCfg.key || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || '').trim();
     var enabled = !!(url && key);
     var client = null;
     var messageChannel = null;

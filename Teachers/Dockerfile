@@ -21,6 +21,12 @@ COPY scripts ./scripts
 COPY artisan ./
 COPY package.json package-lock.json vite.config.js ./
 
+# Vite bakes VITE_* at build time. Pass these as Render env vars (also used at runtime via Blade).
+ARG VITE_SUPABASE_URL
+ARG VITE_SUPABASE_PUBLISHABLE_KEY
+ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
+    VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY
+
 RUN composer install --no-dev --prefer-dist --optimize-autoloader --no-interaction --no-scripts \
     && npm ci \
     && npm run build \
