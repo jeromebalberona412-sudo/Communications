@@ -3,7 +3,6 @@
 namespace App\Modules\Communications\Services;
 
 use App\Models\Barangay;
-use App\Models\OfficialProfile;
 use App\Models\User;
 use App\Modules\Communications\Models\Conversation;
 use App\Modules\Communications\Models\ConversationParticipant;
@@ -567,7 +566,7 @@ class ConversationService
     public function barangayOptions(): Collection
     {
         $barangayClass = Barangay::class;
-        if (! class_exists($barangayClass)) {
+        if (! class_exists($barangayClass) || ! SchemaCache::hasTable('barangays')) {
             return collect();
         }
 
@@ -814,14 +813,17 @@ class ConversationService
         $online = $presence['online_status'];
         $lastSeen = $presence['last_seen'];
 
-        if (! $user->relationLoaded('barangay') && method_exists($user, 'barangay') && SchemaCache::hasTable('barangays')) {
+        $hasBarangays = SchemaCache::hasTable('barangays');
+        $hasOfficialProfiles = SchemaCache::hasTable('official_profiles');
+
+        if ($hasBarangays && ! $user->relationLoaded('barangay') && method_exists($user, 'barangay')) {
             try {
                 $user->loadMissing('barangay');
             } catch (\Throwable) {
                 // Optional relation for SK portals only.
             }
         }
-        if (! $user->relationLoaded('officialProfile') && method_exists($user, 'officialProfile') && SchemaCache::hasTable('official_profiles')) {
+        if ($hasOfficialProfiles && ! $user->relationLoaded('officialProfile') && method_exists($user, 'officialProfile')) {
             try {
                 $user->loadMissing('officialProfile');
             } catch (\Throwable) {
@@ -830,15 +832,21 @@ class ConversationService
         }
 
         $position = null;
-        if (SchemaCache::hasTable('official_profiles')) {
-            $position = $user->officialProfile?->position
-                ?: $user->officialProfile?->federation_position
+        if ($hasOfficialProfiles && $user->relationLoaded('officialProfile')) {
+            $profile = $user->getRelation('officialProfile');
+            $position = $profile?->position
+                ?: $profile?->federation_position
                 ?: null;
+        }
+
+        $barangayName = null;
+        if ($hasBarangays && $user->relationLoaded('barangay')) {
+            $barangayName = $user->getRelation('barangay')?->name;
         }
 
         return [
             'id' => (int) $user->id,
-            'name' => (string) $user->name,
+            'name' => (string) ($user->name ?: (method_exists($user, 'displayName') ? $user->displayName() : 'User')),
             'role' => (string) $user->role,
             'user_type' => $type,
             'user_type_label' => $this->types->label($type),
@@ -846,7 +854,7 @@ class ConversationService
             'online_status' => $online,
             'last_seen' => $lastSeen,
             'barangay_id' => (int) ($user->barangay_id ?? 0) ?: null,
-            'barangay_name' => $user->barangay?->name,
+            'barangay_name' => $barangayName,
             'position' => $position,
         ];
     }

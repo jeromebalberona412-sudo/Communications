@@ -71,15 +71,15 @@ Route::get('/api/communications/users/{user_type}/{user_id}/profile', [Directory
 Route::get('/api/communications/calls', [CallController::class, 'index'])
     ->name('api.communications.calls.index');
 Route::get('/api/communications/calls/ringing', [CallController::class, 'ringing'])
-    ->middleware('throttle:60,1')
+    ->middleware('throttle:90,1')
     ->name('api.communications.calls.ringing');
 Route::post('/api/communications/conversations/{conversation}/calls', [CallController::class, 'store'])
-    ->middleware('throttle:10,1')
+    ->middleware('throttle:20,1')
     ->name('api.communications.calls.store');
 Route::post('/api/communications/calls/{call}/status', [CallController::class, 'updateStatus'])
-    ->middleware('throttle:30,1')
+    ->middleware('throttle:60,1')
     ->name('api.communications.calls.status');
 
 Route::post('/api/communications/presence', [PresenceController::class, 'heartbeat'])
-    ->middleware('throttle:20,1')
+    ->middleware('throttle:30,1')
     ->name('api.communications.presence');

@@ -43,8 +43,14 @@ class DefaultGroupChatService
             return null;
         }
 
+        $portal = strtolower(trim((string) config('communications.portal_user_type', '')));
+        if (in_array($portal, ['students', 'student', 'teachers', 'teacher'], true)) {
+            return null;
+        }
+
         if (! SchemaCache::hasTable('conversations')
             || ! SchemaCache::hasColumn('conversations', 'default_group_type')
+            || ! SchemaCache::hasTable('official_profiles')
         ) {
             return null;
         }
@@ -75,6 +81,16 @@ class DefaultGroupChatService
 
     public function ensureForUser(Authenticatable $user): void
     {
+        // Students / Teachers portals have no SK Officials groups.
+        $portal = strtolower(trim((string) config('communications.portal_user_type', '')));
+        if (in_array($portal, ['students', 'student', 'teachers', 'teacher'], true)) {
+            return;
+        }
+
+        if (! SchemaCache::hasTable('official_profiles')) {
+            return;
+        }
+
         $tenantId = (int) ($user->tenant_id ?? 0);
         if ($tenantId <= 0) {
             return;
@@ -286,6 +302,10 @@ class DefaultGroupChatService
      */
     public function eligibleSkFederationIds(int $tenantId): Collection
     {
+        if (! SchemaCache::hasTable('official_profiles')) {
+            return collect();
+        }
+
         $chairpersons = User::query()
             ->where('tenant_id', $tenantId)
             ->where('role', User::ROLE_SK_OFFICIAL)
@@ -320,8 +340,7 @@ class DefaultGroupChatService
                 $profile->whereIn('federation_position', OfficialProfile::FEDERATION_POSITIONS);
             })
             ->orderByRaw(
-                SchemaCache::hasTable('official_profiles')
-                    && SchemaCache::hasColumn('official_profiles', 'federation_position')
+                SchemaCache::hasColumn('official_profiles', 'federation_position')
                     ? "CASE WHEN EXISTS (
                         SELECT 1 FROM official_profiles op
                         WHERE op.user_id = users.id
@@ -603,31 +622,43 @@ class DefaultGroupChatService
      */
     public function serializeMembers(Conversation $conversation, ConversationService $conversations): array
     {
+        $hasOfficialProfiles = SchemaCache::hasTable('official_profiles');
+        $hasBarangays = SchemaCache::hasTable('barangays');
+
         $load = ['participants.user'];
-        if (SchemaCache::hasTable('official_profiles')) {
+        if ($hasOfficialProfiles) {
             $load[] = 'participants.user.officialProfile';
         }
-        if (SchemaCache::hasTable('barangays')) {
+        if ($hasBarangays) {
             $load[] = 'participants.user.barangay';
         }
         $conversation->loadMissing($load);
 
-        $rankMap = $this->federationPositionRankMap();
-        $isFederationGroup = $conversation->default_group_type === self::TYPE_SK_FEDERATIONS;
+        $rankMap = $hasOfficialProfiles ? $this->federationPositionRankMap() : [];
+        $isFederationGroup = $hasOfficialProfiles
+            && $conversation->default_group_type === self::TYPE_SK_FEDERATIONS;
 
         return $conversation->participants
-            ->sortBy(function (ConversationParticipant $participant) use ($rankMap, $isFederationGroup) {
+            ->sortBy(function (ConversationParticipant $participant) use ($rankMap, $isFederationGroup, $hasOfficialProfiles) {
                 $user = $participant->user;
                 $name = mb_strtolower((string) ($user?->name ?? ''), 'UTF-8');
 
+                if (! $hasOfficialProfiles) {
+                    return $name;
+                }
+
+                $profile = ($user && $user->relationLoaded('officialProfile'))
+                    ? $user->getRelation('officialProfile')
+                    : null;
+
                 if ($isFederationGroup) {
-                    $fed = mb_strtolower(trim((string) ($user?->officialProfile?->federation_position ?? '')), 'UTF-8');
+                    $fed = mb_strtolower(trim((string) ($profile?->federation_position ?? '')), 'UTF-8');
                     $rank = $rankMap[$fed] ?? 1000;
 
                     return sprintf('%04d-%s', $rank, $name);
                 }
 
-                $position = mb_strtolower(trim((string) ($user?->officialProfile?->position ?? '')), 'UTF-8');
+                $position = mb_strtolower(trim((string) ($profile?->position ?? '')), 'UTF-8');
                 $officialRank = match (true) {
                     str_contains($position, 'chair') => 0,
                     str_contains($position, 'secretary') => 1,
@@ -639,7 +670,7 @@ class DefaultGroupChatService
                 return sprintf('%04d-%s', $officialRank, $name);
             })
             ->values()
-            ->map(function (ConversationParticipant $participant) use ($conversations) {
+            ->map(function (ConversationParticipant $participant) use ($conversations, $hasOfficialProfiles) {
                 $user = $participant->user;
                 $serialized = $conversations->serializeUser($user, $participant->user_type) ?? [
                     'id' => (int) $participant->user_id,
@@ -649,9 +680,13 @@ class DefaultGroupChatService
                 $serialized['participant_role'] = $participant->participant_role
                     ?? ConversationParticipant::ROLE_MEMBER;
                 $serialized['joined_at'] = optional($participant->joined_at)?->toIso8601String();
-                $serialized['federation_position'] = $user?->officialProfile?->federation_position;
-                $serialized['position'] = $user?->officialProfile?->federation_position
-                    ?: $user?->officialProfile?->position
+
+                $profile = ($hasOfficialProfiles && $user && $user->relationLoaded('officialProfile'))
+                    ? $user->getRelation('officialProfile')
+                    : null;
+                $serialized['federation_position'] = $profile?->federation_position;
+                $serialized['position'] = $profile?->federation_position
+                    ?: $profile?->position
                     ?: ($serialized['position'] ?? null);
 
                 return $serialized;

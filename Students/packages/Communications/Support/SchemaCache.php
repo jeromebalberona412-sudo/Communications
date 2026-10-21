@@ -45,9 +45,26 @@ class SchemaCache
             }
         }
 
-        $value = (bool) $resolver();
+        try {
+            $value = (bool) $resolver();
+        } catch (\Throwable) {
+            $value = false;
+        }
         @file_put_contents($file, $value ? '1' : '0');
 
         return self::$memo[$key] = $value;
+    }
+
+    /** Drop memo + on-disk flags (e.g. after schema changes or portal switch). */
+    public static function clear(): void
+    {
+        self::$memo = [];
+        $dir = storage_path('framework/cache');
+        if (! is_dir($dir)) {
+            return;
+        }
+        foreach (glob($dir.DIRECTORY_SEPARATOR.'comms-schema-*.flag') ?: [] as $file) {
+            @unlink($file);
+        }
     }
 }
