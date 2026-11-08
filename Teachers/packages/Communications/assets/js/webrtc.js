@@ -1290,7 +1290,8 @@ import {
     function setCallStatus(text) {
         if (els.callStatus) els.callStatus.textContent = text || '';
         if (els.timer) {
-            els.timer.hidden = !callConnected;
+            els.timer.hidden = false;
+            if (!callStartedAt) els.timer.textContent = '00:00';
         }
     }
 
@@ -1641,6 +1642,10 @@ import {
     function startTimer(serverStartedAt, serverTime) {
         applyServerClock(serverTime);
 
+        if (!callConnected) {
+            return;
+        }
+
         var nextStarted = Date.now() + clockOffsetMs;
         if (serverStartedAt) {
             var parsed = Date.parse(serverStartedAt);
@@ -1663,6 +1668,14 @@ import {
         callTimer = setInterval(function () {
             renderTimer();
         }, 250);
+    }
+
+    function maybeStartConnectedTimer() {
+        if (!callConnected) return;
+        var ts = currentCall && (currentCall.started_at || currentCall.answered_at);
+        startTimer(ts || null, currentCall && currentCall.server_time);
+        if (els.timer) els.timer.hidden = false;
+        startCallHeartbeat();
     }
 
     /**
@@ -1692,7 +1705,13 @@ import {
     }
 
     async function ensurePeerConnection(videoEnabled) {
-        if (pc) return pc;
+        if (pc) {
+            attachLocalVideo();
+            if (videoEnabled && localStream && !findLiveVideoTrack()) {
+                try { await applyCameraState(true); } catch (eCam) { /* keep audio call */ }
+            }
+            return pc;
+        }
 
         if (typeof RTCPeerConnection === 'undefined') {
             throw new Error('WebRTC is not supported in this browser.');
@@ -1742,40 +1761,47 @@ import {
                 callConnected = true;
                 clearConnectionTimeout();
                 setCallStatus('Connected');
+                maybeStartConnectedTimer();
                 refreshRemoteFromReceivers();
+                attachLocalVideo();
                 unlockRemotePlayback();
                 updateCameraUi();
                 signalMediaState();
             }
-            if (st === 'disconnected') {
+            if (st === 'disconnected' || st === 'failed') {
                 if (iceDisconnectTimer) clearTimeout(iceDisconnectTimer);
                 iceDisconnectTimer = setTimeout(function () {
                     iceDisconnectTimer = null;
                     if (!pc || !currentCall) return;
                     var now = pc.iceConnectionState;
                     if (now === 'failed') {
-                        toast('Call connection lost.', 'error');
+                        toast('Call connection failed.', 'error');
                         endCall();
                     }
                 }, 8000);
             }
-            if (st === 'failed') {
-                if (!currentCall) return;
-                toast('Call connection failed.', 'error');
-                endCall();
-            }
         };
         pc.onconnectionstatechange = function () {
             if (pc && pc.connectionState === 'connected') {
+                callConnected = true;
                 clearConnectionTimeout();
+                maybeStartConnectedTimer();
+                refreshRemoteFromReceivers();
+                attachLocalVideo();
                 unlockRemotePlayback();
                 updateCameraUi();
                 signalMediaState();
             }
             if (pc && pc.connectionState === 'failed') {
-                if (!currentCall) return;
-                toast('Call connection failed.', 'error');
-                endCall();
+                if (iceDisconnectTimer) clearTimeout(iceDisconnectTimer);
+                iceDisconnectTimer = setTimeout(function () {
+                    iceDisconnectTimer = null;
+                    if (!pc || !currentCall) return;
+                    if (pc.connectionState === 'failed') {
+                        toast('Call connection failed.', 'error');
+                        endCall();
+                    }
+                }, 8000);
             }
         };
 
@@ -1878,11 +1904,9 @@ import {
             if (!enabled) {
                 localStream.getVideoTracks().forEach(function (track) {
                     try { track.enabled = false; } catch (eOff) {}
-                    try { localStream.removeTrack(track); } catch (eRm) {}
-                    try { track.stop(); } catch (eStop) {}
                 });
-                if (sender) {
-                    try { await sender.replaceTrack(null); } catch (eRep) {}
+                if (sender && sender.track) {
+                    try { sender.track.enabled = false; } catch (eRep) {}
                     videoSender = sender;
                 }
                 cameraEnabled = false;
@@ -2107,6 +2131,8 @@ import {
         hideEnded();
         if (els.incoming) els.incoming.hidden = true;
         els.inCall.hidden = false;
+        document.documentElement.classList.add('comms-in-call');
+        document.body.classList.add('comms-in-call');
         if (els.peerName) {
             els.peerName.textContent = (call.peer && call.peer.name) || 'Call';
         }
@@ -2240,6 +2266,8 @@ import {
         if (els.localVideoOff) els.localVideoOff.hidden = true;
         var remoteMicOffEl = document.getElementById('commsRemoteMicOff');
         if (remoteMicOffEl) remoteMicOffEl.hidden = true;
+        document.documentElement.classList.remove('comms-in-call');
+        document.body.classList.remove('comms-in-call');
         cleaningCall = false;
     }
 
@@ -2619,7 +2647,6 @@ import {
         try {
             assertMediaReady();
             await subscribeCallChannel(call.conversation_id);
-            callConnected = true;
             showInCall(call, 'Connecting...');
             unlockRemotePlayback();
             armConnectionTimeout();
@@ -2636,9 +2663,6 @@ import {
                 if (accepted && currentCall && Number(currentCall.id) === Number(accepted.id)) {
                     currentCall = Object.assign({}, currentCall, accepted);
                     answeredCall = currentCall;
-                    if (accepted.started_at || accepted.answered_at) {
-                        startTimer(accepted.started_at || accepted.answered_at, accepted.server_time);
-                    }
                 }
             }).catch(function () {});
             wantsVideo = call.call_type === 'video';
@@ -2667,12 +2691,8 @@ import {
                 while (iceQueue.length) {
                     await pc.addIceCandidate(iceQueue.shift());
                 }
-                setCallStatus('Connected');
-                startTimer(
-                    call.started_at || call.answered_at,
-                    call.server_time
-                );
-                startCallHeartbeat();
+                setCallStatus('Connecting...');
+                attachLocalVideo();
                 signalMediaState();
                 refreshCallChat(call.conversation_id);
             } else {
@@ -2868,10 +2888,14 @@ import {
     function applyPeerAnswered() {
         stopRingtone();
         clearRingTimeout();
-        callConnected = true;
+        if (currentCall && currentCall.id != null) {
+            rememberCallId(answeredCallIds, currentCall.id);
+        }
+        startingCall = true;
         role = 'caller';
         setCallStatus('Connecting...');
         armConnectionTimeout();
+        attachLocalVideo();
         updateCameraUi();
         unlockRemotePlayback();
         signalMediaState();
@@ -3068,26 +3092,12 @@ import {
 
             if (role !== 'caller') return;
             applyPeerAnswered();
-            setCallStatus('Connected');
-            // The peer sends the authoritative start timestamp so both sides
-            // show the same duration.
-            var answerStartedAt = payload.started_at
-                || (currentCall && (currentCall.started_at || currentCall.answered_at));
-            var answerServerTime = payload.server_time
-                || (currentCall && currentCall.server_time)
-                || null;
-            if (answerStartedAt) {
-                startTimer(answerStartedAt, answerServerTime);
-            } else {
-                // Fall back to the server record when the peer did not send it.
-                fetchCallState(currentCall && currentCall.id).then(function (state) {
-                    if (state && (state.started_at || state.answered_at)) {
-                        startTimer(state.started_at || state.answered_at, state.server_time);
-                    }
+            if (payload.started_at || payload.answered_at) {
+                currentCall = Object.assign({}, currentCall || {}, {
+                    started_at: payload.started_at || payload.answered_at,
+                    server_time: payload.server_time || null
                 });
             }
-            // The caller also keeps the call alive on the server.
-            startCallHeartbeat();
             refreshCallChat(currentCall && currentCall.conversation_id);
             return;
         }

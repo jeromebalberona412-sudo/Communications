@@ -230,12 +230,36 @@
         return html;
     }
 
-    function openGroupInfoModal(mode, opts) {
-        opts = opts || {};
-        var conv = state.activeConversation;
-        if (!conv || !isGroupConversation(conv) || !els.groupModal || !els.groupModalBody) return;
+    var groupMembersInflight = Object.create(null);
+
+    function groupMembersCacheKey(convId) {
+        return 'comms.ui.groupMembers.' + String(state.currentUserId || 0) + '.' + String(convId || 0);
+    }
+
+    function readGroupMembersCache(convId) {
+        try {
+            var parsed = JSON.parse(sessionStorage.getItem(groupMembersCacheKey(convId)) || 'null');
+            if (parsed && Number(parsed.userId) === Number(state.currentUserId) && Array.isArray(parsed.items)) {
+                return parsed.items;
+            }
+        } catch (e) { /* ignore */ }
+        return null;
+    }
+
+    function writeGroupMembersCache(convId, items) {
+        try {
+            sessionStorage.setItem(groupMembersCacheKey(convId), JSON.stringify({
+                userId: Number(state.currentUserId || 0),
+                items: items,
+                ts: Date.now()
+            }));
+        } catch (e2) { /* ignore */ }
+    }
+
+    function paintGroupInfoModal(mode, conv) {
         var name = conv.name || (conv.other_user && conv.other_user.name) || 'Group chat';
-        var count = Number(conv.member_count || (conv.members && conv.members.length) || 0);
+        var members = Array.isArray(conv.members) ? conv.members : [];
+        var count = Number(conv.member_count || members.length || 0);
         var max = Number(conv.max_members || 0);
         var typeLabel = conv.default_group_type === 'SK_OFFICIALS'
             ? 'SK Officials'
@@ -245,34 +269,6 @@
                 ? 'View Members'
                 : (mode === 'call' ? 'Select call recipient' : 'Group Info');
         }
-
-        if (!opts.skipFetch && routes.conversationMembers) {
-            var cachedMembers = Array.isArray(conv.members) ? conv.members : [];
-            if (cachedMembers.length) {
-                openGroupInfoModal(mode, { skipFetch: true });
-            } else {
-                els.groupModalBody.innerHTML = '<p class="comms-muted">Loading members…</p>';
-                els.groupModal.hidden = false;
-            }
-            Comms.api(Comms.route(routes.conversationMembers, conv.id), { dedupe: true }).then(function (data) {
-                if (data && data.conversation) {
-                    state.activeConversation = Object.assign({}, state.activeConversation || {}, data.conversation);
-                }
-                if (data && Array.isArray(data.members)) {
-                    state.activeConversation.members = data.members;
-                    state.activeConversation.member_count = data.member_count != null
-                        ? data.member_count
-                        : data.members.length;
-                }
-                openGroupInfoModal(mode, { skipFetch: true });
-            }).catch(function (err) {
-                Comms.showToast(err.message || 'Unable to load members.', 'error');
-                els.groupModalBody.innerHTML = '<p class="comms-muted">Unable to load members.</p>';
-            });
-            return;
-        }
-
-        var members = Array.isArray(conv.members) ? conv.members : [];
         var html = '';
         if (mode !== 'members' && mode !== 'call') {
             var groupAvatar = conv.avatar_url
@@ -293,9 +289,64 @@
         } else {
             html += renderMembersListHtml(members, mode);
         }
-
         els.groupModalBody.innerHTML = html;
         els.groupModal.hidden = false;
+    }
+
+    function openGroupInfoModal(mode, opts) {
+        opts = opts || {};
+        var conv = state.activeConversation;
+        if (!conv || !isGroupConversation(conv) || !els.groupModal || !els.groupModalBody) return;
+
+        if (!Array.isArray(conv.members) || !conv.members.length) {
+            var cachedMembers = readGroupMembersCache(conv.id);
+            if (cachedMembers && cachedMembers.length) {
+                conv.members = cachedMembers;
+                conv.member_count = cachedMembers.length;
+            }
+        }
+
+        if (els.groupModalTitle) {
+            els.groupModalTitle.textContent = mode === 'members'
+                ? 'View Members'
+                : (mode === 'call' ? 'Select call recipient' : 'Group Info');
+        }
+        els.groupModal.hidden = false;
+        if (Array.isArray(conv.members) && conv.members.length) {
+            paintGroupInfoModal(mode, conv);
+        } else {
+            els.groupModalBody.innerHTML = '<p class="comms-muted">Loading members…</p>';
+        }
+
+        if (!opts.skipFetch && routes.conversationMembers) {
+            var fetchKey = String(conv.id) + ':' + mode;
+            if (groupMembersInflight[fetchKey]) return;
+            groupMembersInflight[fetchKey] = Comms.api(Comms.route(routes.conversationMembers, conv.id), { dedupe: true }).then(function (data) {
+                if (data && data.conversation) {
+                    state.activeConversation = Object.assign({}, state.activeConversation || {}, data.conversation);
+                }
+                if (data && Array.isArray(data.members)) {
+                    state.activeConversation.members = data.members;
+                    state.activeConversation.member_count = data.member_count != null
+                        ? data.member_count
+                        : data.members.length;
+                    writeGroupMembersCache(state.activeConversation.id, data.members);
+                }
+                if (state.activeConversation && !els.groupModal.hidden) {
+                    paintGroupInfoModal(mode, state.activeConversation);
+                }
+            }).catch(function (err) {
+                Comms.showToast(err.message || 'Unable to load members.', 'error');
+                if (!conv.members || !conv.members.length) {
+                    els.groupModalBody.innerHTML = '<p class="comms-muted">Unable to load members.</p>';
+                }
+            }).finally(function () {
+                delete groupMembersInflight[fetchKey];
+            });
+            return;
+        }
+
+        paintGroupInfoModal(mode, conv);
     }
 
     function beginGroupOrDirectCall(callType) {

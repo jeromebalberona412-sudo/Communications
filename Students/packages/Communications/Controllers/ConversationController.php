@@ -201,22 +201,28 @@ class ConversationController extends Controller
 
         $page = max(1, (int) request()->integer('page', 1));
         $perPage = min(100, max(10, (int) request()->integer('per_page', 40)));
+        $user = Auth::user();
+        $cacheKey = 'comms.members.'.$conversation->id.'.'.(int) $user->id.'.'.$page.'.'.$perPage;
 
-        $result = $this->defaultGroups->memberPage(
-            $conversation,
-            $this->conversations,
-            $page,
-            $perPage
-        );
+        $payload = Cache::remember($cacheKey, 15, function () use ($conversation, $page, $perPage, $user) {
+            $result = $this->defaultGroups->memberPage(
+                $conversation,
+                $this->conversations,
+                $page,
+                $perPage
+            );
 
-        return response()->json([
-            'conversation' => $this->conversations->showPayload($conversation, Auth::user()),
-            'members' => $result['members'],
-            'member_count' => $result['total'],
-            'max_members' => $conversation->max_members,
-            'page' => $result['page'],
-            'per_page' => $result['per_page'],
-            'has_more' => $result['has_more'],
-        ]);
+            return [
+                'conversation' => $this->conversations->showPayload($conversation, $user),
+                'members' => $result['members'],
+                'member_count' => $result['total'],
+                'max_members' => $conversation->max_members,
+                'page' => $result['page'],
+                'per_page' => $result['per_page'],
+                'has_more' => $result['has_more'],
+            ];
+        });
+
+        return response()->json($payload);
     }
 }

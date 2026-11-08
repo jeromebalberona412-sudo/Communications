@@ -2153,11 +2153,12 @@ button.comms-bubble-image {
     object-fit: cover;
 }
 .comms-call-overlay.is-group-call.has-remote-video .comms-call-center {
-    top: 1.25rem;
-    transform: translate(-50%, 0);
+    top: max(0.55rem, env(safe-area-inset-top, 0px));
+    left: max(0.65rem, env(safe-area-inset-left, 0px));
+    transform: none;
 }
 .comms-call-overlay.has-remote-video .comms-call-center.is-compact .comms-call-avatar {
-    display: none;
+    display: grid;
 }
 .comms-call-overlay.has-remote-video:not(.is-group-call) .comms-local-video {
     object-fit: cover;
@@ -2334,92 +2335,60 @@ button.comms-bubble-image {
     }
 }
 
+html.comms-in-call,
+body.comms-in-call {
+    overflow: hidden !important;
+    overscroll-behavior: none;
+    touch-action: none;
+    height: 100%;
+    height: 100dvh;
+}
+
 .comms-call-center {
     position: absolute;
-    left: 50%;
-    top: 42%;
-    transform: translate(-50%, -50%);
-    text-align: center;
-    z-index: 2;
-    width: min(92vw, 420px);
-    pointer-events: none;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.35rem;
-}
-
-.comms-call-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.2rem;
-    min-width: 0;
-}
-
-.comms-call-overlay.is-connected.has-remote-video .comms-call-center {
-    top: max(0.65rem, env(safe-area-inset-top, 0px));
+    top: max(0.55rem, env(safe-area-inset-top, 0px));
     left: max(0.65rem, env(safe-area-inset-left, 0px));
     right: auto;
     transform: none;
+    z-index: 5;
     width: auto;
-    max-width: min(72vw, 320px);
+    max-width: min(78vw, 340px);
+    pointer-events: none;
+    display: flex;
     flex-direction: row;
     align-items: center;
     gap: 0.55rem;
     text-align: left;
-    padding: 0.4rem 0.7rem 0.4rem 0.4rem;
+    padding: 0.4rem 0.75rem 0.4rem 0.4rem;
     border-radius: 999px;
-    background: rgba(15, 23, 42, 0.55);
+    background: rgba(15, 23, 42, 0.58);
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
 }
 
-.comms-call-overlay.is-connected.has-remote-video .comms-call-avatar {
-    width: 34px;
-    height: 34px;
-    margin: 0;
-    font-size: 0.8rem;
-    box-shadow: none;
-    flex: 0 0 auto;
-}
-
-.comms-call-overlay.is-connected.has-remote-video .comms-call-meta {
+.comms-call-meta {
+    display: flex;
+    flex-direction: column;
     align-items: flex-start;
-}
-
-.comms-call-overlay.is-connected.has-remote-video .comms-call-peer-name {
-    font-size: 0.92rem;
-    font-weight: 700;
-    margin: 0;
-    line-height: 1.15;
-    max-width: 12rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.comms-call-overlay.is-connected.has-remote-video .comms-call-status,
-.comms-call-overlay.is-connected.has-remote-video .comms-call-timer {
-    margin: 0;
-    font-size: 0.72rem;
-    color: rgba(255, 255, 255, 0.82);
+    gap: 0.05rem;
+    min-width: 0;
 }
 
 .comms-call-avatar {
-    width: 112px;
-    height: 112px;
-    margin: 0 auto 1rem;
+    width: 36px;
+    height: 36px;
+    margin: 0;
     border-radius: 50%;
     background: #fff;
     color: #0f172a;
-    font-size: 2.4rem;
+    font-size: 0.85rem;
     font-weight: 800;
     display: grid;
     place-items: center;
     overflow: hidden;
-    box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.12);
+    box-shadow: none;
+    flex: 0 0 auto;
 }
 
 .comms-call-avatar img {
@@ -2429,10 +2398,15 @@ button.comms-bubble-image {
 }
 
 .comms-call-peer-name {
-    font-size: clamp(1.35rem, 3vw, 1.85rem);
-    font-weight: 800;
-    letter-spacing: -0.02em;
-    margin-bottom: 0.35rem;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+    line-height: 1.2;
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .comms-call-peer-position,
@@ -2447,15 +2421,11 @@ button.comms-bubble-image {
     font-size: 0.9rem;
 }
 
-.comms-call-status {
-    font-size: 0.95rem;
-    color: rgba(255, 255, 255, 0.78);
-}
-
+.comms-call-status,
 .comms-call-timer {
-    margin-top: 0.35rem;
-    font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.7);
+    margin: 0;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.82);
     font-variant-numeric: tabular-nums;
 }
 
@@ -3036,7 +3006,7 @@ body.comms-messages-layout .comms-composer {
 /* Small laptop screens */
 @media (max-height: 700px) and (min-width: 769px) {
     .comms-call-center {
-        top: 38%;
+        top: max(0.4rem, env(safe-area-inset-top, 0px));
     }
     .comms-call-controls {
         bottom: max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
@@ -3648,7 +3618,7 @@ body.comms-messages-layout .comms-composer {
         height: 100%;
         max-width: 100%;
         max-height: 100%;
-        object-fit: contain;
+        object-fit: cover;
         object-position: center center;
         transform: none;
     }
@@ -3720,7 +3690,7 @@ body.comms-messages-layout .comms-composer {
     }
 }
 
-/* Students List Styles */
+/* Teachers List Styles */
 .comms-sidebar-tabs {
     display: flex;
     border-bottom: 1px solid #e1e4e8;
@@ -3750,35 +3720,34 @@ body.comms-messages-layout .comms-composer {
     color: #0039A8;
 }
 
-.comms-students-list {
+.comms-teachers-list {
     overflow-y: auto;
     flex: 1;
-    height: calc(100vh - 320px);
+    display: none;
 }
 
-.comms-students-search-wrap {
+.comms-teachers-list .comms-conv-item {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.comms-teachers-list .comms-conv-item:hover {
+    background-color: rgba(0, 57, 168, 0.04);
+}
+
+.comms-teachers-list .comms-conv-item:active {
+    background-color: rgba(0, 57, 168, 0.08);
+}
+
+.comms-teachers-search-wrap {
     padding: 0 12px 12px 12px;
+    display: none;
 }
 
-.comms-students-empty {
+.comms-teachers-empty {
     padding: 24px;
     text-align: center;
     color: #586069;
-    font-size: 14px;
-}
-
-.comms-avatar-initial {
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #0039A8;
-    color: #fff;
-    font-weight: 700;
-    font-size: 18px;
-    border-radius: 50%;
-    flex-shrink: 0;
 }
 
 /* Responsive design for mobile */
@@ -3792,7 +3761,7 @@ body.comms-messages-layout .comms-composer {
         font-size: 13px;
     }
     
-    .comms-students-list {
+    .comms-teachers-list {
         height: calc(100vh - 280px);
     }
 }

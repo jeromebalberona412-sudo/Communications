@@ -721,15 +721,13 @@ import {
         if (!enabled) {
             videoTracks.forEach(function (t) {
                 try { t.enabled = false; } catch (eOff) {}
-                try { meshLocalStream.removeTrack(t); } catch (eRm) {}
-                try { t.stop(); } catch (eStop) {}
             });
             Object.keys(meshPeers).forEach(function (key) {
                 var pc = meshPeers[key] && meshPeers[key].pc;
                 if (!pc) return;
                 pc.getSenders().forEach(function (sender) {
                     if (sender && sender.track && sender.track.kind === 'video') {
-                        sender.replaceTrack(null).catch(function () {});
+                        try { sender.track.enabled = false; } catch (eEn) {}
                     }
                 });
             });

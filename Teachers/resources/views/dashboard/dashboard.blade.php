@@ -18,9 +18,5 @@
             <span>Role</span>
             <strong>Teacher</strong>
         </article>
-        <article class="profile-card">
-            <span>Status</span>
-            <strong class="{{ $teacher->is_active ? 'status-active' : '' }}">{{ $teacher->is_active ? 'Active' : 'Inactive' }}</strong>
-        </article>
     </section>
 @endsection
