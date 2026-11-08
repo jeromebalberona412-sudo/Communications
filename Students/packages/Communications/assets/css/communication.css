@@ -3734,3 +3734,49 @@ body.comms-messages-layout .comms-composer {
         height: calc(100vh - 280px);
     }
 }
+
+/* View Members Action Buttons */
+.comms-member-message-btn,
+.comms-member-call-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    transition: all 0.2s ease;
+}
+
+.comms-member-message-btn {
+    background-color: #0039A8;
+    color: #fff;
+    border-color: #0039A8;
+}
+
+.comms-member-message-btn:hover {
+    background-color: #002a7a;
+    border-color: #002a7a;
+}
+
+.comms-member-call-btn {
+    background-color: #22c55e;
+    color: #fff;
+    border-color: #22c55e;
+}
+
+.comms-member-call-btn:hover {
+    background-color: #16a34a;
+    border-color: #16a34a;
+}
+
+.comms-group-member-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+
+.comms-group-member-actions .comms-btn-secondary svg {
+    display: inline-block;
+    vertical-align: middle;
+}
