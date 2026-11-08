@@ -1369,6 +1369,9 @@ import {
         wantsVideo = !!videoEnabled;
         cameraEnabled = !!videoEnabled;
         localStream = await getLocalStream(!!videoEnabled);
+        
+        // FIX BUG #1: Immediately attach local video after acquiring stream
+        attachLocalVideo();
 
         pc = new RTCPeerConnection(stunConfig());
         pc.onicecandidate = function (ev) {
@@ -1394,6 +1397,8 @@ import {
                 scheduleRemoteVideoUiRefresh();
             }
             unlockRemotePlayback();
+            // FIX BUG #1: Ensure local video stays visible when peer joins
+            attachLocalVideo();
         };
         pc.oniceconnectionstatechange = function () {
             var st = pc && pc.iceConnectionState;
