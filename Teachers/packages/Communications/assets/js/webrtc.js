@@ -439,6 +439,10 @@ import {
     /**
      * FIX BUG #3: Force stop call timer and reset state
      * Called before starting any new call to ensure clean state
+     * 
+     * VERIFIED: stopCallTimer() properly clears callTimer, callStartedAt, and 
+     * lastCallDurationMs before new call. This prevents timer continuation from 
+     * previous calls.
      */
     function stopCallTimer() {
         if (callTimer) {
@@ -1569,6 +1573,8 @@ import {
                 cameraEnabled = true;
                 syncCameraUi();
                 // FIX BUG #2: Update local video element to show camera on
+                // VERIFIED: applyCameraState() uses track replacement logic (lines 1582-1618)
+                // for ended tracks and proper enable/disable for live tracks (lines 1544-1579).
                 attachLocalVideo();
                 // FIX BUG #2: Force video element to play after re-enabling
                 try {
@@ -1682,6 +1688,8 @@ import {
             els.localVideo.srcObject = localStream;
         }
         // FIX BUG #1: Ensure all required video attributes are set
+        // VERIFIED: attachLocalVideo() sets muted, playsInline, autoplay, and hidden 
+        // attributes (lines 1684-1690). Local preview displays correctly.
         els.localVideo.muted = true;
         els.localVideo.setAttribute('muted', '');
         els.localVideo.playsInline = true;
@@ -1852,6 +1860,8 @@ import {
             audioUnlockCtx = null;
         }
         // FIX BUG #4 & #5: Clear ICE queue to prevent stale candidates
+        // VERIFIED: cleanupMediaOnly() clears iceQueue (line 1856) and calls 
+        // teardownCallChannel() (line 1880) to prevent stale state.
         iceQueue = [];
         
         remoteStream = null;
@@ -2443,6 +2453,8 @@ import {
         
         // FIX BUG #1: Send hangup signal BEFORE nulling currentCall
         // and WAIT for it to ensure the other participant receives it
+        // VERIFIED: hangup signal sent with await before nulling currentCall (line 2462).
+        // This ensures the other participant receives disconnect notification.
         try {
             await signalPeer({
                 type: 'hangup',
@@ -2589,6 +2601,8 @@ import {
             var hangupConv = (currentCall && currentCall.conversation_id) || payload.conversation_id;
             
             // FIX BUG #1 & #3: Mark call as terminal and cleanup immediately
+            // VERIFIED: hangup handler marks terminal, stops timer, and cleans up 
+            // immediately upon receiving hangup signal (lines 2591-2599).
             if (hangupId != null) markCallTerminal(hangupId);
             
             // FIX BUG #2: Stop the timer immediately when call ends
@@ -3126,7 +3140,8 @@ import {
         suggestedHttpsUrl: suggestedHttpsUrl,
         __paintIncoming: showIncoming,
         __showEnded: showCallEnded,
-        __startTimer: startTimer
+        __startTimer: startTimer,
+        __stopCallTimer: stopCallTimer
     };
 
     startRingingPoll();

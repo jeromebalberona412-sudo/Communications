@@ -1,0 +1,24 @@
+{
+  "project_type": "Dual Laravel applications (Students + Teachers) with WebRTC, Supabase Realtime broadcasting, Blade views, vanilla JavaScript",
+  "language": "JavaScript ES5/ES6, PHP (Laravel backend)",
+  "build_system": "Laravel Mix / Vite for asset compilation, npm for JavaScript dependencies",
+  "test_framework": "Manual testing (no automated test suite found for WebRTC components)",
+  "build_command": "npm run dev (for development) or npm run build (for production) in each application's root",
+  "test_command": "Manual browser testing following TESTING_GUIDE.md - no automated tests for WebRTC layer",
+  "verification_instructions": "1. Start both Students and Teachers applications on separate ports. 2. Open two browser sessions (one logged in as Student, one as Teacher). 3. Execute test scenarios from TESTING_GUIDE.md starting with Phase 1 critical tests. 4. Verify hangup synchronization (Test 2.1, 2.2), timer reset (Test 3.1, 3.2), and camera toggle (Test 4.1). 5. Check browser console for errors. 6. Confirm signaling via Supabase Realtime channels. 7. Test cross-portal compatibility (Student ↔ Teacher calls).",
+  "snapshot_or_generated_files": "None. All WebRTC JavaScript is source-controlled. Laravel Mix/Vite generates compiled assets in public/js but these are typically not committed.",
+  "environment_constraints": "WebRTC requires HTTPS or localhost. getUserMedia() fails on http://. STUN servers (Google, Cloudflare) used for NAT traversal; no TURN configured. Supabase Realtime credentials required in .env (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY). Camera and microphone permissions must be granted. Cross-origin issues if Students and Teachers apps on different domains.",
+  "contribution_requirements": "Changes must be made to BOTH Students/packages/Communications/assets/js/webrtc.js AND Teachers/packages/Communications/assets/js/webrtc.js to maintain compatibility. Files are nearly identical (3140 vs 3137 lines). Use same signaling protocol (event names, payload structures). Preserve existing Laravel routes and broadcasting setup. Do not modify database migrations or .env files. Test cross-portal calls (Student ↔ Teacher) after any change. Follow existing code style (ES5-compatible, no TypeScript, no React/Vue).",
+  "key_patterns": "IIFE module pattern, promise-based async flow, global window.CommsWebRTC namespace, state machine via flags (role, callConnected, startingCall), timer based on server timestamps (not local intervals), media track management via replaceTrack(), signaling via window.CommsRealtime.broadcastSignal(), cleanup via idempotent cleanupMediaOnly(), UI updates via direct DOM manipulation (document.getElementById), SDP offer/answer exchange with ICE candidate queueing",
+  "relevant_files": [
+    "Students/packages/Communications/assets/js/webrtc.js",
+    "Teachers/packages/Communications/assets/js/webrtc.js",
+    "Students/packages/Communications/assets/js/realtime.js",
+    "Teachers/packages/Communications/assets/js/realtime.js",
+    "Students/packages/Communications/assets/js/media-constraints.js",
+    "Teachers/packages/Communications/assets/js/media-constraints.js",
+    "Students/packages/Communications/assets/js/webrtc-group.js",
+    "Teachers/packages/Communications/assets/js/webrtc-group.js"
+  ],
+  "directory_structure": "Students/ and Teachers/ are parallel Laravel apps. Each has packages/Communications/assets/js/ containing webrtc.js (1:1 calls), webrtc-group.js (group calls), realtime.js (Supabase channel management), media-constraints.js (getUserMedia config). Blade views in packages/Communications/resources/views/. Laravel controllers in packages/Communications/src/Http/Controllers/. Database migrations in packages/Communications/database/migrations/. Public compiled assets in public/vendor/communications/."
+}

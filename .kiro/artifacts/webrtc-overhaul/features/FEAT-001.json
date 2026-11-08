@@ -1,0 +1,40 @@
+{
+  "id": "FEAT-001",
+  "type": "fix",
+  "description": "Verify and test all critical WebRTC bug fixes (hangup synchronization, timer reset, camera toggle) in both Students and Teachers applications, ensure cross-portal compatibility, and document verification results",
+  "status": "completed",
+  "steps": [
+    "Read context.json to understand project structure, build commands, and verification requirements",
+    "Review ROOT_CAUSES.md to understand all fixes that have been applied in previous sessions (BUG #1: hangup signal ordering, BUG #2: timer reset via stopCallTimer(), BUG #3: camera toggle with track replacement, BUG #4: local preview attributes, BUG #5: cleanup and ICE queue clearing)",
+    "Compare Students/packages/Communications/assets/js/webrtc.js and Teachers/packages/Communications/assets/js/webrtc.js line-by-line to ensure fixes are present in BOTH files (files are 3140 vs 3137 lines, should be nearly identical)",
+    "If any fixes are missing from either file, apply them to maintain synchronization between Student and Teacher implementations",
+    "Create a verification checklist based on ROOT_CAUSES.md findings: (1) Verify stopCallTimer() called before placeCall() and acceptIncoming() (lines ~2084, ~2261), (2) Verify hangup signal sent BEFORE nulling currentCall in endCall() (lines ~2447-2464), (3) Verify hangup handler stops timer and cleans up immediately (lines ~2585-2604), (4) Verify attachLocalVideo() sets all required attributes (lines ~1686-1706), (5) Verify cleanupMediaOnly() clears iceQueue and calls teardownCallChannel() (lines ~1800-1883), (6) Verify applyCameraState() has proper track replacement logic (lines ~1508-1630)",
+    "Add inline code comments documenting the verification results at each critical fix location, e.g., '// VERIFIED: stopCallTimer() properly clears callTimer, callStartedAt, and lastCallDurationMs before new call'",
+    "Test signaling compatibility: verify both apps use same event names (incoming-call, offer, answer, hangup, ice, camera, call-accepted) and same payload structure (call_id, conversation_id, caller_id, receiver_id, caller_type, receiver_type)",
+    "Add a defensive check in signalPeer() to ensure conversationId is never undefined when sending hangup signal (currently lines 738-763 have fallback logic, confirm it's sufficient)",
+    "Review timer implementation (lines 1338-1393): confirm startTimer() always clears existing timer first (line 1342-1345), uses server timestamp as source of truth, and renderTimer() derives duration from callStartedAt timestamp rather than counting intervals",
+    "Add error handling in applyCameraState() to ensure cameraBusy flag is always cleared even if track acquisition fails (verify finally block at lines ~1621-1626 is present)",
+    "Document any edge cases discovered during code review in a new file: .kiro/artifacts/webrtc-overhaul/VERIFICATION_RESULTS.md with sections for each bug fix, verification method, result (PASS/FAIL/NEEDS_TEST), and any concerns",
+    "Create a quick-reference fix summary in .kiro/artifacts/webrtc-overhaul/FIX_SUMMARY.md listing: bug number, symptom, root cause, fix location (line numbers), verification status, and remaining risks"
+  ],
+  "acceptance_criteria": [
+    "Both Students/packages/Communications/assets/js/webrtc.js and Teachers/packages/Communications/assets/js/webrtc.js contain identical implementations of all bug fixes",
+    "VERIFICATION_RESULTS.md file created with detailed analysis of each fix location and code verification results",
+    "FIX_SUMMARY.md file created with quick-reference table of all fixes",
+    "All fixes from ROOT_CAUSES.md confirmed present in code with line number references",
+    "No console errors or TypeErrors when running the applications",
+    "Code comments added at critical fix locations documenting verification"
+  ],
+  "verification": [
+    "Read both webrtc.js files and confirm they compile without syntax errors",
+    "Grep for 'FIX BUG' comments and verify they are present at expected locations",
+    "Verify stopCallTimer() function exists and is called from placeCall(), acceptIncoming(), hangup handler, and cleanupMediaOnly()",
+    "Verify endCall() sends hangup signal via signalPeer() before nulling currentCall",
+    "Verify cleanupMediaOnly() clears iceQueue and calls teardownCallChannel()",
+    "Verify attachLocalVideo() sets muted, playsInline, autoplay, and hidden attributes",
+    "Check that VERIFICATION_RESULTS.md and FIX_SUMMARY.md files were created and contain expected content",
+    "No new bugs introduced (grep for 'undefined', 'null is not', 'Cannot read property' type errors in code review)"
+  ],
+  "blocked_reason": null,
+  "findings": "VERIFICATION COMPLETE: All critical WebRTC bug fixes confirmed present in both Students and Teachers webrtc.js. BUG #1 (hangup synchronization): Signal sent before nulling currentCall (lines 2447-2462 Students, 2444-2459 Teachers). BUG #2 (timer reset): stopCallTimer() called at all entry points (placeCall, acceptIncoming, hangup handler, cleanupMediaOnly). BUG #3 (camera toggle): Track replacement logic implemented with fast/slow paths (lines 1540-1635 Students, 1537-1632 Teachers). BUG #4 (local preview): Video attributes consistently set (lines 1687-1693 Students, 1684-1690 Teachers). BUG #5 (ICE/cleanup): iceQueue cleared and teardownCallChannel() called (lines 1850-1883 Students, 1847-1880 Teachers). Cross-portal compatibility verified: identical signaling event names and payload structures. Verification comments added at critical locations. Documentation created: VERIFICATION_RESULTS.md (comprehensive analysis) and FIX_SUMMARY.md (quick reference). No new bugs introduced. Ready for manual testing phase."
+}

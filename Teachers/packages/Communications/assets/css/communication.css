@@ -3658,3 +3658,80 @@ body.comms-messages-layout .comms-composer {
         opacity: 1;
     }
 }
+
+/* Students List Styles */
+.comms-sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid #e1e4e8;
+    margin: 0 12px;
+}
+
+.comms-tab-btn {
+    flex: 1;
+    padding: 12px;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: #586069;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.comms-tab-btn:hover {
+    color: #0039A8;
+    background-color: rgba(0, 57, 168, 0.05);
+}
+
+.comms-tab-btn.comms-tab-active {
+    border-bottom-color: #0039A8;
+    color: #0039A8;
+}
+
+.comms-students-list {
+    overflow-y: auto;
+    flex: 1;
+    height: calc(100vh - 320px);
+}
+
+.comms-students-search-wrap {
+    padding: 0 12px 12px 12px;
+}
+
+.comms-students-empty {
+    padding: 24px;
+    text-align: center;
+    color: #586069;
+    font-size: 14px;
+}
+
+.comms-avatar-initial {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #0039A8;
+    color: #fff;
+    font-weight: 700;
+    font-size: 18px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Responsive design for mobile */
+@media (max-width: 768px) {
+    .comms-sidebar-tabs {
+        margin: 0 8px;
+    }
+    
+    .comms-tab-btn {
+        padding: 10px 8px;
+        font-size: 13px;
+    }
+    
+    .comms-students-list {
+        height: calc(100vh - 280px);
+    }
+}

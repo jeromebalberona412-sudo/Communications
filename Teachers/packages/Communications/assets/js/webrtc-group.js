@@ -445,6 +445,10 @@ import {
 
     async function cleanupMesh(opts) {
         opts = opts || {};
+        // Stop the call timer (CRITICAL FIX #3)
+        if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
+            window.CommsWebRTC.__stopCallTimer();
+        }
         if (ringTimer) {
             clearTimeout(ringTimer);
             ringTimer = null;
@@ -498,6 +502,10 @@ import {
         if (!window.Comms) return;
         if (meshCall) return;
         try {
+            // Stop any existing timer from previous calls (CRITICAL FIX #1)
+            if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
+                window.CommsWebRTC.__stopCallTimer();
+            }
             meshWantsVideo = callType === 'video';
             meshRole = 'caller';
             var r = routes();
@@ -546,6 +554,10 @@ import {
 
     async function acceptGroupInvite(payload) {
         if (meshCall && Number(meshCall.id) === Number(payload.call_id)) return;
+        // Stop any existing timer from previous calls (CRITICAL FIX #2)
+        if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
+            window.CommsWebRTC.__stopCallTimer();
+        }
         meshWantsVideo = (payload.call_type || 'voice') === 'video';
         meshRole = 'callee';
         meshCall = {

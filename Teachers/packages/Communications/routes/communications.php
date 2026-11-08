@@ -8,6 +8,7 @@ use App\Modules\Communications\Controllers\DirectoryController;
 use App\Modules\Communications\Controllers\MessageAttachmentController;
 use App\Modules\Communications\Controllers\MessageController;
 use App\Modules\Communications\Controllers\PresenceController;
+use App\Modules\Communications\Controllers\StudentsListController;
 use App\Modules\Communications\Controllers\UserSearchController;
 use Illuminate\Support\Facades\Route;
 
@@ -97,6 +98,10 @@ Route::middleware([
     Route::get('/api/communications/users/directory', DirectoryController::class)
         ->middleware('throttle:30,1')
         ->name('api.communications.users.directory');
+
+    Route::get('/api/communications/users/students-list', StudentsListController::class)
+        ->middleware('throttle:30,1')
+        ->name('api.communications.users.students-list');
 
     // User profile endpoint for call UI (REVIEW FIX #3, #5)
     Route::get('/api/communications/users/{user_type}/{user_id}/profile', [DirectoryController::class, 'userProfile'])

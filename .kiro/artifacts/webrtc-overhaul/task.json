@@ -1,0 +1,9 @@
+{
+  "task_id": "task-webrtc-verification",
+  "task_description": "Verify and finalize WebRTC bug fixes for hangup synchronization, timer reset, camera toggle, and cross-application compatibility",
+  "status": "pending",
+  "feature_order": [
+    "FEAT-001"
+  ],
+  "blocked_reason": null
+}

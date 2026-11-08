@@ -3056,3 +3056,216 @@
     });
 })();
 
+
+    // =========================================================================
+    // STUDENTS LIST FEATURE (Teachers Portal)
+    // =========================================================================
+
+    var studentsState = {
+        students: [],
+        searchTimer: null,
+        loading: false
+    };
+
+    var studentsEls = {
+        conversationsTab: document.getElementById('commsConversationsTab'),
+        studentsTab: document.getElementById('commsStudentsTab'),
+        studentsList: document.getElementById('commsStudentsList'),
+        studentsSearch: document.getElementById('commsStudentsSearch'),
+        studentsSearchWrap: document.getElementById('commsStudentsSearchWrap'),
+        studentsEmpty: document.getElementById('commsStudentsEmpty')
+    };
+
+    function loadStudentsList(searchQuery) {
+        if (studentsState.loading) return;
+        studentsState.loading = true;
+
+        var url = routes.studentsList || '/api/communications/users/students-list';
+        if (searchQuery) {
+            url += '?q=' + encodeURIComponent(searchQuery);
+        }
+
+        window.Comms.api(url, { method: 'GET', dedupe: false })
+            .then(function (data) {
+                studentsState.students = data.students || [];
+                renderStudentsList();
+            })
+            .catch(function (err) {
+                console.error('Failed to load students:', err);
+                window.Comms.showToast('Failed to load students list.', 'error');
+            })
+            .finally(function () {
+                studentsState.loading = false;
+            });
+    }
+
+    function renderStudentsList() {
+        if (!studentsEls.studentsList) return;
+
+        studentsEls.studentsList.innerHTML = '';
+
+        if (studentsState.students.length === 0) {
+            if (studentsEls.studentsEmpty) {
+                studentsEls.studentsEmpty.hidden = false;
+            }
+            return;
+        }
+
+        if (studentsEls.studentsEmpty) {
+            studentsEls.studentsEmpty.hidden = true;
+        }
+
+        studentsState.students.forEach(function (student) {
+            var item = document.createElement('div');
+            item.className = 'comms-conv-item';
+            item.dataset.userId = student.id;
+            item.dataset.userType = 'students';
+            item.setAttribute('role', 'button');
+            item.setAttribute('tabindex', '0');
+
+            var avatarUrl = student.profile_image_url || '';
+            var initials = getInitials(student.name);
+
+            var avatar = avatarUrl
+                ? '<img src="' + escapeHtml(avatarUrl) + '" alt="" class="comms-avatar" width="48" height="48">'
+                : '<div class="comms-avatar comms-avatar-initial" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:#0039A8;color:#fff;font-weight:700;font-size:18px;border-radius:50%;">' + escapeHtml(initials) + '</div>';
+
+            item.innerHTML =
+                '<div class="comms-conv-avatar-wrap">' + avatar + '</div>' +
+                '<div class="comms-conv-main">' +
+                '<div class="comms-conv-name">' + escapeHtml(student.name) + '</div>' +
+                '<div class="comms-conv-snippet" style="color:#586069;font-size:13px;">' +
+                escapeHtml(student.student_id || 'Student') +
+                '</div>' +
+                '</div>';
+
+            item.addEventListener('click', function () {
+                openStudentConversation(student);
+            });
+
+            item.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    openStudentConversation(student);
+                }
+            });
+
+            studentsEls.studentsList.appendChild(item);
+        });
+    }
+
+    function openStudentConversation(student) {
+        // Create or find private conversation with this student
+        var url = routes.storeConversation || '/api/communications/conversations';
+        
+        window.Comms.api(url, {
+            method: 'POST',
+            body: JSON.stringify({ user_id: student.id }),
+            dedupe: false
+        })
+        .then(function (data) {
+            if (data && data.conversation) {
+                // Switch to conversations tab
+                switchToConversationsTab();
+                // Load and display the conversation
+                loadConversation(data.conversation.id);
+            }
+        })
+        .catch(function (err) {
+            console.error('Failed to create conversation:', err);
+            window.Comms.showToast('Failed to start conversation with student.', 'error');
+        });
+    }
+
+    function getInitials(name) {
+        if (!name) return '?';
+        var parts = name.trim().split(/\s+/);
+        if (parts.length === 1) {
+            return parts[0].charAt(0).toUpperCase();
+        }
+        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+
+    function escapeHtml(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function switchToConversationsTab() {
+        if (!studentsEls.conversationsTab || !studentsEls.studentsTab) return;
+
+        // Update tab styles
+        studentsEls.conversationsTab.classList.add('comms-tab-active');
+        studentsEls.conversationsTab.style.borderBottomColor = '#0039A8';
+        studentsEls.conversationsTab.style.color = '#0039A8';
+
+        studentsEls.studentsTab.classList.remove('comms-tab-active');
+        studentsEls.studentsTab.style.borderBottomColor = 'transparent';
+        studentsEls.studentsTab.style.color = '#586069';
+
+        // Show conversations list, hide students list
+        if (els.convList) els.convList.style.display = '';
+        if (studentsEls.studentsList) studentsEls.studentsList.style.display = 'none';
+        if (studentsEls.studentsSearchWrap) studentsEls.studentsSearchWrap.style.display = 'none';
+        if (els.userSearch && els.userSearch.parentElement) {
+            els.userSearch.parentElement.style.display = '';
+        }
+        if (studentsEls.studentsEmpty) studentsEls.studentsEmpty.hidden = true;
+
+        state.listMode = 'conversations';
+    }
+
+    function switchToStudentsTab() {
+        if (!studentsEls.conversationsTab || !studentsEls.studentsTab) return;
+
+        // Update tab styles
+        studentsEls.studentsTab.classList.add('comms-tab-active');
+        studentsEls.studentsTab.style.borderBottomColor = '#0039A8';
+        studentsEls.studentsTab.style.color = '#0039A8';
+
+        studentsEls.conversationsTab.classList.remove('comms-tab-active');
+        studentsEls.conversationsTab.style.borderBottomColor = 'transparent';
+        studentsEls.conversationsTab.style.color = '#586069';
+
+        // Hide conversations list, show students list
+        if (els.convList) els.convList.style.display = 'none';
+        if (studentsEls.studentsList) studentsEls.studentsList.style.display = '';
+        if (studentsEls.studentsSearchWrap) studentsEls.studentsSearchWrap.style.display = '';
+        if (els.userSearch && els.userSearch.parentElement) {
+            els.userSearch.parentElement.style.display = 'none';
+        }
+
+        state.listMode = 'students';
+
+        // Load students list if not already loaded
+        if (studentsState.students.length === 0) {
+            loadStudentsList();
+        }
+    }
+
+    // Event listeners for tabs
+    if (studentsEls.conversationsTab) {
+        studentsEls.conversationsTab.addEventListener('click', switchToConversationsTab);
+    }
+
+    if (studentsEls.studentsTab) {
+        studentsEls.studentsTab.addEventListener('click', switchToStudentsTab);
+    }
+
+    // Event listener for students search
+    if (studentsEls.studentsSearch) {
+        studentsEls.studentsSearch.addEventListener('input', function (e) {
+            var query = e.target.value.trim();
+            
+            clearTimeout(studentsState.searchTimer);
+            studentsState.searchTimer = setTimeout(function () {
+                loadStudentsList(query);
+            }, 300);
+        });
+    }
+
+    // =========================================================================
+    // END OF STUDENTS LIST FEATURE
+    // =========================================================================
