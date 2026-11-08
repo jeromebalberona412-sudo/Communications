@@ -66,8 +66,10 @@ import {
     var ringAudio = null;
     var ringtonePlaying = false;
     var ringMode = null;
+    var ringingCallId = null;
     var ringUnlockBound = false;
     var ringNotify = null;
+    var timerCallId = null;
 
     var HTTPS_PORT_BY_HTTP = {
         '8000': '8440',
@@ -335,29 +337,15 @@ import {
         document.addEventListener('pointerdown', unlock, true);
         document.addEventListener('keydown', unlock, true);
         document.addEventListener('touchstart', unlock, { capture: true, passive: true });
-        document.addEventListener('click', unlock, true);
         document.addEventListener('visibilitychange', function () {
-            if (document.visibilityState === 'visible' && ringtonePlaying) {
-                startRingtone(ringMode || 'incoming');
-            }
+            if (document.visibilityState !== 'visible' || !ringtonePlaying || !ringAudio) return;
+            if (!ringAudio.paused) return;
+            var resume = ringAudio.play();
+            if (resume && typeof resume.catch === 'function') resume.catch(function () {});
         });
     }
 
     function unlockCallAudio() {
-        ensureRingAudio();
-        if (ringAudio) {
-            ringAudio.muted = false;
-            var p = ringAudio.play();
-            if (p && typeof p.then === 'function') {
-                p.then(function () {
-                    if (!ringtonePlaying) {
-                        ringAudio.pause();
-                        try { ringAudio.currentTime = 0; } catch (e0) { /* ignore */ }
-                    }
-                    ringHint(false);
-                }).catch(function () { /* still locked */ });
-            }
-        }
         var AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (AudioCtx && !ringCtx) {
             try { ringCtx = new AudioCtx(); } catch (e1) { /* ignore */ }
@@ -365,8 +353,15 @@ import {
         if (ringCtx && ringCtx.state === 'suspended') {
             ringCtx.resume().catch(function () { /* ignore */ });
         }
-        if (window.Notification && Notification.permission === 'default') {
-            try { Notification.requestPermission().catch(function () {}); } catch (e2) { /* ignore */ }
+        if (ringtonePlaying && ringAudio) {
+            try {
+                ringAudio.muted = false;
+                ringAudio.volume = 1;
+                if (ringAudio.paused) {
+                    var p = ringAudio.play();
+                    if (p && typeof p.catch === 'function') p.catch(function () {});
+                }
+            } catch (ePlay) { /* ignore */ }
         }
     }
 
@@ -432,9 +427,13 @@ import {
         return 'data:audio/wav;base64,' + btoa(binary);
     }
 
-    function stopRingtone() {
+    function stopRingtone(callId) {
+        if (callId != null && ringingCallId != null && Number(callId) !== Number(ringingCallId)) {
+            return;
+        }
         ringtonePlaying = false;
         ringMode = null;
+        ringingCallId = null;
         ringHint(false);
         if (ringTimer) {
             clearInterval(ringTimer);
@@ -447,6 +446,7 @@ import {
         if (ringAudio) {
             try {
                 ringAudio.pause();
+                ringAudio.muted = true;
                 ringAudio.currentTime = 0;
             } catch (e2) { /* ignore */ }
         }
@@ -506,16 +506,30 @@ import {
         ringTimer = setInterval(scheduleCycle, incoming ? 2800 : 3600);
     }
 
-    function startRingtone(mode) {
+    function startRingtone(mode, callId) {
         bindRingtoneUnlock();
         var incoming = mode === 'incoming';
-        if (ringtonePlaying && ringMode === mode && ringAudio && !ringAudio.paused) {
+        var id = callId != null ? Number(callId) : (incomingCallId || (currentCall && currentCall.id) || 0);
+        if (incoming && id && (answeredCallIds[id] || dismissedRingIds[id])) {
             return;
+        }
+        if (incoming && (startingCall || callConnected) && currentCall && Number(currentCall.id) === id) {
+            return;
+        }
+        if (ringtonePlaying && ringingCallId != null && id && Number(ringingCallId) === id) {
+            return;
+        }
+        if (ringtonePlaying && ringMode === mode) {
+            if (id) ringingCallId = id;
+            return;
+        }
+        if (ringtonePlaying) {
+            stopRingtone();
         }
         ringtonePlaying = true;
         ringMode = mode;
+        ringingCallId = id || null;
         ensureRingAudio();
-        unlockCallAudio();
 
         if (ringAudio) {
             try {
@@ -527,6 +541,7 @@ import {
                     playPromise.then(function () {
                         ringHint(false);
                     }).catch(function () {
+                        if (!ringtonePlaying) return;
                         startOscillatorRing(incoming);
                         ringHint(true);
                     });
@@ -569,7 +584,8 @@ import {
             ? Math.max(RING_TIMEOUT_MS, (Number(window.__COMMS_CALL_RING_TTL__) || 60) * 1000)
             : RING_TIMEOUT_MS;
         ringTimeout = setTimeout(function () {
-            if (!currentCall || callConnected) return;
+            if (!currentCall || callConnected || startingCall) return;
+            if (currentCall.id != null && answeredCallIds[Number(currentCall.id)]) return;
             finishUnanswered('missed');
         }, ttl);
     }
@@ -586,7 +602,7 @@ import {
         connectionTimeout = setTimeout(function () {
             if (!currentCall) return;
             var state = pc && (pc.connectionState || pc.iceConnectionState);
-            if (state === 'connected' || state === 'completed') return;
+            if (state === 'connected' || state === 'completed' || callConnected) return;
             toast('Call could not connect in time.', 'error');
             endCall();
         }, CONNECTION_TIMEOUT_MS);
@@ -632,8 +648,10 @@ import {
             clearInterval(callTimer);
             callTimer = null;
         }
+        timerCallId = null;
         callStartedAt = null;
         lastCallDurationMs = 0;
+        if (els.timer) els.timer.textContent = '00:00';
     }
 
     function endedCopy(reason, endedByRole) {
@@ -788,7 +806,7 @@ import {
         if (callKey && summaryShownFor[callKey]) {
             return;
         }
-        if (callId != null && Number(callId) === Number(lastEndedCallId) && !callPayload) {
+        if (els.ended && !els.ended.hidden && callKey && Number(lastEndedCallId) === Number(callId)) {
             return;
         }
         if (callId != null) lastEndedCallId = callId;
@@ -1122,7 +1140,8 @@ import {
         ensureRemoteAudioPlaying();
         if (els.remoteVideo) {
             try {
-                // CRITICAL FIX: Remote video should NOT be muted - removed muted setting
+                els.remoteVideo.muted = true;
+                els.remoteVideo.setAttribute('muted', '');
                 els.remoteVideo.playsInline = true;
                 var vp = els.remoteVideo.play();
                 if (vp && typeof vp.then === 'function') {
@@ -1148,33 +1167,49 @@ import {
         } catch (e) { /* ignore */ }
     }
 
+    function dropRemoteTracksOfKind(kind, exceptId) {
+        if (!remoteStream || typeof remoteStream.getTracks !== 'function') return;
+        remoteStream.getTracks().forEach(function (existing) {
+            if (!existing || existing.kind !== kind) return;
+            if (exceptId && existing.id === exceptId) return;
+            if (existing._commsUnmuteHandler) {
+                existing.removeEventListener('unmute', existing._commsUnmuteHandler);
+                delete existing._commsUnmuteHandler;
+            }
+            if (existing._commsEndedHandler) {
+                existing.removeEventListener('ended', existing._commsEndedHandler);
+                delete existing._commsEndedHandler;
+            }
+            try { remoteStream.removeTrack(existing); } catch (eRm) { /* ignore */ }
+        });
+    }
+
     function mergeRemoteTrack(track, inboundStream) {
         if (!remoteStream) remoteStream = new MediaStream();
         if (track && !remoteStream.getTracks().some(function (t) { return t.id === track.id; })) {
+            dropRemoteTracksOfKind(track.kind, track.id);
             remoteStream.addTrack(track);
-            
-            // Store listener refs for cleanup
+
             var unmuteHandler = function () {
+                if (track.kind === 'video') remoteCameraEnabled = true;
                 bindRemoteMedia(remoteStream);
-                scheduleRemoteVideoUiRefresh();
             };
             var endedHandler = function () {
                 try { remoteStream.removeTrack(track); } catch (err) { /* ignore */ }
-                bindRemoteMedia(remoteStream);
+                refreshRemoteFromReceivers();
             };
-            
+
             track.addEventListener('unmute', unmuteHandler);
             track.addEventListener('ended', endedHandler);
-            
-            // Store handlers on track object for later removal
             track._commsUnmuteHandler = unmuteHandler;
             track._commsEndedHandler = endedHandler;
         }
         if (inboundStream && typeof inboundStream.getTracks === 'function') {
             inboundStream.getTracks().forEach(function (t) {
-                if (!remoteStream.getTracks().some(function (x) { return x.id === t.id; })) {
-                    remoteStream.addTrack(t);
-                }
+                if (!t) return;
+                if (remoteStream.getTracks().some(function (x) { return x.id === t.id; })) return;
+                dropRemoteTracksOfKind(t.kind, t.id);
+                remoteStream.addTrack(t);
             });
         }
         return remoteStream;
@@ -1192,24 +1227,29 @@ import {
         els.inCall.classList.toggle('is-remote-landscape', !portrait);
     }
 
+    function refreshRemoteFromReceivers() {
+        if (!pc) {
+            if (remoteStream) bindRemoteMedia(remoteStream);
+            return;
+        }
+        pc.getReceivers().forEach(function (recv) {
+            if (recv && recv.track && recv.track.readyState !== 'ended') {
+                mergeRemoteTrack(recv.track, null);
+            }
+        });
+        if (remoteStream) bindRemoteMedia(remoteStream);
+    }
+
     function bindRemoteMedia(stream) {
         if (!stream) return;
         if (els.remoteVideo) {
-            // CRITICAL FIX: Remote video should NOT be muted so you can hear the peer
-            els.remoteVideo.muted = false;
-            els.remoteVideo.removeAttribute('muted');
+            els.remoteVideo.muted = true;
+            els.remoteVideo.setAttribute('muted', '');
             els.remoteVideo.playsInline = true;
             els.remoteVideo.autoplay = true;
-            
-            if (!remoteCameraEnabled) {
-                els.remoteVideo.style.visibility = 'hidden';
-            } else {
-                els.remoteVideo.style.visibility = '';
-            }
-            
-            if (els.remoteVideo.srcObject !== stream) {
-                els.remoteVideo.srcObject = stream;
-            }
+            els.remoteVideo.style.visibility = '';
+            els.remoteVideo.srcObject = null;
+            els.remoteVideo.srcObject = stream;
             try {
                 var vp = els.remoteVideo.play();
                 if (vp && typeof vp.catch === 'function') {
@@ -1339,13 +1379,13 @@ import {
         rememberCallId(dismissedRingIds, id);
         rememberCallId(answeredCallIds, id);
         rememberCallId(shownIncomingIds, id);
-        lastEndedCallId = id;
     }
 
     function isCallAlreadyHandled(callId) {
         var id = callId != null ? Number(callId) : 0;
         if (!id) return false;
         if (dismissedRingIds[id] || answeredCallIds[id]) return true;
+        if (startingCall && currentCall && Number(currentCall.id) === id) return true;
         if (shownIncomingIds[id] && incomingCallId !== id) return true;
         if (lastEndedCallId != null && Number(lastEndedCallId) === id) return true;
         return false;
@@ -1465,7 +1505,6 @@ import {
             if (call._remoteOffer && currentCall && Number(currentCall.id) === callId) {
                 currentCall._remoteOffer = call._remoteOffer;
             }
-            startRingtone('incoming');
             return;
         }
 
@@ -1538,7 +1577,7 @@ import {
             currentCall = null;
             els.incoming.hidden = false;
             els.incoming.removeAttribute('hidden');
-            startRingtone('incoming');
+            startRingtone('incoming', callId);
             clearRingTimeout();
             ringTimeout = setTimeout(function () {
                 if (call.id != null) dismissedRingIds[Number(call.id)] = true;
@@ -1562,13 +1601,13 @@ import {
         }
         els.incoming.hidden = false;
         els.incoming.removeAttribute('hidden');
-        startRingtone('incoming');
+        startRingtone('incoming', callId);
         armRingTimeout(true);
     }
 
     function hideIncoming() {
         if (els.incoming) els.incoming.hidden = true;
-        // Ringtone may continue for outgoing ring UI; stop only if not showing in-call ringing.
+        if (ringMode === 'incoming') stopRingtone();
     }
 
     function formatTimer(ms) {
@@ -1602,27 +1641,24 @@ import {
     function startTimer(serverStartedAt, serverTime) {
         applyServerClock(serverTime);
 
-        // FIX BUG #3: ALWAYS clear existing timer first to prevent multiple intervals
+        var nextStarted = Date.now() + clockOffsetMs;
+        if (serverStartedAt) {
+            var parsed = Date.parse(serverStartedAt);
+            if (!isNaN(parsed)) nextStarted = parsed;
+        }
+        var cid = currentCall && currentCall.id != null ? Number(currentCall.id) : null;
+        if (callTimer && timerCallId != null && cid != null && timerCallId === cid
+            && callStartedAt && Math.abs(callStartedAt - nextStarted) < 1500) {
+            renderTimer();
+            return;
+        }
+
         if (callTimer) {
             clearInterval(callTimer);
             callTimer = null;
         }
-
-        // FIX BUG #3: Always set fresh timestamp for each call
-        if (serverStartedAt) {
-            var parsed = Date.parse(serverStartedAt);
-            if (!isNaN(parsed)) {
-                callStartedAt = parsed;
-            } else {
-                // Fallback if server time is invalid
-                callStartedAt = Date.now() + clockOffsetMs;
-            }
-        } else {
-            // No server time provided - use local time
-            callStartedAt = Date.now() + clockOffsetMs;
-        }
-        
-        // Start fresh timer interval
+        timerCallId = cid;
+        callStartedAt = nextStarted;
         renderTimer();
         callTimer = setInterval(function () {
             renderTimer();
@@ -1706,6 +1742,7 @@ import {
                 callConnected = true;
                 clearConnectionTimeout();
                 setCallStatus('Connected');
+                refreshRemoteFromReceivers();
                 unlockRemotePlayback();
                 updateCameraUi();
                 signalMediaState();
@@ -1716,11 +1753,11 @@ import {
                     iceDisconnectTimer = null;
                     if (!pc || !currentCall) return;
                     var now = pc.iceConnectionState;
-                    if (now === 'disconnected' || now === 'failed') {
+                    if (now === 'failed') {
                         toast('Call connection lost.', 'error');
                         endCall();
                     }
-                }, 4000);
+                }, 8000);
             }
             if (st === 'failed') {
                 if (!currentCall) return;
@@ -1977,7 +2014,8 @@ import {
      */
     function attachLocalVideo() {
         if (!els.localVideo || !localStream) return;
-        if (els.localVideo.srcObject !== localStream) {
+        if (els.localVideo.srcObject !== localStream || cameraEnabled) {
+            els.localVideo.srcObject = null;
             els.localVideo.srcObject = localStream;
         }
         // FIX BUG #1: Ensure all required video attributes are set
@@ -2083,9 +2121,6 @@ import {
                 els.timer.textContent = '00:00';
             }
         }
-        if (callConnected && !callStartedAt) {
-            startTimer();
-        }
         setMuteUi(false);
         updateCameraUi();
         syncLocalPipLayout();
@@ -2105,7 +2140,7 @@ import {
             clearTimeout(iceDisconnectTimer);
             iceDisconnectTimer = null;
         }
-        if (ringTimer || ringCtx) stopRingtone();
+        stopRingtone();
         
         clearInterval(callTimer);
         callTimer = null;
@@ -2213,7 +2248,8 @@ import {
         if (!notice || !window.CommsChat || typeof window.CommsChat.publishSentMessage !== 'function') return;
         var peers = (data.call && data.call.invitees) || [];
         window.CommsChat.publishSentMessage(notice, peers);
-        if (typeof window.CommsChat.appendMessage === 'function') {
+        if (typeof window.CommsChat.appendMessage === 'function'
+            && typeof window.CommsChat.publishSentMessage !== 'function') {
             window.CommsChat.appendMessage(notice);
         }
     }
@@ -2535,6 +2571,8 @@ import {
     }
 
     async function acceptIncoming() {
+        stopRingtone();
+        clearRingTimeout();
         if (typeof window.CommsWebRTC !== 'undefined'
             && typeof window.CommsWebRTC.__acceptGroupIfPending === 'function') {
             try {
@@ -2542,7 +2580,6 @@ import {
                 if (groupHandled) {
                     hideIncoming();
                     stopRingtone();
-                    clearRingTimeout();
                     return;
                 }
             } catch (err) {
@@ -2992,9 +3029,7 @@ import {
                 return;
             }
             remoteCameraEnabled = payload.enabled !== false;
-            if (remoteStream) {
-                bindRemoteMedia(remoteStream);
-            }
+            refreshRemoteFromReceivers();
             unlockRemotePlayback();
             updateCameraUi();
             return;
@@ -3140,6 +3175,14 @@ import {
             if (row.id != null) markCallTerminal(row.id);
             hideIncoming();
             stopRingtone();
+            if (row.id != null && summaryShownFor[String(row.id)]) {
+                if (currentCall && Number(currentCall.id) === Number(row.id)) {
+                    currentCall = null;
+                    cleanupMediaOnly();
+                }
+                refreshCallChat(row.conversation_id);
+                return;
+            }
             if (currentCall && Number(currentCall.id) === Number(row.id)) {
                 var peerName = (currentCall.peer && currentCall.peer.name) || '';
                 var rowId = row.id;
@@ -3347,19 +3390,14 @@ import {
     mountCallUiToBody();
 
     document.addEventListener('click', function (e) {
-        if (e.target && e.target.closest('#commsInCall')) {
-            unlockRemotePlayback();
-        }
         if (e.target && e.target.closest('#commsTapToPlay')) {
             e.preventDefault();
-            unlockCallAudio();
             unlockRemotePlayback();
             showTapToPlay(false);
             return;
         }
-        if (e.target && e.target.closest('#commsIncomingCall')) {
+        if (e.target && e.target.closest('#commsIncomingCall') && ringtonePlaying) {
             unlockCallAudio();
-            if (ringtonePlaying) startRingtone(ringMode || 'incoming');
         }
         var acceptBtn = e.target && e.target.closest('#commsAcceptCall');
         var rejectBtn = e.target && e.target.closest('#commsRejectCall');

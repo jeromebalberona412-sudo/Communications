@@ -68,6 +68,7 @@ class Call extends Model
         'answered_at',
         'ended_at',
         'duration_seconds',
+        'end_reason',
     ];
 
     protected function casts(): array

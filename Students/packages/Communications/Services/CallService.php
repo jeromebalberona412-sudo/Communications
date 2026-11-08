@@ -11,6 +11,7 @@ use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 
 class CallService
 {
@@ -563,8 +564,10 @@ class CallService
             }
 
             $call->ended_at = now();
+            if (Schema::hasColumn($call->getTable(), 'end_reason')) {
+                $call->end_reason = $status;
+            }
             if ($status === Call::STATUS_ENDED) {
-                // Authoritative duration from the persisted connection timestamps.
                 $call->duration_seconds = $this->durationBetween($call, $call->ended_at);
             } else {
                 $call->duration_seconds = null;
