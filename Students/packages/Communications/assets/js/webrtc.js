@@ -1310,20 +1310,23 @@ import {
     function startTimer(serverStartedAt, serverTime) {
         applyServerClock(serverTime);
 
+        // FIX BUG #3: Always clear old timer before starting new one
+        if (callTimer) {
+            clearInterval(callTimer);
+            callTimer = null;
+        }
+
+        // FIX BUG #3: Always reset callStartedAt for new calls
         if (serverStartedAt) {
             var parsed = Date.parse(serverStartedAt);
             if (!isNaN(parsed)) {
                 callStartedAt = parsed;
             }
-        }
-
-        if (callTimer) {
-            renderTimer();
-            return;
-        }
-        if (!callStartedAt) {
+        } else {
+            // Always set fresh timestamp for new calls
             callStartedAt = Date.now() + clockOffsetMs;
         }
+        
         renderTimer();
         callTimer = setInterval(function () {
             renderTimer();
@@ -1434,8 +1437,20 @@ import {
         if (!kinds.audio) {
             try { pc.addTransceiver('audio', { direction: 'recvonly' }); } catch (e2) { /* ignore */ }
         }
+        // FIX BUG #1: Attach local video with all required attributes for immediate preview
         if (els.localVideo) {
             els.localVideo.srcObject = localStream;
+            els.localVideo.muted = true;
+            els.localVideo.setAttribute('muted', '');
+            els.localVideo.playsInline = true;
+            els.localVideo.autoplay = true;
+            els.localVideo.hidden = false;
+            try {
+                var playPromise = els.localVideo.play();
+                if (playPromise && typeof playPromise.catch === 'function') {
+                    playPromise.catch(function() {});
+                }
+            } catch (e) { /* ignore */ }
             syncLocalPipLayout();
         }
         if (els.muteBtn) setMuteUi(false);
@@ -1505,6 +1520,8 @@ import {
                 });
                 cameraEnabled = false;
                 syncCameraUi();
+                // FIX BUG #2: Update local video element to reflect camera off state
+                attachLocalVideo();
                 return;
             }
 
@@ -1517,6 +1534,15 @@ import {
                 await attachVideoTrackToSender(liveTrack);
                 cameraEnabled = true;
                 syncCameraUi();
+                // FIX BUG #2: Update local video element to show camera on
+                attachLocalVideo();
+                // FIX BUG #2: Force video element to play after re-enabling
+                try {
+                    var lp = els.localVideo.play();
+                    if (lp && typeof lp.catch === 'function') {
+                        lp.catch(function () {});
+                    }
+                } catch (ePlay) { /* ignore */ }
                 return;
             }
 
@@ -1621,6 +1647,11 @@ import {
         if (els.localVideo.srcObject !== localStream) {
             els.localVideo.srcObject = localStream;
         }
+        // FIX BUG #1: Ensure all required video attributes are set
+        els.localVideo.muted = true;
+        els.localVideo.setAttribute('muted', '');
+        els.localVideo.playsInline = true;
+        els.localVideo.autoplay = true;
         els.localVideo.hidden = false;
         els.localVideo.classList.toggle('is-camera-off', !cameraEnabled);
         try {
