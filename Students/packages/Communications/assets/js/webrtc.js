@@ -17,7 +17,7 @@ import {
     }
 
     var RING_TIMEOUT_MS = 30000;
-    var CALL_START_DELAY_MS = 3000;
+    var CALL_START_DELAY_MS = 400;
     var CONNECTION_TIMEOUT_MS = 30000;
 
     var pc = null;
@@ -1380,10 +1380,11 @@ import {
         return {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun.cloudflare.com:3478' }
-            ]
+            ],
+            bundlePolicy: 'max-bundle',
+            rtcpMuxPolicy: 'require',
+            iceCandidatePoolSize: 4
         };
     }
 
@@ -2628,7 +2629,7 @@ import {
                     clearInterval(timer);
                     resolve(false);
                 }
-            }, 50);
+            }, 20);
         });
     }
 
@@ -2680,27 +2681,30 @@ import {
         hideIncoming();
         try {
             assertMediaReady();
-            await subscribeCallChannel(call.conversation_id);
             showInCall(call, 'Connecting...');
             unlockRemotePlayback();
             armConnectionTimeout();
-            await signalPeer({
-                type: 'call-accept',
-                call_id: call.id,
-                conversation_id: call.conversation_id,
-                caller_id: call.caller_id,
-                caller_type: call.caller_type,
-                receiver_id: call.receiver_id,
-                receiver_type: call.receiver_type
-            });
+            wantsVideo = call.call_type === 'video';
+            var acceptJobs = [
+                subscribeCallChannel(call.conversation_id),
+                signalPeer({
+                    type: 'call-accept',
+                    call_id: call.id,
+                    conversation_id: call.conversation_id,
+                    caller_id: call.caller_id,
+                    caller_type: call.caller_type,
+                    receiver_id: call.receiver_id,
+                    receiver_type: call.receiver_type
+                }),
+                ensurePeerConnection(wantsVideo)
+            ];
             updateCallStatus(call.id, 'accepted').then(function (accepted) {
                 if (accepted && currentCall && Number(currentCall.id) === Number(accepted.id)) {
                     currentCall = Object.assign({}, currentCall, accepted);
                     answeredCall = currentCall;
                 }
             }).catch(function () {});
-            wantsVideo = call.call_type === 'video';
-            await ensurePeerConnection(wantsVideo);
+            await Promise.all(acceptJobs);
             if (wantsVideo) {
                 cameraEnabled = true;
                 var pickupTrack = findLiveVideoTrack();
@@ -2709,7 +2713,7 @@ import {
                 syncCameraUi();
             }
             if (!call._remoteOffer) {
-                await waitForRemoteOffer(8000);
+                await waitForRemoteOffer(2500);
             }
             if (call._remoteOffer) {
                 await pc.setRemoteDescription(call._remoteOffer);
@@ -2967,9 +2971,30 @@ import {
             // Terminal calls: ignore BOTH stale incoming-call AND late offers (except renegotiation
             // while actively in that same call). Late offers after Decline used to re-open the modal.
             if (signalCallId && isCallAlreadyHandled(signalCallId)) {
-                if (payload.type === 'offer' && payload.sdp && isActivelyInCall(signalCallId) && callConnected) {
-                    // fall through to renegotiation block below
-                } else {
+                var sameActiveCall = currentCall && Number(currentCall.id) === signalCallId;
+                if (payload.type === 'offer' && payload.sdp && sameActiveCall) {
+                    currentCall._remoteOffer = payload.sdp;
+                    if (pc && startingCall && pc.signalingState === 'stable') {
+                        try {
+                            await pc.setRemoteDescription(payload.sdp);
+                            var lateAnswer = await pc.createAnswer();
+                            await pc.setLocalDescription(lateAnswer);
+                            await signalPeer({
+                                type: 'answer',
+                                call_id: currentCall.id,
+                                conversation_id: currentCall.conversation_id,
+                                sdp: lateAnswer,
+                                caller_id: currentCall.caller_id,
+                                caller_type: currentCall.caller_type,
+                                receiver_id: currentCall.receiver_id,
+                                receiver_type: currentCall.receiver_type
+                            });
+                            attachLocalVideo();
+                            signalMediaState();
+                        } catch (lateOfferErr) { /* waitForRemoteOffer may still apply */ }
+                    }
+                    if (!(callConnected && pc)) return;
+                } else if (!(payload.type === 'offer' && payload.sdp && isActivelyInCall(signalCallId) && callConnected)) {
                     return;
                 }
             }
