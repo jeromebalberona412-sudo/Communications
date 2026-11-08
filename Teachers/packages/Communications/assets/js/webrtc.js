@@ -948,8 +948,9 @@ import {
     function bindRemoteMedia(stream) {
         if (!stream) return;
         if (els.remoteVideo) {
-            els.remoteVideo.muted = true;
-            els.remoteVideo.setAttribute('muted', '');
+            // CRITICAL FIX: Remote video should NOT be muted so you can hear the peer
+            els.remoteVideo.muted = false;
+            els.remoteVideo.removeAttribute('muted');
             els.remoteVideo.playsInline = true;
             els.remoteVideo.autoplay = true;
             
