@@ -878,8 +878,7 @@ import {
         ensureRemoteAudioPlaying();
         if (els.remoteVideo) {
             try {
-                els.remoteVideo.muted = true;
-                els.remoteVideo.setAttribute('muted', '');
+                // CRITICAL FIX: Remote video should NOT be muted - removed muted setting
                 els.remoteVideo.playsInline = true;
                 var vp = els.remoteVideo.play();
                 if (vp && typeof vp.catch === 'function') vp.catch(function () {});
