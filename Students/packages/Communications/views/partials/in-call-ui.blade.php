@@ -14,6 +14,7 @@
             <span class="comms-video-off-label">Camera Off</span>
         </div>
         <div class="comms-remote-mic-off" id="commsRemoteMicOff" hidden>Muted</div>
+        <button type="button" class="comms-tap-to-play" id="commsTapToPlay" hidden>Tap to play video</button>
         <audio id="commsRemoteAudio" class="comms-remote-audio" autoplay playsinline></audio>
 
         <div class="comms-call-center" id="commsCallCenter">

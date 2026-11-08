@@ -1,7 +1,40 @@
 # FIX_PROGRESS — chat + WebRTC (Students + Teachers)
 
 Branch: `fix/chat-webrtc`  
-Date: 2026-11-09
+Date: 2026-11-09 (ringtone + live video follow-up)
+
+## Phase 1 — Ringtone / hangup / camera re-audit (complete)
+
+**Ringtone root cause (`webrtc.js` `startRingtone` ~353, `stopRingtone` ~319):**
+- Incoming ring uses `new AudioContext()` + oscillators. Without a prior user gesture the context stays `suspended`; `resume()` fails silently.
+- `stopRingtone()` **closes** the AudioContext. The next incoming call creates a fresh locked context, so the phone never rings.
+- Duplicate invite (inbox + conversation + poll) hits `showIncoming` while the modal is already open and **returns without retrying** ringtone (`webrtc.js` ~1276). If the first `play()` failed, it never retries.
+- No HTMLAudioElement loop (more reliable on Android/iOS after unlock). Oscillator volume is also easy for mobile to swallow.
+
+Incoming events themselves are OK: inbox `comms-inbox-{type}-{id}` + `comms-signal-{conversationId}` + ringing poll. Layout already includes the incoming modal on every page.
+
+**Camera / hangup:** previous session already uses `replaceTrack(null)` + `camera-state` and awaits `call-end`. Remaining: retry ringtone, tap-to-play if `video.play()` is blocked, larger mobile Accept/Reject hit targets.
+
+Files to change this round: `webrtc.js` (both), incoming-call modal (both), in-call UI (both), `communication.css` (both), `FIX_PROGRESS.md`.
+
+## Phase 2 — Ringtone + tap-to-play (complete)
+
+Done in Students and Teachers:
+- HTML `<audio>` loop + generated WAV ringtone (not oscillator-only).
+- Unlock on first tap/key (`bindRingtoneUnlock`). AudioContext is **not** closed on stop, so the next ring is not locked.
+- Duplicate incoming events retry ringtone if the first `play()` failed.
+- Silent notification when the tab is hidden (does not double-play sound).
+- Vibrate on supported phones.
+- “Tap anywhere to enable call sound” if autoplay is blocked.
+- “Tap to play video” if `video.play()` is blocked.
+- Accept/Reject min-height 48px.
+
+`node --check` on both `webrtc.js`: no syntax errors.
+
+Rebuild Vite in both apps so the browser loads this JS.
+
+Manual device tests still NOT TESTED.
+
 
 ## Phase 1 — Audit (complete)
 

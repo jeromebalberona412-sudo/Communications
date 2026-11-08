@@ -6,10 +6,12 @@
         <p class="comms-modal-peer" id="commsIncomingPeer"></p>
         <p class="comms-modal-type" id="commsIncomingType"></p>
         <p class="comms-modal-hint">Ringing...</p>
+        <p class="comms-ringtone-hint" id="commsRingtoneHint" hidden>Tap anywhere to enable call sound</p>
         <div class="comms-modal-actions">
             <button type="button" class="comms-btn comms-btn--danger" id="commsRejectCall">Decline</button>
             <button type="button" class="comms-btn comms-btn--success" id="commsAcceptCall">Answer</button>
         </div>
+        <audio id="commsRingtoneAudio" playsinline loop preload="auto" hidden></audio>
     </div>
 </div>
 

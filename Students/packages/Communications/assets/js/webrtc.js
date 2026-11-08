@@ -63,6 +63,11 @@ import {
     var ringCtx = null;
     var ringTimer = null;
     var ringOscillators = [];
+    var ringAudio = null;
+    var ringtonePlaying = false;
+    var ringMode = null;
+    var ringUnlockBound = false;
+    var ringNotify = null;
 
     var HTTPS_PORT_BY_HTTP = {
         '8000': '8440',
@@ -316,7 +321,121 @@ import {
         }
     }
 
+    function ringHint(show) {
+        var hint = document.getElementById('commsRingtoneHint');
+        if (hint) hint.hidden = !show;
+    }
+
+    function bindRingtoneUnlock() {
+        if (ringUnlockBound) return;
+        ringUnlockBound = true;
+        var unlock = function () {
+            unlockCallAudio();
+        };
+        document.addEventListener('pointerdown', unlock, true);
+        document.addEventListener('keydown', unlock, true);
+        document.addEventListener('touchstart', unlock, { capture: true, passive: true });
+        document.addEventListener('click', unlock, true);
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible' && ringtonePlaying) {
+                startRingtone(ringMode || 'incoming');
+            }
+        });
+    }
+
+    function unlockCallAudio() {
+        ensureRingAudio();
+        if (ringAudio) {
+            ringAudio.muted = false;
+            var p = ringAudio.play();
+            if (p && typeof p.then === 'function') {
+                p.then(function () {
+                    if (!ringtonePlaying) {
+                        ringAudio.pause();
+                        try { ringAudio.currentTime = 0; } catch (e0) { /* ignore */ }
+                    }
+                    ringHint(false);
+                }).catch(function () { /* still locked */ });
+            }
+        }
+        var AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (AudioCtx && !ringCtx) {
+            try { ringCtx = new AudioCtx(); } catch (e1) { /* ignore */ }
+        }
+        if (ringCtx && ringCtx.state === 'suspended') {
+            ringCtx.resume().catch(function () { /* ignore */ });
+        }
+        if (window.Notification && Notification.permission === 'default') {
+            try { Notification.requestPermission().catch(function () {}); } catch (e2) { /* ignore */ }
+        }
+    }
+
+    function ensureRingAudio() {
+        if (ringAudio) return ringAudio;
+        ringAudio = document.getElementById('commsRingtoneAudio');
+        if (!ringAudio) {
+            ringAudio = document.createElement('audio');
+            ringAudio.id = 'commsRingtoneAudio';
+            ringAudio.setAttribute('playsinline', '');
+            ringAudio.setAttribute('preload', 'auto');
+            ringAudio.hidden = true;
+            document.body.appendChild(ringAudio);
+        }
+        ringAudio.loop = true;
+        ringAudio.preload = 'auto';
+        ringAudio.playsInline = true;
+        ringAudio.setAttribute('playsinline', '');
+        ringAudio.muted = false;
+        ringAudio.volume = 1;
+        if (!ringAudio.src) {
+            try {
+                ringAudio.src = makeRingtoneDataUri();
+            } catch (e) { /* ignore */ }
+        }
+        return ringAudio;
+    }
+
+    function makeRingtoneDataUri() {
+        var sampleRate = 8000;
+        var seconds = 2.4;
+        var n = sampleRate * seconds;
+        var dataSize = n * 2;
+        var buf = new ArrayBuffer(44 + dataSize);
+        var view = new DataView(buf);
+        var writeStr = function (offset, str) {
+            for (var i = 0; i < str.length; i += 1) view.setUint8(offset + i, str.charCodeAt(i));
+        };
+        writeStr(0, 'RIFF');
+        view.setUint32(4, 36 + dataSize, true);
+        writeStr(8, 'WAVE');
+        writeStr(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true);
+        view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true);
+        view.setUint16(34, 16, true);
+        writeStr(36, 'data');
+        view.setUint32(40, dataSize, true);
+        for (var s = 0; s < n; s += 1) {
+            var t = s / sampleRate;
+            var cycle = t % 2.4;
+            var on = cycle < 0.42 || (cycle > 0.52 && cycle < 0.94);
+            var amp = on ? 0.42 : 0;
+            var sample = (Math.sin(2 * Math.PI * 440 * t) + Math.sin(2 * Math.PI * 480 * t)) * 0.5 * amp;
+            view.setInt16(44 + s * 2, Math.max(-1, Math.min(1, sample)) * 32767, true);
+        }
+        var bytes = new Uint8Array(buf);
+        var binary = '';
+        for (var b = 0; b < bytes.length; b += 1) binary += String.fromCharCode(bytes[b]);
+        return 'data:audio/wav;base64,' + btoa(binary);
+    }
+
     function stopRingtone() {
+        ringtonePlaying = false;
+        ringMode = null;
+        ringHint(false);
         if (ringTimer) {
             clearInterval(ringTimer);
             ringTimer = null;
@@ -325,14 +444,24 @@ import {
             try { osc.stop(); } catch (e) { /* ignore */ }
         });
         ringOscillators = [];
-        if (ringCtx) {
-            try { ringCtx.close(); } catch (e) { /* ignore */ }
-            ringCtx = null;
+        if (ringAudio) {
+            try {
+                ringAudio.pause();
+                ringAudio.currentTime = 0;
+            } catch (e2) { /* ignore */ }
         }
+        // Keep AudioContext open so the next ring is not blocked by autoplay.
+        if (ringNotify) {
+            try { ringNotify.close(); } catch (e3) { /* ignore */ }
+            ringNotify = null;
+        }
+        try {
+            if (navigator.vibrate) navigator.vibrate(0);
+        } catch (e4) { /* ignore */ }
     }
 
     function playToneBurst(ctx, freqs, when, duration, volume) {
-        var level = Math.max(0.01, Math.min(Number(volume) || 0.14, 0.2));
+        var level = Math.max(0.01, Math.min(Number(volume) || 0.18, 0.28));
         freqs.forEach(function (freq) {
             var osc = ctx.createOscillator();
             var gain = ctx.createGain();
@@ -350,36 +479,81 @@ import {
         });
     }
 
-    function startRingtone(mode) {
-        stopRingtone();
+    function startOscillatorRing(incoming) {
         var AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtx) return;
-
-        try {
-            ringCtx = new AudioCtx();
-        } catch (e) {
-            return;
+        if (!ringCtx) {
+            try { ringCtx = new AudioCtx(); } catch (e) { return; }
         }
-
         if (ringCtx.state === 'suspended') {
             ringCtx.resume().catch(function () { /* ignore */ });
         }
-
-        var incoming = mode === 'incoming';
-
         function scheduleCycle() {
-            if (!ringCtx) return;
+            if (!ringtonePlaying || !ringCtx) return;
             var now = ringCtx.currentTime;
             if (incoming) {
-                playToneBurst(ringCtx, [440, 480], now, 0.42, 0.22);
-                playToneBurst(ringCtx, [440, 480], now + 0.52, 0.42, 0.22);
+                playToneBurst(ringCtx, [440, 480], now, 0.42, 0.24);
+                playToneBurst(ringCtx, [440, 480], now + 0.52, 0.42, 0.24);
             } else {
-                playToneBurst(ringCtx, [440, 480], now, 1.15, 0.16);
+                playToneBurst(ringCtx, [440, 480], now, 1.15, 0.18);
             }
         }
-
+        if (ringTimer) {
+            clearInterval(ringTimer);
+            ringTimer = null;
+        }
         scheduleCycle();
         ringTimer = setInterval(scheduleCycle, incoming ? 2800 : 3600);
+    }
+
+    function startRingtone(mode) {
+        bindRingtoneUnlock();
+        var incoming = mode === 'incoming';
+        if (ringtonePlaying && ringMode === mode && ringAudio && !ringAudio.paused) {
+            return;
+        }
+        ringtonePlaying = true;
+        ringMode = mode;
+        ensureRingAudio();
+        unlockCallAudio();
+
+        if (ringAudio) {
+            try {
+                ringAudio.loop = true;
+                ringAudio.muted = false;
+                ringAudio.volume = 1;
+                var playPromise = ringAudio.play();
+                if (playPromise && typeof playPromise.then === 'function') {
+                    playPromise.then(function () {
+                        ringHint(false);
+                    }).catch(function () {
+                        startOscillatorRing(incoming);
+                        ringHint(true);
+                    });
+                }
+            } catch (ePlay) {
+                startOscillatorRing(incoming);
+                ringHint(true);
+            }
+        } else {
+            startOscillatorRing(incoming);
+            ringHint(true);
+        }
+
+        try {
+            if (navigator.vibrate) navigator.vibrate([220, 120, 220, 400, 220, 120, 220]);
+        } catch (eV) { /* ignore */ }
+
+        if (incoming && document.hidden && window.Notification && Notification.permission === 'granted') {
+            try {
+                if (ringNotify) ringNotify.close();
+                ringNotify = new Notification('Incoming call', {
+                    body: (els.incomingPeer && els.incomingPeer.textContent) || 'Incoming call',
+                    silent: true,
+                    tag: 'comms-incoming-call'
+                });
+            } catch (eN) { /* ignore */ }
+        }
     }
 
     /**
@@ -931,6 +1105,12 @@ import {
         els.localVideo.classList.toggle('is-cam-portrait', !camLandscape);
     }
 
+    function showTapToPlay(show) {
+        var btn = document.getElementById('commsTapToPlay');
+        if (!btn) return;
+        btn.hidden = !show;
+    }
+
     function unlockRemotePlayback() {
         try {
             var Ctx = window.AudioContext || window.webkitAudioContext;
@@ -945,8 +1125,12 @@ import {
                 // CRITICAL FIX: Remote video should NOT be muted - removed muted setting
                 els.remoteVideo.playsInline = true;
                 var vp = els.remoteVideo.play();
-                if (vp && typeof vp.catch === 'function') vp.catch(function () {});
-            } catch (e2) { /* ignore */ }
+                if (vp && typeof vp.then === 'function') {
+                    vp.then(function () { showTapToPlay(false); }).catch(function () { showTapToPlay(true); });
+                }
+            } catch (e2) {
+                showTapToPlay(true);
+            }
         }
     }
 
@@ -1028,8 +1212,12 @@ import {
             }
             try {
                 var vp = els.remoteVideo.play();
-                if (vp && typeof vp.catch === 'function') vp.catch(function () {});
-            } catch (e) { /* ignore */ }
+                if (vp && typeof vp.catch === 'function') {
+                    vp.catch(function () { showTapToPlay(true); });
+                }
+            } catch (e) {
+                showTapToPlay(true);
+            }
             if (!els.remoteVideo._commsMetricsBound) {
                 els.remoteVideo._commsMetricsBound = true;
                 els.remoteVideo.addEventListener('loadedmetadata', applyRemoteVideoMetrics);
@@ -1277,6 +1465,7 @@ import {
             if (call._remoteOffer && currentCall && Number(currentCall.id) === callId) {
                 currentCall._remoteOffer = call._remoteOffer;
             }
+            startRingtone('incoming');
             return;
         }
 
@@ -3161,6 +3350,17 @@ import {
         if (e.target && e.target.closest('#commsInCall')) {
             unlockRemotePlayback();
         }
+        if (e.target && e.target.closest('#commsTapToPlay')) {
+            e.preventDefault();
+            unlockCallAudio();
+            unlockRemotePlayback();
+            showTapToPlay(false);
+            return;
+        }
+        if (e.target && e.target.closest('#commsIncomingCall')) {
+            unlockCallAudio();
+            if (ringtonePlaying) startRingtone(ringMode || 'incoming');
+        }
         var acceptBtn = e.target && e.target.closest('#commsAcceptCall');
         var rejectBtn = e.target && e.target.closest('#commsRejectCall');
         var endBtn = e.target && e.target.closest('#commsEndCall');
@@ -3269,6 +3469,7 @@ import {
     }
 
     showSecureContextBanner();
+    bindRingtoneUnlock();
 
     window.addEventListener('orientationchange', syncLocalPipLayout);
     window.addEventListener('resize', syncLocalPipLayout);
