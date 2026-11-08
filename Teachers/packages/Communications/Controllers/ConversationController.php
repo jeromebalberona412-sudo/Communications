@@ -10,6 +10,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Gate;
 
 class ConversationController extends Controller
@@ -22,10 +23,13 @@ class ConversationController extends Controller
 
     public function index(Request $request): JsonResponse
     {
-        $items = $this->conversations->listForUser(
-            Auth::user(),
-            $request->string('q')->toString() ?: null
-        );
+        $user = Auth::user();
+        $search = $request->string('q')->toString() ?: null;
+        $cacheKey = 'comms.inbox.'.(int) $user->id.'.'.md5((string) $search);
+
+        $items = Cache::remember($cacheKey, 8, function () use ($user, $search) {
+            return $this->conversations->listForUser($user, $search);
+        });
 
         return response()->json(['conversations' => $items]);
     }

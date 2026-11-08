@@ -246,10 +246,14 @@
                 : (mode === 'call' ? 'Select call recipient' : 'Group Info');
         }
 
-        // Always refresh members so photos/names stay accurate.
         if (!opts.skipFetch && routes.conversationMembers) {
-            els.groupModalBody.innerHTML = '<p class="comms-muted">Loading members…</p>';
-            els.groupModal.hidden = false;
+            var cachedMembers = Array.isArray(conv.members) ? conv.members : [];
+            if (cachedMembers.length) {
+                openGroupInfoModal(mode, { skipFetch: true });
+            } else {
+                els.groupModalBody.innerHTML = '<p class="comms-muted">Loading members…</p>';
+                els.groupModal.hidden = false;
+            }
             Comms.api(Comms.route(routes.conversationMembers, conv.id), { dedupe: true }).then(function (data) {
                 if (data && data.conversation) {
                     state.activeConversation = Object.assign({}, state.activeConversation || {}, data.conversation);
@@ -1034,16 +1038,20 @@
     }
 
     function renderSendStatus(msg, isLatestMine) {
-        if (!msg || !msg.mine || !isLatestMine) return '';
+        if (!msg || !msg.mine) return '';
         var status = msg.send_status || '';
         if (!status && String(msg.id || '').indexOf('local-') === 0) status = 'sending';
-        // Hide "Sent" after a moment; never leave a permanent label on real ids.
+        if (status === 'failed') {
+            return '<div class="comms-send-status is-failed" role="status">Failed <button type="button" class="comms-retry-send" data-retry-send="' +
+                Comms.escapeHtml(String(msg.id || '')) + '">Retry</button></div>';
+        }
+        if (!isLatestMine) return '';
         if (status === 'sent' && String(msg.id || '').indexOf('local-') !== 0) {
             var age = msg._sentAt ? (Date.now() - Number(msg._sentAt)) : 99999;
             if (age > 2500) return '';
         }
-        if (status !== 'sending' && status !== 'sent' && status !== 'failed') return '';
-        var label = status === 'sending' ? 'Sending...' : (status === 'sent' ? 'Sent' : 'Failed');
+        if (status !== 'sending' && status !== 'sent') return '';
+        var label = status === 'sending' ? 'Sending...' : 'Sent';
         return '<div class="comms-send-status is-' + status + '" role="status">' + label + '</div>';
     }
 
@@ -1756,6 +1764,10 @@
         });
     }
 
+    function loadConversation(id, opts) {
+        return openConversation(id, opts);
+    }
+
     function loadConversations() {
         var epoch = Number(window.__COMMS_INBOX_EPOCH__) || 0;
         state.listGen = (state.listGen || 0) + 1;
@@ -2218,6 +2230,17 @@
         }, 20000);
     }
 
+    function retryFailedMessage(tempId) {
+        var idx = state.messages.findIndex(function (m) { return String(m.id) === String(tempId); });
+        if (idx === -1) return;
+        var msg = state.messages[idx];
+        if (!msg || msg.send_status !== 'failed') return;
+        var body = String(msg.body || '');
+        state.messages.splice(idx, 1);
+        renderMessages({ stickBottom: true });
+        if (body) sendMessage(body);
+    }
+
     function startConversationWithUser(userId) {
         return Comms.api(routes.storeConversation, {
             method: 'POST',
@@ -2366,6 +2389,13 @@
 
     if (els.messages) {
         els.messages.addEventListener('click', function (e) {
+            var retryBtn = e.target.closest('[data-retry-send]');
+            if (retryBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                retryFailedMessage(retryBtn.getAttribute('data-retry-send'));
+                return;
+            }
             var peopleBtn = e.target.closest('[data-react-people]');
             if (peopleBtn) {
                 e.preventDefault();
@@ -3136,7 +3166,62 @@
         studentsEmpty: document.getElementById('commsStudentsEmpty')
     };
 
+    function membersUiCacheKey(kind) {
+        return 'comms.ui.members.' + String(state.currentUserId || 0) + '.' + kind;
+    }
+
+    function readMembersUiCache(kind) {
+        try {
+            var parsed = JSON.parse(sessionStorage.getItem(membersUiCacheKey(kind)) || 'null');
+            if (parsed && Number(parsed.userId) === Number(state.currentUserId) && Array.isArray(parsed.items)) {
+                return parsed.items;
+            }
+        } catch (e) { /* ignore */ }
+        return null;
+    }
+
+    function writeMembersUiCache(kind, items) {
+        try {
+            sessionStorage.setItem(membersUiCacheKey(kind), JSON.stringify({
+                userId: Number(state.currentUserId || 0),
+                items: items,
+                ts: Date.now()
+            }));
+        } catch (e2) { /* ignore */ }
+    }
+
+    function isLivePresenceOnline(userId, portal) {
+        var map = window.__COMMS_PRESENCE_ONLINE_IDS__ || {};
+        var id = Number(userId || 0);
+        if (!id) return false;
+        var typed = String(portal || '').toLowerCase() + ':' + id;
+        if (typed && map[typed]) return true;
+        return false;
+    }
+
+    function memberActionButtonsHtml(userId) {
+        return '<div class="comms-member-actions">' +
+            '<button type="button" class="comms-member-action" data-member-act="message" data-user-id="' + Number(userId) + '">Message</button>' +
+            '<button type="button" class="comms-member-action" data-member-act="voice" data-user-id="' + Number(userId) + '">Voice Call</button>' +
+            '<button type="button" class="comms-member-action" data-member-act="video" data-user-id="' + Number(userId) + '">Video Call</button>' +
+            '</div>';
+    }
+
+    function handleMemberListAction(userId, act) {
+        if (act === 'voice' || act === 'video') {
+            return openOrCallUser(userId, act);
+        }
+        return openOrCallUser(userId, null);
+    }
+
     function loadStudentsList(searchQuery) {
+        if (!searchQuery) {
+            var cached = readMembersUiCache('students');
+            if (cached && cached.length) {
+                studentsState.students = cached;
+                renderStudentsList();
+            }
+        }
         if (studentsState.loading) return;
         studentsState.loading = true;
 
@@ -3145,9 +3230,10 @@
             url += '?q=' + encodeURIComponent(searchQuery);
         }
 
-        window.Comms.api(url, { method: 'GET', dedupe: false })
+        window.Comms.api(url, { method: 'GET', dedupe: true })
             .then(function (data) {
                 studentsState.students = data.students || [];
+                if (!searchQuery) writeMembersUiCache('students', studentsState.students);
                 renderStudentsList();
             })
             .catch(function (err) {
@@ -3180,34 +3266,36 @@
             item.className = 'comms-conv-item';
             item.dataset.userId = student.id;
             item.dataset.userType = 'students';
-            item.setAttribute('role', 'button');
-            item.setAttribute('tabindex', '0');
 
             var avatarUrl = student.profile_image_url || '';
             var initials = getInitials(student.name);
+            var online = isLivePresenceOnline(student.id, 'students');
 
             var avatar = avatarUrl
                 ? '<img src="' + escapeHtml(avatarUrl) + '" alt="" class="comms-avatar" width="48" height="48">'
                 : '<div class="comms-avatar comms-avatar-initial" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:#0039A8;color:#fff;font-weight:700;font-size:18px;border-radius:50%;">' + escapeHtml(initials) + '</div>';
 
             item.innerHTML =
-                '<div class="comms-conv-avatar-wrap">' + avatar + '</div>' +
+                '<div class="comms-conv-avatar-wrap">' + avatar +
+                (online ? '<span class="comms-online-dot" title="Online"></span>' : '') +
+                '</div>' +
                 '<div class="comms-conv-main">' +
                 '<div class="comms-conv-name">' + escapeHtml(student.name) + '</div>' +
                 '<div class="comms-conv-snippet" style="color:#586069;font-size:13px;">' +
                 escapeHtml(student.student_id || 'Student') +
                 '</div>' +
+                memberActionButtonsHtml(student.id) +
                 '</div>';
 
-            item.addEventListener('click', function () {
-                openStudentConversation(student);
-            });
-
-            item.addEventListener('keydown', function (e) {
-                if (e.key === 'Enter' || e.key === ' ') {
+            item.addEventListener('click', function (e) {
+                var actBtn = e.target.closest('[data-member-act]');
+                if (actBtn) {
                     e.preventDefault();
-                    openStudentConversation(student);
+                    e.stopPropagation();
+                    handleMemberListAction(actBtn.getAttribute('data-user-id'), actBtn.getAttribute('data-member-act'));
+                    return;
                 }
+                openStudentConversation(student);
             });
 
             studentsEls.studentsList.appendChild(item);

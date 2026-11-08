@@ -2200,7 +2200,7 @@ button.comms-bubble-image {
     border-radius: 14px;
     border: 2px solid rgba(255, 255, 255, 0.4);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-    transform: scaleX(-1);
+    transform: none;
 }
 .comms-video-off--local.is-cam-landscape,
 .comms-call-overlay.is-desktop-call .comms-video-off--local {
@@ -2220,11 +2220,51 @@ button.comms-bubble-image {
     font-weight: 700;
     font-size: 1.1rem;
 }
+.comms-video-off-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #f9fafb;
+    max-width: 80%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
 .comms-video-off-label {
     font-size: 0.72rem;
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: #9ca3af;
+}
+.comms-call-overlay.is-remote-camera-off:not(.is-group-call) .comms-remote-video {
+    visibility: hidden;
+}
+.comms-remote-mic-off {
+    position: absolute;
+    left: 0.75rem;
+    top: 0.75rem;
+    z-index: 5;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #f9fafb;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.comms-member-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+.comms-member-action {
+    border: 0;
+    border-radius: 999px;
+    background: #e8eef9;
+    color: #0039A8;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    cursor: pointer;
 }
 .comms-call-ctrl.is-busy {
     opacity: 0.65;

@@ -11,6 +11,7 @@ use App\Services\BarangayLogoUrlService;
 use Illuminate\Contracts\Auth\Authenticatable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use App\Modules\Communications\Support\SchemaCache;
 use Illuminate\Support\Facades\Storage;
@@ -25,6 +26,19 @@ class ConversationService
         protected BarangayLogoUrlService $barangayLogos,
         protected DefaultGroupChatService $defaultGroups,
     ) {}
+
+    public function forgetInboxCacheForConversation(Conversation $conversation): void
+    {
+        $ids = ConversationParticipant::query()
+            ->where('conversation_id', $conversation->id)
+            ->pluck('user_id')
+            ->unique()
+            ->all();
+
+        foreach ($ids as $userId) {
+            Cache::forget('comms.inbox.'.(int) $userId.'.'.md5(''));
+        }
+    }
 
     public function isParticipant(Conversation $conversation, Authenticatable $user, ?string $userType = null): bool
     {
@@ -199,7 +213,11 @@ class ConversationService
             return collect();
         }
 
-        $this->defaultGroups->ensureForUser($user);
+        $ensureKey = 'comms.groups.ensured.'.((int) $user->id);
+        if (! Cache::get($ensureKey)) {
+            $this->defaultGroups->ensureForUser($user);
+            Cache::put($ensureKey, 1, 60);
+        }
 
         $userType = $this->types->portalType();
         $userId = (int) $user->id;

@@ -173,6 +173,7 @@ class MessageService
 
         $conversation->touch();
         $this->conversations->markRead($conversation, $user);
+        $this->conversations->forgetInboxCacheForConversation($conversation);
 
         return $message->load(['sender', 'reactions.user', 'attachments']);
     }

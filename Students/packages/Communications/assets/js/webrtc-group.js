@@ -719,7 +719,20 @@ import {
         var live = videoTracks.filter(function (t) { return t.readyState === 'live'; });
 
         if (!enabled) {
-            videoTracks.forEach(function (t) { t.enabled = false; });
+            videoTracks.forEach(function (t) {
+                try { t.enabled = false; } catch (eOff) {}
+                try { meshLocalStream.removeTrack(t); } catch (eRm) {}
+                try { t.stop(); } catch (eStop) {}
+            });
+            Object.keys(meshPeers).forEach(function (key) {
+                var pc = meshPeers[key] && meshPeers[key].pc;
+                if (!pc) return;
+                pc.getSenders().forEach(function (sender) {
+                    if (sender && sender.track && sender.track.kind === 'video') {
+                        sender.replaceTrack(null).catch(function () {});
+                    }
+                });
+            });
             meshCameraOn = false;
             syncMeshCameraUi();
             return;
@@ -749,9 +762,17 @@ import {
             meshLocalStream.addTrack(newTrack);
             Object.keys(meshPeers).forEach(function (key) {
                 var pc = meshPeers[key].pc;
-                var sender = pc.getSenders().find(function (s) { return s.track && s.track.kind === 'video'; });
-                if (sender) {
-                    sender.replaceTrack(newTrack);
+                if (!pc) return;
+                var videoSender = pc.getSenders().find(function (s) {
+                    return s && s.track && s.track.kind === 'video';
+                }) || pc.getTransceivers().reduce(function (found, t) {
+                    if (found) return found;
+                    var kind = (t.receiver && t.receiver.track && t.receiver.track.kind)
+                        || (t.sender && t.sender.track && t.sender.track.kind);
+                    return kind === 'video' ? t.sender : null;
+                }, null);
+                if (videoSender) {
+                    videoSender.replaceTrack(newTrack).catch(function () {});
                 } else {
                     pc.addTrack(newTrack, meshLocalStream);
                 }
