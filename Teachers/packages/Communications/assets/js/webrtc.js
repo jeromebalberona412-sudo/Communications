@@ -436,6 +436,19 @@ import {
         }
     }
 
+    /**
+     * FIX BUG #3: Force stop call timer and reset state
+     * Called before starting any new call to ensure clean state
+     */
+    function stopCallTimer() {
+        if (callTimer) {
+            clearInterval(callTimer);
+            callTimer = null;
+        }
+        callStartedAt = null;
+        lastCallDurationMs = 0;
+    }
+
     function endedCopy(reason, endedByRole) {
         var actor = endedByRole || role;
         switch (reason) {
@@ -1310,23 +1323,27 @@ import {
     function startTimer(serverStartedAt, serverTime) {
         applyServerClock(serverTime);
 
-        // FIX BUG #3: Always clear old timer before starting new one
+        // FIX BUG #3: ALWAYS clear existing timer first to prevent multiple intervals
         if (callTimer) {
             clearInterval(callTimer);
             callTimer = null;
         }
 
-        // FIX BUG #3: Always reset callStartedAt for new calls
+        // FIX BUG #3: Always set fresh timestamp for each call
         if (serverStartedAt) {
             var parsed = Date.parse(serverStartedAt);
             if (!isNaN(parsed)) {
                 callStartedAt = parsed;
+            } else {
+                // Fallback if server time is invalid
+                callStartedAt = Date.now() + clockOffsetMs;
             }
         } else {
-            // Always set fresh timestamp for new calls
+            // No server time provided - use local time
             callStartedAt = Date.now() + clockOffsetMs;
         }
         
+        // Start fresh timer interval (always creates new one)
         renderTimer();
         callTimer = setInterval(function () {
             renderTimer();
@@ -2039,10 +2056,8 @@ import {
         if (!window.Comms || startingCall) return;
         startingCall = true;
         
-        // Ensure timer is fully reset before starting new call (REVIEW FIX #1)
-        clearInterval(callTimer);
-        callTimer = null;
-        callStartedAt = null;
+        // FIX BUG #3: Force stop any existing timer before starting new call
+        stopCallTimer();
         
         var r = routes();
         try {
@@ -2222,10 +2237,8 @@ import {
         if (acceptedCallId) rememberCallId(answeredCallIds, acceptedCallId);
         answeredCall = call;
 
-        // Ensure timer is fully reset before starting new call (REVIEW FIX #1)
-        clearInterval(callTimer);
-        callTimer = null;
-        callStartedAt = null;
+        // FIX BUG #3: Force stop any existing timer before accepting new call
+        stopCallTimer();
 
         clearRingTimeout();
         stopRingtone();
