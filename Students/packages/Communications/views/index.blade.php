@@ -31,6 +31,7 @@
         'showConversation' => url('/api/communications/conversations/__ID__'),
         'searchUsers' => route('api.communications.users.search'),
         'directory' => route('api.communications.users.directory'),
+        'teachersList' => route('api.communications.users.teachers-list'),
         'unreadCount' => route('api.communications.unread-count'),
         'startCall' => url('/api/communications/conversations/__ID__/calls'),
         'callStatus' => url('/api/communications/calls/__ID__/status'),
@@ -95,16 +96,36 @@
                 <button type="button" class="comms-mark-all-read" id="commsMarkAllRead" style="display:flex;align-items:center;justify-content:center;width:calc(100% - 24px);margin:8px 12px;box-sizing:border-box;background:#0039A8;color:#fff;border:0;border-radius:999px;padding:8px 12px;font-size:13px;font-weight:700;line-height:1.2;cursor:pointer;">
                     <span class="comms-mark-all-read-label" style="color:#fff;font-size:13px;font-weight:700;line-height:1.2;">Mark All as Read</span>
                 </button>
+                
+                <!-- Tabs for Conversations and Teachers -->
+                <div class="comms-sidebar-tabs" style="display:flex;border-bottom:1px solid #e1e4e8;margin:0 12px;">
+                    <button type="button" class="comms-tab-btn comms-tab-active" id="commsConversationsTab" style="flex:1;padding:12px;background:none;border:0;border-bottom:2px solid #0039A8;color:#0039A8;font-weight:600;cursor:pointer;font-size:14px;">Conversations</button>
+                    <button type="button" class="comms-tab-btn" id="commsTeachersTab" style="flex:1;padding:12px;background:none;border:0;border-bottom:2px solid transparent;color:#586069;font-weight:600;cursor:pointer;font-size:14px;">Teachers</button>
+                </div>
+                
                 <label class="visually-hidden" for="commsUserSearch">Search kabataan or officials</label>
                 <div class="comms-search-wrap">
                     <svg class="comms-search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
                     <input type="search" id="commsUserSearch" class="comms-search-input" placeholder="Search kabataan or officials" autocomplete="off">
                     <div class="comms-search-results" id="commsSearchResults" hidden></div>
                 </div>
+                
+                <!-- Teachers search (hidden by default) -->
+                <div class="comms-teachers-search-wrap" id="commsTeachersSearchWrap" style="display:none;padding:0 12px 12px 12px;">
+                    <label class="visually-hidden" for="commsTeachersSearch">Search teachers</label>
+                    <div style="position:relative;">
+                        <svg style="position:absolute;left:12px;top:50%;transform:translateY(-50%);pointer-events:none;" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+                        <input type="search" id="commsTeachersSearch" class="comms-search-input" placeholder="Search teachers by name" autocomplete="off" style="width:100%;padding-left:36px;">
+                    </div>
+                </div>
             </div>
             <div class="comms-conv-list" id="commsConvList" role="list"></div>
+            <div class="comms-teachers-list" id="commsTeachersList" role="list" style="display:none;"></div>
             <div class="comms-empty" id="commsConvEmpty" hidden>
                 <p>No conversations yet. Search for someone to start messaging.</p>
+            </div>
+            <div class="comms-teachers-empty" id="commsTeachersEmpty" hidden style="padding:24px;text-align:center;color:#586069;">
+                <p>No teachers found.</p>
             </div>
         </aside>
 

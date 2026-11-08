@@ -68,6 +68,10 @@ Route::get('/api/communications/users/{user_type}/{user_id}/profile', [Directory
     ->middleware('throttle:30,1')
     ->name('api.communications.users.profile');
 
+Route::get('/api/communications/users/teachers-list', \App\Modules\Communications\Controllers\TeachersListController::class)
+    ->middleware('throttle:30,1')
+    ->name('api.communications.users.teachers-list');
+
 Route::get('/api/communications/calls', [CallController::class, 'index'])
     ->middleware('throttle:60,1')
     ->name('api.communications.calls.index');

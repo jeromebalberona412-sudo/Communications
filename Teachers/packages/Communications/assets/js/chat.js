@@ -208,7 +208,8 @@
                 var mName = m.name || 'User';
                 var role = m.participant_role === 'admin' ? 'Admin' : 'Member';
                 var position = m.federation_position || m.position || '';
-                html += '<div class="comms-group-member" role="listitem" data-user-id="' + Number(m.id || 0) + '">' +
+                var isCurrentUser = Number(m.id) === Number(state.currentUserId);
+                html += '<div class="comms-group-member" role="listitem" data-user-id="' + Number(m.id || 0) + '" data-user-type="' + Comms.escapeHtml(m.user_type || m.type || '') + '">' +
                     memberAvatarHtml(m) +
                     '<div class="comms-group-member-main">' +
                     '<div class="comms-group-member-name">' + Comms.escapeHtml(mName) + '</div>' +
@@ -216,10 +217,20 @@
                     (position ? Comms.escapeHtml(String(position)) : Comms.escapeHtml(role)) +
                     (position && role === 'Admin' ? ' · Admin' : '') +
                     '</div></div>';
-                if (mode === 'call' && Number(m.id) !== Number(state.currentUserId)) {
+                if (mode === 'call' && !isCurrentUser) {
                     html += '<div class="comms-group-member-actions">' +
                         '<button type="button" class="comms-btn-secondary comms-group-call-btn" data-call-type="voice" data-user-id="' + Number(m.id) + '">Voice</button>' +
                         '<button type="button" class="comms-btn-secondary comms-group-call-btn" data-call-type="video" data-user-id="' + Number(m.id) + '">Video</button>' +
+                        '</div>';
+                } else if (mode === 'members' && !isCurrentUser) {
+                    // Add Message and Call buttons in View Members modal
+                    html += '<div class="comms-group-member-actions">' +
+                        '<button type="button" class="comms-btn-secondary comms-member-message-btn" data-user-id="' + Number(m.id) + '" title="Send message">' +
+                        '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
+                        'Message</button>' +
+                        '<button type="button" class="comms-btn-secondary comms-member-call-btn" data-user-id="' + Number(m.id) + '" title="Start call">' +
+                        '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>' +
+                        'Call</button>' +
                         '</div>';
                 }
                 html += '</div>';
@@ -2947,13 +2958,72 @@
     });
     if (els.groupModalBody) {
         els.groupModalBody.addEventListener('click', function (e) {
+            // Handle call buttons (existing functionality)
             var btn = e.target.closest('.comms-group-call-btn');
-            if (!btn || !state.activeId || !window.CommsWebRTC) return;
-            var uid = Number(btn.getAttribute('data-user-id') || 0);
-            var callType = btn.getAttribute('data-call-type') || 'voice';
-            if (!uid) return;
-            closeGroupModals();
-            window.CommsWebRTC.startCall(state.activeId, callType, state.activeConversation, uid);
+            if (btn && state.activeId && window.CommsWebRTC) {
+                var uid = Number(btn.getAttribute('data-user-id') || 0);
+                var callType = btn.getAttribute('data-call-type') || 'voice';
+                if (uid) {
+                    closeGroupModals();
+                    window.CommsWebRTC.startCall(state.activeId, callType, state.activeConversation, uid);
+                }
+                return;
+            }
+
+            // Handle Message button
+            var messageBtn = e.target.closest('.comms-member-message-btn');
+            if (messageBtn) {
+                var userId = Number(messageBtn.getAttribute('data-user-id') || 0);
+                if (!userId) return;
+                
+                closeGroupModals();
+                
+                // Create or find private conversation with this member
+                var url = routes.storeConversation || '/api/communications/conversations';
+                window.Comms.api(url, {
+                    method: 'POST',
+                    body: JSON.stringify({ user_id: userId }),
+                    dedupe: false
+                })
+                .then(function (data) {
+                    if (data && data.conversation) {
+                        loadConversation(data.conversation.id);
+                    }
+                })
+                .catch(function (err) {
+                    console.error('Failed to create conversation:', err);
+                    window.Comms.showToast('Failed to start conversation.', 'error');
+                });
+                return;
+            }
+
+            // Handle Call button
+            var callBtn = e.target.closest('.comms-member-call-btn');
+            if (callBtn) {
+                var userId = Number(callBtn.getAttribute('data-user-id') || 0);
+                if (!userId) return;
+                
+                closeGroupModals();
+                
+                // Create conversation first, then start call
+                var url = routes.storeConversation || '/api/communications/conversations';
+                window.Comms.api(url, {
+                    method: 'POST',
+                    body: JSON.stringify({ user_id: userId }),
+                    dedupe: false
+                })
+                .then(function (data) {
+                    if (data && data.conversation && window.CommsWebRTC) {
+                        // Start video call
+                        window.CommsWebRTC.startCall(data.conversation.id, 'video', data.conversation);
+                    }
+                })
+                .catch(function (err) {
+                    console.error('Failed to start call:', err);
+                    window.Comms.showToast('Failed to start call.', 'error');
+                });
+                return;
+            }
         });
     }
 

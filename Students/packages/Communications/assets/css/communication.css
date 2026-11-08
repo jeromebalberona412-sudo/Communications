@@ -3658,3 +3658,79 @@ body.comms-messages-layout .comms-composer {
         opacity: 1;
     }
 }
+
+/* Teachers List Styles */
+.comms-sidebar-tabs {
+    display: flex;
+    border-bottom: 1px solid #e1e4e8;
+    margin: 0 12px;
+}
+
+.comms-tab-btn {
+    flex: 1;
+    padding: 12px;
+    background: none;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    color: #586069;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+}
+
+.comms-tab-btn:hover {
+    color: #0039A8;
+    background-color: rgba(0, 57, 168, 0.05);
+}
+
+.comms-tab-btn.comms-tab-active {
+    border-bottom-color: #0039A8;
+    color: #0039A8;
+}
+
+.comms-teachers-list {
+    overflow-y: auto;
+    flex: 1;
+    display: none;
+}
+
+.comms-teachers-list .comms-conv-item {
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+
+.comms-teachers-list .comms-conv-item:hover {
+    background-color: rgba(0, 57, 168, 0.04);
+}
+
+.comms-teachers-list .comms-conv-item:active {
+    background-color: rgba(0, 57, 168, 0.08);
+}
+
+.comms-teachers-search-wrap {
+    padding: 0 12px 12px 12px;
+    display: none;
+}
+
+.comms-teachers-empty {
+    padding: 24px;
+    text-align: center;
+    color: #586069;
+}
+
+/* Responsive design for mobile */
+@media (max-width: 768px) {
+    .comms-sidebar-tabs {
+        margin: 0 8px;
+    }
+    
+    .comms-tab-btn {
+        padding: 10px 8px;
+        font-size: 13px;
+    }
+    
+    .comms-teachers-list {
+        height: calc(100vh - 280px);
+    }
+}
