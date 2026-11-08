@@ -952,6 +952,15 @@ import {
             els.remoteVideo.setAttribute('muted', '');
             els.remoteVideo.playsInline = true;
             els.remoteVideo.autoplay = true;
+            
+            // CRITICAL FIX: Hide video element when remote camera is OFF
+            // This prevents showing frozen last frame as if camera is still on
+            if (!remoteCameraEnabled) {
+                els.remoteVideo.style.display = 'none';
+            } else {
+                els.remoteVideo.style.display = '';
+            }
+            
             if (els.remoteVideo.srcObject !== stream) {
                 els.remoteVideo.srcObject = stream;
             }
