@@ -67,6 +67,7 @@ import {
     var ringtonePlaying = false;
     var ringMode = null;
     var ringingCallId = null;
+    var peerAnsweredFor = null;
     var ringUnlockBound = false;
     var ringNotify = null;
     var timerCallId = null;
@@ -455,9 +456,32 @@ import {
             try { ringNotify.close(); } catch (e3) { /* ignore */ }
             ringNotify = null;
         }
+        stopVibration();
+    }
+
+    var vibeTimer = null;
+
+    function stopVibration() {
+        if (vibeTimer) {
+            clearInterval(vibeTimer);
+            vibeTimer = null;
+        }
         try {
             if (navigator.vibrate) navigator.vibrate(0);
         } catch (e4) { /* ignore */ }
+    }
+
+    function startIncomingVibration() {
+        stopVibration();
+        if (!navigator.vibrate) return;
+        try { navigator.vibrate([220, 120, 220, 400, 220, 120, 220]); } catch (eV) { /* ignore */ }
+        vibeTimer = setInterval(function () {
+            if (!ringtonePlaying || ringMode !== 'incoming') {
+                stopVibration();
+                return;
+            }
+            try { navigator.vibrate([220, 120, 220, 400]); } catch (e2) { /* ignore */ }
+        }, 1800);
     }
 
     function playToneBurst(ctx, freqs, when, duration, volume) {
@@ -555,9 +579,11 @@ import {
             ringHint(true);
         }
 
-        try {
-            if (navigator.vibrate) navigator.vibrate([220, 120, 220, 400, 220, 120, 220]);
-        } catch (eV) { /* ignore */ }
+        if (incoming) {
+            startIncomingVibration();
+        } else {
+            stopVibration();
+        }
 
         if (incoming && document.hidden && window.Notification && Notification.permission === 'granted') {
             try {
@@ -1045,7 +1071,7 @@ import {
         var stream = (els.remoteVideo && els.remoteVideo.srcObject) || remoteStream;
         if (!stream || typeof stream.getVideoTracks !== 'function') return false;
         return stream.getVideoTracks().some(function (track) {
-            return !!(track && track.readyState === 'live' && track.enabled !== false && track.muted !== true);
+            return !!(track && track.readyState === 'live' && track.enabled !== false);
         });
     }
 
@@ -2176,6 +2202,7 @@ import {
         cameraEnabled = false;
         wantsVideo = false;
         callConnected = false;
+        peerAnsweredFor = null;
         remoteCameraEnabled = true;
         remoteMicEnabled = true;
         videoSender = null;
@@ -2523,6 +2550,13 @@ import {
             await Promise.all([channelReady, ringSignal]);
             setCallStatus('Ringing...');
             await ensurePeerConnection(wantsVideo);
+            if (wantsVideo) {
+                cameraEnabled = true;
+                var outTrack = findLiveVideoTrack();
+                if (outTrack) outTrack.enabled = true;
+                attachLocalVideo();
+                syncCameraUi();
+            }
             var offer = await pc.createOffer({
                 offerToReceiveAudio: true,
                 offerToReceiveVideo: !!wantsVideo
@@ -2650,7 +2684,7 @@ import {
             showInCall(call, 'Connecting...');
             unlockRemotePlayback();
             armConnectionTimeout();
-            signalPeer({
+            await signalPeer({
                 type: 'call-accept',
                 call_id: call.id,
                 conversation_id: call.conversation_id,
@@ -2667,6 +2701,13 @@ import {
             }).catch(function () {});
             wantsVideo = call.call_type === 'video';
             await ensurePeerConnection(wantsVideo);
+            if (wantsVideo) {
+                cameraEnabled = true;
+                var pickupTrack = findLiveVideoTrack();
+                if (pickupTrack) pickupTrack.enabled = true;
+                attachLocalVideo();
+                syncCameraUi();
+            }
             if (!call._remoteOffer) {
                 await waitForRemoteOffer(8000);
             }
@@ -2887,10 +2928,15 @@ import {
 
     function applyPeerAnswered() {
         stopRingtone();
+        stopVibration();
         clearRingTimeout();
-        if (currentCall && currentCall.id != null) {
-            rememberCallId(answeredCallIds, currentCall.id);
+        var cid = currentCall && currentCall.id != null ? Number(currentCall.id) : null;
+        if (cid != null) rememberCallId(answeredCallIds, cid);
+        if (peerAnsweredFor != null && cid != null && peerAnsweredFor === cid) {
+            attachLocalVideo();
+            return;
         }
+        peerAnsweredFor = cid;
         startingCall = true;
         role = 'caller';
         setCallStatus('Connecting...');
@@ -2898,6 +2944,12 @@ import {
         attachLocalVideo();
         updateCameraUi();
         unlockRemotePlayback();
+        var ice = pc && (pc.iceConnectionState || pc.connectionState);
+        if (ice === 'connected' || ice === 'completed') {
+            callConnected = true;
+            setCallStatus('Connected');
+            maybeStartConnectedTimer();
+        }
         signalMediaState();
     }
 
@@ -3000,11 +3052,16 @@ import {
         }
 
         if (payload.type === 'call-accepted' || payload.type === 'accepted') {
+            if (payload.call_id != null && currentCall && Number(currentCall.id) !== Number(payload.call_id)) {
+                return;
+            }
             var meAccept = myIdentity();
             var iAmCallerAccept = currentCall
                 && Number(currentCall.caller_id) === meAccept.id
-                && portalTypesMatch(currentCall.caller_type, meAccept.type);
-            if ((!iAmCallerAccept && role !== 'caller') || !sameCall(payload)) return;
+                && (!meAccept.type || portalTypesMatch(currentCall.caller_type, meAccept.type)
+                    || Number(currentCall.caller_id) === meAccept.id);
+            if (role === 'callee' && !iAmCallerAccept) return;
+            if (!currentCall && payload.call_id == null) return;
             role = 'caller';
             applyPeerAnswered();
             return;
@@ -3069,14 +3126,21 @@ import {
         }
 
         if (payload.type === 'answer') {
-            if (!sameCall(payload)) return;
+            if (payload.call_id != null && currentCall && Number(currentCall.id) !== Number(payload.call_id)) {
+                return;
+            }
+            if (!currentCall) return;
+            stopRingtone();
+            stopVibration();
 
             var isRenego = !!(payload.renegotiate) || (callConnected && pc && pc.signalingState === 'have-local-offer');
-            if (role !== 'caller' && !isRenego) return;
+            if (role === 'callee' && !isRenego) return;
 
-            if (pc && payload.sdp && pc.signalingState === 'have-local-offer') {
+            if (pc && payload.sdp && (pc.signalingState === 'have-local-offer' || pc.signalingState === 'stable')) {
                 try {
-                    await pc.setRemoteDescription(payload.sdp);
+                    if (pc.signalingState === 'have-local-offer') {
+                        await pc.setRemoteDescription(payload.sdp);
+                    }
                     while (iceQueue.length) {
                         await pc.addIceCandidate(iceQueue.shift());
                     }
@@ -3090,7 +3154,7 @@ import {
                 return;
             }
 
-            if (role !== 'caller') return;
+            if (role === 'callee' && !isRenego) return;
             applyPeerAnswered();
             if (payload.started_at || payload.answered_at) {
                 currentCall = Object.assign({}, currentCall || {}, {
@@ -3141,6 +3205,11 @@ import {
             return;
         }
 
+        if (row.status === 'ringing' && currentCall && Number(currentCall.id) === Number(row.id)
+            && (answeredCallIds[Number(row.id)] || startingCall || callConnected || peerAnsweredFor === Number(row.id))) {
+            return;
+        }
+
         if (row.status === 'ringing' && isReceiver && !isGroupRow) {
             if (row.id != null && (isCallAlreadyHandled(row.id) || isActivelyInCall(row.id))) return;
             role = 'callee';
@@ -3163,7 +3232,9 @@ import {
             if (row.id != null) markCallTerminal(row.id);
             hideIncoming();
             stopRingtone();
-            if (isCaller) {
+            stopVibration();
+            var mineOutgoing = isCaller || (role === 'caller' && currentCall && Number(currentCall.id) === Number(row.id));
+            if (mineOutgoing) {
                 role = 'caller';
                 if (!currentCall || Number(currentCall.id) !== Number(row.id)) {
                     currentCall = Object.assign({}, currentCall || {}, {
