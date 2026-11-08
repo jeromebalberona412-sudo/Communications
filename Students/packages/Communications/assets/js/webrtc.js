@@ -436,6 +436,19 @@ import {
         }
     }
 
+    /**
+     * FIX BUG #3: Force stop call timer and reset state
+     * Called before starting any new call to ensure clean state
+     */
+    function stopCallTimer() {
+        if (callTimer) {
+            clearInterval(callTimer);
+            callTimer = null;
+        }
+        callStartedAt = null;
+        lastCallDurationMs = 0;
+    }
+
     function endedCopy(reason, endedByRole) {
         var actor = endedByRole || role;
         switch (reason) {
@@ -721,16 +734,28 @@ import {
     }
 
     function signalPeer(payload) {
-        if (!window.CommsRealtime || !currentCall) return Promise.resolve();
+        if (!window.CommsRealtime) return Promise.resolve();
+        
+        // FIX BUG: Allow signaling even when currentCall is null (for hangup signals)
+        // Use payload values if currentCall is not available
+        var conversationId = (currentCall && currentCall.conversation_id) || payload.conversation_id;
+        var callId = (currentCall && currentCall.id) || payload.call_id;
+        
+        if (!conversationId) {
+            console.warn('Cannot signal: no conversation_id available');
+            return Promise.resolve();
+        }
+        
         var me = myIdentity();
         payload.from_user_id = me.id;
         payload.from_user_type = me.type;
         payload.from_name = me.name || payload.from_name;
-        payload.call_id = payload.call_id || currentCall.id;
-        payload.conversation_id = payload.conversation_id || currentCall.conversation_id;
+        payload.call_id = payload.call_id || callId;
+        payload.conversation_id = payload.conversation_id || conversationId;
+        
         var targets = signalTargets();
-        subscribeCallChannel(currentCall.conversation_id);
-        return window.CommsRealtime.broadcastSignal(currentCall.conversation_id, payload, {
+        subscribeCallChannel(conversationId);
+        return window.CommsRealtime.broadcastSignal(conversationId, payload, {
             peerId: targets.peerId,
             peerType: targets.peerType,
             peers: targets.peers
@@ -1306,27 +1331,34 @@ import {
      * interval ticks, so a throttled background tab cannot drift. The server
      * timestamp is the shared source of truth for both participants and the
      * server clock offset removes any difference between the two devices.
+     * 
+     * CRITICAL: Always clears existing timer before creating new one to prevent
+     * multiple intervals running simultaneously.
      */
     function startTimer(serverStartedAt, serverTime) {
         applyServerClock(serverTime);
 
-        // FIX BUG #3: Always clear old timer before starting new one
+        // FIX BUG #3: ALWAYS clear existing timer first to prevent multiple intervals
         if (callTimer) {
             clearInterval(callTimer);
             callTimer = null;
         }
 
-        // FIX BUG #3: Always reset callStartedAt for new calls
+        // FIX BUG #3: Always set fresh timestamp for each call
         if (serverStartedAt) {
             var parsed = Date.parse(serverStartedAt);
             if (!isNaN(parsed)) {
                 callStartedAt = parsed;
+            } else {
+                // Fallback if server time is invalid
+                callStartedAt = Date.now() + clockOffsetMs;
             }
         } else {
-            // Always set fresh timestamp for new calls
+            // No server time provided - use local time
             callStartedAt = Date.now() + clockOffsetMs;
         }
         
+        // Start fresh timer interval
         renderTimer();
         callTimer = setInterval(function () {
             renderTimer();
@@ -2039,10 +2071,8 @@ import {
         if (!window.Comms || startingCall) return;
         startingCall = true;
         
-        // Ensure timer is fully reset before starting new call (REVIEW FIX #1)
-        clearInterval(callTimer);
-        callTimer = null;
-        callStartedAt = null;
+        // FIX BUG #3: Force stop any existing timer before starting new call
+        stopCallTimer();
         
         var r = routes();
         try {
@@ -2222,10 +2252,8 @@ import {
         if (acceptedCallId) rememberCallId(answeredCallIds, acceptedCallId);
         answeredCall = call;
 
-        // Ensure timer is fully reset before starting new call (REVIEW FIX #1)
-        clearInterval(callTimer);
-        callTimer = null;
-        callStartedAt = null;
+        // FIX BUG #3: Force stop any existing timer before accepting new call
+        stopCallTimer();
 
         clearRingTimeout();
         stopRingtone();
@@ -2415,24 +2443,32 @@ import {
         rememberCallContext(callSnapshot);
         stopRingtone();
         hideIncoming();
-        var signalPromise = signalPeer({
-            type: 'hangup',
-            reason: 'ended',
-            ended_by_role: role || 'caller',
-            call_id: callSnapshot.id,
-            conversation_id: callSnapshot.conversation_id,
-            caller_id: callSnapshot.caller_id,
-            caller_type: callSnapshot.caller_type,
-            receiver_id: callSnapshot.receiver_id,
-            receiver_type: callSnapshot.receiver_type
-        });
+        
+        // FIX BUG #1: Send hangup signal BEFORE nulling currentCall
+        // and WAIT for it to ensure the other participant receives it
+        try {
+            await signalPeer({
+                type: 'hangup',
+                reason: 'ended',
+                ended_by_role: role || 'caller',
+                call_id: callSnapshot.id,
+                conversation_id: callSnapshot.conversation_id,
+                caller_id: callSnapshot.caller_id,
+                caller_type: callSnapshot.caller_type,
+                receiver_id: callSnapshot.receiver_id,
+                receiver_type: callSnapshot.receiver_type
+            });
+        } catch (err) {
+            console.error('Failed to send hangup signal:', err);
+        }
+        
+        // Now safe to clean up local state
         currentCall = null;
         await cleanupMediaOnly();
         // The server owns the end timestamp and the duration.
         var serverCall = await withTimeout(updateCallStatus(callSnapshot.id, 'ended'), 4000);
         showCallEnded('ended', peerName, callSnapshot.id, role, serverCall);
         refreshCallChat(callSnapshot.conversation_id);
-        signalPromise.catch(function () {});
     }
 
     function sameCall(payload) {
@@ -2554,10 +2590,17 @@ import {
             var peerName = (currentCall && currentCall.peer && currentCall.peer.name) || '';
             var hangupId = (currentCall && currentCall.id) || payload.call_id;
             var hangupConv = (currentCall && currentCall.conversation_id) || payload.conversation_id;
+            
+            // FIX BUG #1 & #3: Mark call as terminal and cleanup immediately
             if (hangupId != null) markCallTerminal(hangupId);
+            
+            // FIX BUG #2: Stop the timer immediately when call ends
+            stopCallTimer();
+            
             currentCall = null;
             role = null;
             await cleanupMediaOnly();
+            
             // The peer already ended the call server-side: read the
             // authoritative timestamps and duration from the server.
             var serverState = await withTimeout(fetchCallState(hangupId), 4000);
