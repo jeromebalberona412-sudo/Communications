@@ -209,7 +209,7 @@
                 var role = m.participant_role === 'admin' ? 'Admin' : 'Member';
                 var position = m.federation_position || m.position || '';
                 var isCurrentUser = Number(m.id) === Number(state.currentUserId);
-                html += '<div class="comms-group-member" role="listitem" data-user-id="' + Number(m.id || 0) + '" data-user-type="' + Comms.escapeHtml(m.user_type || m.type || '') + '">' +
+                html += '<div class="comms-group-member" role="listitem" data-user-id="' + Number(m.id || 0) + '" data-user-type="' + Comms.escapeHtml(m.user_type || m.type || state.portalUserType) + '" data-user-name="' + Comms.escapeHtml(mName) + '">' +
                     memberAvatarHtml(m) +
                     '<div class="comms-group-member-main">' +
                     '<div class="comms-group-member-name">' + Comms.escapeHtml(mName) + '</div>' +
@@ -217,20 +217,10 @@
                     (position ? Comms.escapeHtml(String(position)) : Comms.escapeHtml(role)) +
                     (position && role === 'Admin' ? ' · Admin' : '') +
                     '</div></div>';
-                if (mode === 'call' && !isCurrentUser) {
+                if (!isCurrentUser) {
                     html += '<div class="comms-group-member-actions">' +
-                        '<button type="button" class="comms-btn-secondary comms-group-call-btn" data-call-type="voice" data-user-id="' + Number(m.id) + '">Voice</button>' +
-                        '<button type="button" class="comms-btn-secondary comms-group-call-btn" data-call-type="video" data-user-id="' + Number(m.id) + '">Video</button>' +
-                        '</div>';
-                } else if (mode === 'members' && !isCurrentUser) {
-                    // Add Message and Call buttons in View Members modal
-                    html += '<div class="comms-group-member-actions">' +
-                        '<button type="button" class="comms-btn-secondary comms-member-message-btn" data-user-id="' + Number(m.id) + '" title="Send message">' +
-                        '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>' +
-                        'Message</button>' +
-                        '<button type="button" class="comms-btn-secondary comms-member-call-btn" data-user-id="' + Number(m.id) + '" title="Start call">' +
-                        '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>' +
-                        'Call</button>' +
+                        '<button type="button" class="comms-btn-secondary comms-member-message-btn" data-user-id="' + Number(m.id) + '" data-user-name="' + Comms.escapeHtml(mName) + '" data-user-type="' + Comms.escapeHtml(m.type || m.user_type || state.portalUserType) + '">Message</button>' +
+                        '<button type="button" class="comms-btn-secondary comms-member-call-btn" data-user-id="' + Number(m.id) + '" data-user-name="' + Comms.escapeHtml(mName) + '">Call</button>' +
                         '</div>';
                 }
                 html += '</div>';
