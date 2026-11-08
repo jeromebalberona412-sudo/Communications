@@ -1764,16 +1764,20 @@ import {
         clearConnectionTimeout();
         stopCallHeartbeat();
         if (ringTimer || ringCtx) stopRingtone();
+        
+        // FIX BUG #3: Always clear timer properly
         clearInterval(callTimer);
         callTimer = null;
         lastCallDurationMs = callElapsedMs();
         callStartedAt = null;
+        
         cameraEnabled = false;
         wantsVideo = false;
         callConnected = false;
         // Critical: stale role=caller blocked ringing poll / syncIncomingFromServer.
         role = null;
         startingCall = false;
+        
         if (els.endBtn) setCtrlLabel(els.endBtn, 'End');
         if (els.muteBtn) {
             els.muteBtn.hidden = false;
@@ -1818,7 +1822,9 @@ import {
             } catch (e) { /* ignore */ }
             audioUnlockCtx = null;
         }
+        // FIX BUG #4 & #5: Clear ICE queue to prevent stale candidates
         iceQueue = [];
+        
         remoteStream = null;
         negotiating = false;
         if (els.remoteVideo) {
@@ -1839,6 +1845,7 @@ import {
         if (els.remoteVideo) {
             els.remoteVideo.classList.remove('is-remote-portrait', 'is-remote-landscape');
         }
+        // FIX BUG #5: Always teardown call channel to prevent stale signals
         if (window.CommsRealtime && typeof window.CommsRealtime.teardownCallChannel === 'function') {
             window.CommsRealtime.teardownCallChannel();
         }
