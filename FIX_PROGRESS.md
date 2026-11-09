@@ -1,170 +1,119 @@
-# WebRTC End-Call Synchronization Fix - Progress
+# Floating Chat Window Implementation Progress
 
-## TASK PRIORITY
-1. ✅ **COMPLETED** - Fix WebRTC end-call realtime synchronization 
-2. ⏳ Header "Chats" dropdown navigation improvements (QUEUED)
+## Status: ✅ IMPLEMENTATION COMPLETE - BROWSER TESTING REQUIRED
 
-## IMPLEMENTATION COMPLETED
+## Implementation Completed
 
-### Root Causes Discovered
+### Core Files Modified (BOTH Students AND Teachers apps)
 
-**1:1 Calls - Delayed UI Update:**
-- Hangup handler was AWAITING `fetchCallState()` with 4-second timeout before showing "Call Ended"
-- Local `endCall()` was AWAITING `updateCallStatus()` server update before showing UI
-- Result: 0-4 second delay before user saw call ended screen
+#### 1. JavaScript Files
+- [x] `packages/Communications/assets/js/floating-chat.js` - NEW FILE - Main floating window logic (complete)
+- [x] `packages/Communications/assets/js/header-chat.js` - Hook conversation clicks to openChatWindow() (complete)
+- [x] `resources/js/communications.js` - Import floating-chat.js and CSS (complete)
 
-**Group Calls - Wrong Termination Logic:**
-- When caller/host left, code ended ENTIRE call for everyone
-- No distinction between "participant leaves" vs "host ends call"
-- Result: Group calls ended prematurely when host left
+#### 2. CSS Files
+- [x] `packages/Communications/assets/css/floating-chat.css` - NEW FILE - Floating window styles (complete)
 
-### Files Modified
+#### 3. Build Configuration
+- [x] Updated communications.js to include new CSS/JS (complete)
 
-**Students Portal:**
-✅ `packages/Communications/assets/js/webrtc.js` (lines 2914-2958, 3145-3195)
-✅ `packages/Communications/assets/js/webrtc-group.js` (lines 603-633, 703-723)
+## Files Changed
 
-**Teachers Portal:**
-✅ `packages/Communications/assets/js/webrtc.js` (lines 2914-2958, 3145-3195)
-✅ `packages/Communications/assets/js/webrtc-group.js` (lines 603-633, 703-723)
+### Students App
+1. `/Students/packages/Communications/assets/js/floating-chat.js` - NEW - 700+ lines
+2. `/Students/packages/Communications/assets/css/floating-chat.css` - NEW - 400+ lines
+3. `/Students/packages/Communications/assets/js/header-chat.js` - MODIFIED - Added openChatWindow() integration
+4. `/Students/resources/js/communications.js` - MODIFIED - Added imports
 
-### Changes Applied
+### Teachers App
+1. `/Teachers/packages/Communications/assets/js/floating-chat.js` - NEW - 700+ lines
+2. `/Teachers/packages/Communications/assets/css/floating-chat.css` - NEW - 400+ lines
+3. `/Teachers/packages/Communications/assets/js/header-chat.js` - MODIFIED - Added openChatWindow() integration
+4. `/Teachers/resources/js/communications.js` - MODIFIED - Added imports
 
-#### 1:1 Call Termination - IMMEDIATE UI UPDATE
+## Syntax Checks Performed
+✅ JavaScript syntax check passed (header-chat.js)
+✅ JavaScript syntax check passed (floating-chat.js)
 
-**Local `endCall()` function:**
-- Added `stopVibration()` and explicit `stopCallTimer()` calls
-- Set `role = null` immediately
-- Show "Call Ended" UI IMMEDIATELY with `showCallEnded(reason, peerName, callId, role, null)`
-- Update server status in BACKGROUND (non-blocking)
-- If server returns duration, update display asynchronously
+## Features Implemented
 
-**Remote `hangup` handler:**
-- Added explicit `stopRingtone()`, `stopVibration()`, `hideIncoming()` calls
-- Show "Call Ended" UI IMMEDIATELY (don't await server fetch)
-- Fetch server state in BACKGROUND
-- If server has better duration data, update UI asynchronously
+### Core Functionality
+- ✅ Floating window opens when clicking conversations in header Chats panel
+- ✅ Window docked at bottom-right like Facebook Messenger
+- ✅ Maximum 3 windows side-by-side on desktop
+- ✅ Full-screen mode on mobile (using dvh for safe areas)
+- ✅ Minimizes to avatar bubble with unread badge
+- ✅ Window persistence across page navigation (sessionStorage)
+- ✅ Clear state on logout
+- ✅ Prevents duplicate windows (focuses existing)
+- ✅ Closes header panel after opening window
+- ✅ On Messages page: redirects to conversation instead of floating window
 
-**Result:** Call ends instantly on both sides with 0ms delay
+### Message Handling
+- ✅ Loads last 20 messages initially
+- ✅ Scrolls to newest message
+- ✅ Sends messages (optimistic UI with temp client ID)
+- ✅ Replaces temp message with server-confirmed message
+- ✅ Handles realtime incoming messages
+- ✅ Marks conversation as read when viewing
+- ✅ Updates unread badges everywhere
+- ✅ No duplicate messages from realtime events
 
-#### Group Call Termination - PROPER SIGNAL HANDLING
+### Window Controls
+- ✅ Voice call button (for private chats only)
+- ✅ Video call button (for private chats only)
+- ✅ Minimize to bubble
+- ✅ Expand to Messages page with conversation selected
+- ✅ Close button
 
-**New signal types:**
-- `group-end` - Host ending entire group call (everyone disconnects)
-- `group-leave` - Individual participant leaving (others continue)
+### UI/UX
+- ✅ Header shows peer name, avatar, and status (Online for real presence data, member count for groups)
+- ✅ Message bubbles styled (blue for mine, gray for theirs, system messages centered)
+- ✅ Textarea auto-grows, Enter sends, Shift+Enter new line
+- ✅ Typing indicator integration (broadcasts and displays)
+- ✅ Smooth open/minimize animations
+- ✅ Z-index management (focus brings to front)
+- ✅ Responsive positioning on window resize
+- ✅ Lower z-index than modals and call UI
 
-**`leaveGroupCall()` logic:**
-```javascript
-var isEndingEntireCall = isCaller && (reason === 'ended' || reason === 'cancelled' || reason === 'missed');
+### Reusability
+- ✅ Reuses existing realtime.js subscriptions
+- ✅ Reuses existing Comms.api() for loading/sending messages
+- ✅ Reuses existing WebRTC startCall() for voice/video
+- ✅ Works with existing presence system
+- ✅ Global openChatWindow(conversationId, opts) function available
 
-if (isEndingEntireCall) {
-    await signal({ type: 'group-end', reason: reason || 'ended' });
-} else {
-    await signal({ type: 'group-leave', reason: reason || 'ended' });
-}
-```
+## NOT IMPLEMENTED (Out of Scope)
+- File attachments from floating window (+ button present but not wired)
+- Reaction picker from floating window
+- Message editing/deletion from floating window
+- Group member list from floating window
+- Auto-scroll on new messages (implemented basic scroll to bottom)
+- "View Members Message" button integration (requires chat.js modifications)
+- Call history entry clicks (requires additional integration)
+- Message toast/notification clicks (requires additional integration)
 
-**Signal handlers:**
-- `group-leave`: Remove only that participant's peer connection and tile
-- `group-end`: Everyone calls `leaveGroupCall('ended')` and disconnects
+## Tests NOT Performed (Manual Testing Required)
+- ❌ Browser testing (Chrome, Firefox, Safari, Edge)
+- ❌ Mobile responsive testing (iOS, Android)
+- ❌ Opening 3+ conversations (oldest closes)
+- ❌ Minimize and restore
+- ❌ Cross-page persistence
+- ❌ Realtime message delivery
+- ❌ Send message and see it appear once
+- ❌ Typing indicator display
+- ❌ Voice/video call from window
+- ❌ Expand to Messages page
+- ❌ Duplicate window prevention
+- ❌ Group chat vs private chat differences
+- ❌ Online status display
+- ❌ Logout clears state
+- ❌ Z-index stacking with modals/calls
+- ❌ Session storage across refresh
 
-**Result:** 
-- Participant leaves → Others continue
-- Host ends call → Everyone disconnects immediately
-
-### How It Works Now
-
-**1:1 Call Termination:**
-1. User clicks End Call
-2. Local cleanup happens INSTANTLY:
-   - Timer stops
-   - Ringtone/vibration stops
-   - Media tracks stop
-   - Peer connection closes
-   - "Call Ended" UI shows immediately
-3. `call-end` signal sent via Supabase Realtime
-4. Remote side receives `hangup` event
-5. Remote cleanup happens INSTANTLY (same as step 2)
-6. Server status updates happen in background (don't block UI)
-
-**Group Call Termination:**
-
-**Scenario A - Participant Leaves:**
-1. Participant clicks End Call
-2. Sends `group-leave` signal
-3. Other participants receive signal
-4. They close only that peer connection and remove that video tile
-5. Call continues for remaining participants
-
-**Scenario B - Host Ends Entire Call:**
-1. Host clicks End Call
-2. Sends `group-end` signal (because isCaller + reason='ended')
-3. All participants receive signal
-4. Everyone calls `leaveGroupCall('ended')`
-5. Everyone's cleanup runs: close all peer connections, stop media, hide UI
-6. Entire group call ends for everyone
-
-### Laravel Caches Cleared
-- Students: ✅ Cleared
-- Teachers: ✅ Cleared
-
-## Tests Performed
-
-### Static Code Analysis:
-✅ PHP syntax check (both portals compile)
-✅ JavaScript syntax valid
-✅ Code flow traced for all scenarios
-✅ Signal type consistency verified
-✅ Cleanup function idempotency verified
-
-### NOT TESTED (Requires Real Browsers):
-⚠️ All manual test scenarios require 2+ browsers with cameras
-
-## Manual Testing Checklist
-
-**1:1 Calls:**
-- [ ] Teacher calls Student → Teacher clicks End → Student ends immediately
-- [ ] Teacher calls Student → Student clicks End → Teacher ends immediately  
-- [ ] Student calls Teacher → Student clicks End → Teacher ends immediately
-- [ ] Student calls Teacher → Teacher clicks End → Student ends immediately
-- [ ] Both click End simultaneously → Clean termination, no duplicates
-- [ ] End during ringing → Both sides stop ringing immediately
-- [ ] End during ICE connecting → Both sides terminate correctly
-
-**Group Calls (AM GC, PM GC, Custom Groups):**
-- [ ] Teacher starts group call with 3 Students
-- [ ] One Student leaves → Only that Student disconnects, others continue
-- [ ] Teacher (host) clicks End → ALL participants disconnect immediately
-- [ ] Another Student starts group call → Original Student leaves → Others continue
-- [ ] Host ends entire call → Everyone sees "Call Ended" instantly
-
-**Race Conditions:**
-- [ ] Receive old call-end after new call started → New call unaffected
-- [ ] Duplicate hangup events → Only one cleanup, no errors
-- [ ] Rapid End + Redial → New call works correctly
-
-**Network Recovery:**
-- [ ] Participant loses internet during call → Reconnects → Sees correct state
-- [ ] Call ended while disconnected → Stale call cleaned up on reconnect
-
-## Remaining Limitations
-
-1. **Duration Display Accuracy**: 
-   - Shows immediately with local timer value
-   - Updates asynchronously if server has more accurate duration
-   - Usually within 1 second accuracy
-
-2. **Server Status Update Failures**:
-   - If server is unreachable, call still ends locally
-   - Server sync happens in background with timeout
-   - No user-visible error if server update fails
-
-3. **Supabase Connection Required**:
-   - Realtime signals require active Supabase connection
-   - If connection is down, peer won't receive termination event
-   - Fallback: Server polling (existing mechanism, not modified)
-
-## Next Task
-Once manual testing confirms end-call synchronization works:
-- Proceed to Task 2: Header "Chats" Dropdown Navigation
-
+## Next Steps for Full Implementation
+1. Build assets: `npm run build` in both Students and Teachers
+2. Manual browser testing using checklist below
+3. Optional: Wire up member "Message" buttons in chat.js
+4. Optional: Wire up call history entry clicks
+5. Optional: Wire up notification toast clicks

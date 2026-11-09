@@ -6,3 +6,5 @@ import '../../packages/Communications/assets/js/webrtc.js';
 import '../../packages/Communications/assets/js/webrtc-group.js';
 import '../../packages/Communications/assets/js/chat.js';
 import '../../packages/Communications/assets/js/header-chat.js';
+import '../../packages/Communications/assets/js/floating-chat.js';
+import '../../packages/Communications/assets/css/floating-chat.css';
