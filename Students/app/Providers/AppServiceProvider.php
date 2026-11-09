@@ -3,7 +3,9 @@
 namespace App\Providers;
 
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -24,6 +26,14 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        View::addLocation(base_path('shared/Views'));
+        Blade::anonymousComponentPath(base_path('shared/Views/components'));
+
+        $this->loadViewsFrom(app_path('Modules/Authentication/Views'), 'authentication');
+        $this->loadViewsFrom(app_path('Modules/Dashboard/Views'), 'dashboard');
+        $this->loadViewsFrom(app_path('Modules/Messages/Views'), 'messages');
+        $this->loadViewsFrom(app_path('Modules/Messages/Views'), 'communications');
+
         Paginator::useBootstrapFive();
 
         $appUrl = (string) config('app.url', '');

@@ -2,7 +2,7 @@
 
 namespace Tests\Concerns;
 
-use App\Modules\Communications\Support\SchemaCache;
+use App\Modules\Messages\Support\SchemaCache;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Schema;
 use Tests\Support\CommunicationsSchema;

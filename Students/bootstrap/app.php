@@ -1,6 +1,6 @@
 <?php
 
-use App\Http\Middleware\EnsureStudentRole;
+use App\Modules\Authentication\Middleware\EnsureStudentRole;
 use App\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;

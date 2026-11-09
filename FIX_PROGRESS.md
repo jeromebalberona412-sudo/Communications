@@ -1,5 +1,8 @@
 # FIX_PROGRESS — 2026-11-09-c
 
+## Modular Laravel architecture (2026-11-10)
+Both apps now use `app/Modules/{Authentication,Dashboard,Messages}` plus `resources/views/layouts` and `resources/js/modules/messages`. Vite entry: `resources/js/modules/messages/index.js`.
+
 ## Status
 - Phase 0: done
 - Phase 1: done (branding → Messages). **Set `APP_NAME=Messages` in each app `.env` yourself.** I did not edit `.env`.

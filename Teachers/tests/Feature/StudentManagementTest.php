@@ -4,10 +4,10 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\VerifyCsrfToken;
 use App\Models\User;
-use App\Modules\Communications\Models\Conversation;
-use App\Modules\Communications\Models\ConversationParticipant;
-use App\Modules\Communications\Services\DefaultGroupChatService;
-use App\Modules\Communications\Support\SchemaCache;
+use App\Modules\Messages\Models\Conversation;
+use App\Modules\Messages\Models\ConversationParticipant;
+use App\Modules\Messages\Services\DefaultGroupChatService;
+use App\Modules\Messages\Support\SchemaCache;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
