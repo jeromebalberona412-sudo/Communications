@@ -104,6 +104,9 @@ async function cleanupMediaOnly() {
     
     S.remoteStream = null;
     S.remoteDisplayStream = null;
+    S.remotePlaybackStream = null;
+    S.pendingRemoteAnswer = null;
+    S._offerRebuildTried = false;
     S._remoteVideoSig = '';
     S.negotiating = false;
     if (S.els.remoteVideo) {

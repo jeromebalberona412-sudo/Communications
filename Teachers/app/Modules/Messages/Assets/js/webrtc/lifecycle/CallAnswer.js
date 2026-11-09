@@ -78,9 +78,7 @@ async function tryCompleteCalleeAnswer() {
             server_time: call.server_time || null
         });
         S.answerAppliedFor = callId;
-        while (S.iceQueue.length && S.pc) {
-            try { await S.pc.addIceCandidate(S.iceQueue.shift()); } catch (iceErr) { /* stale candidate */ }
-        }
+        if (typeof api.flushIceQueue === 'function') await api.flushIceQueue();
         api.attachLocalVideo();
         api.refreshRemoteFromReceivers();
         api.signalMediaState();
@@ -93,6 +91,18 @@ async function tryCompleteCalleeAnswer() {
         return true;
     } catch (err) {
         console.warn('Callee answer failed', err);
+        var msg = String((err && (err.message || err.name)) || '');
+        if (!S._offerRebuildTried && /m-line|order|InvalidAccess|setRemoteDescription/i.test(msg)) {
+            S._offerRebuildTried = true;
+            try {
+                if (S.pc) {
+                    S.pc.ontrack = null;
+                    S.pc.close();
+                }
+            } catch (eClose) { /* ignore */ }
+            S.pc = null;
+            S.answerAppliedFor = null;
+        }
         return false;
     } finally {
         S.negotiating = false;

@@ -498,8 +498,15 @@ body.comms-in-call {
     color: #fff;
     font-variant-numeric: tabular-nums;
 }
-.comms-call-overlay.is-connected .comms-call-timer {
+.comms-call-overlay.is-connected .comms-call-timer,
+#commsCallTimer.is-live {
     display: block !important;
     visibility: visible !important;
+}
+.comms-call-overlay.has-remote-video:not(.is-remote-camera-off) .comms-video-off--remote {
+    display: none !important;
+}
+.comms-remote-stage .comms-remote-video {
+    z-index: 1;
 }
 

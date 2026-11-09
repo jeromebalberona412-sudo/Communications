@@ -240,6 +240,9 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
         }
         var offer = await S.pc.createOffer();
         await S.pc.setLocalDescription(offer);
+        if (S.pendingRemoteAnswer && typeof api.applyRemoteAnswer === 'function') {
+            try { await api.applyRemoteAnswer(S.pendingRemoteAnswer); } catch (eAns) { /* answer handler retries */ }
+        }
         await api.signalPeer({
             type: 'offer',
             call_id: S.currentCall.id,
@@ -276,10 +279,12 @@ async function startCall(conversationId, callType, conversation, receiverId) {
         try {
             api.assertMediaReady();
         } catch (err) {
+            api.stopRingtone();
             api.toast(api.callErrorMessage(err), 'error');
             return;
         }
         if (!window.CommsRealtime || !window.CommsRealtime.enabled) {
+            api.stopRingtone();
             api.toast('Realtime is not configured. Rebuild after setting VITE_SUPABASE keys.', 'error');
             return;
         }

@@ -58,6 +58,18 @@ export function bindCallControls() {
         if (e.target && e.target.closest('#commsCallEndedRedial')) {
             e.preventDefault();
             api.unlockCallAudio();
+            api.ensureRingAudio();
+            if (S.ringAudio) {
+                var ringUnlock = S.ringAudio.play();
+                if (ringUnlock && typeof ringUnlock.then === 'function') {
+                    ringUnlock.then(function () {
+                        if (!S.ringtonePlaying && S.ringAudio) {
+                            S.ringAudio.pause();
+                            S.ringAudio.currentTime = 0;
+                        }
+                    }).catch(function () { /* ignore */ });
+                }
+            }
             api.redialLastCall();
             return;
         }

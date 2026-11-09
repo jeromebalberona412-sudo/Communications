@@ -51,6 +51,7 @@ function stopCallTimer() {
     S.lastCallDurationMs = 0;
     if (S.els.timer) {
         S.els.timer.textContent = '00:00';
+        S.els.timer.classList.remove('is-live');
         if (!S.callConnected) {
             S.els.timer.hidden = true;
             S.els.timer.setAttribute('hidden', '');
@@ -64,11 +65,13 @@ function syncCallTimerVisibility() {
     if (S.callConnected && S.callStartedAt) {
         S.els.timer.hidden = false;
         S.els.timer.removeAttribute('hidden');
+        S.els.timer.classList.add('is-live');
         if (S.els.inCall) S.els.inCall.classList.add('is-connected');
         api.renderTimer();
         return;
     }
     if (!S.callConnected) {
+        S.els.timer.classList.remove('is-live');
         S.els.timer.hidden = true;
         S.els.timer.setAttribute('hidden', '');
     }

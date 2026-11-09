@@ -301,18 +301,51 @@ function remoteVideoSignature(stream) {
     }).filter(Boolean).join('|');
 }
 
+function isLocalMedia(stream) {
+    if (!stream || !S.localStream) return false;
+    if (stream === S.localStream) return true;
+    if (typeof stream.getTracks !== 'function' || typeof S.localStream.getTracks !== 'function') return false;
+    var localIds = {};
+    S.localStream.getTracks().forEach(function (track) {
+        if (track) localIds[track.id] = true;
+    });
+    var tracks = stream.getTracks();
+    return tracks.length > 0 && tracks.every(function (track) { return !!(track && localIds[track.id]); });
+}
+
+function liveVideoTracks(stream) {
+    if (!stream || typeof stream.getVideoTracks !== 'function') return [];
+    return stream.getVideoTracks().filter(function (track) {
+        return track && track.readyState !== 'ended';
+    });
+}
+
+function rememberRemoteVideoTrack(track, inbound) {
+    if (!track || track.kind !== 'video') return;
+    if (S.localStream && S.localStream.getTracks().some(function (local) { return local && local.id === track.id; })) return;
+    if (!S.remotePlaybackStream) S.remotePlaybackStream = new MediaStream();
+    if (!S.remotePlaybackStream.getTrackById(track.id)) {
+        S.remotePlaybackStream.addTrack(track);
+    }
+    if (inbound && !isLocalMedia(inbound) && liveVideoTracks(inbound).length) {
+        S.remoteDisplayStream = inbound;
+    }
+}
+
 function bindRemoteMedia(stream) {
-    if (!stream) return;
-    var display = S.remoteDisplayStream || stream;
-    if (S.els.remoteVideo) {
-        var videoSource = (display && typeof display.getVideoTracks === 'function' && display.getVideoTracks().some(function (track) {
-            return track && track.readyState !== 'ended';
-        })) ? display : stream;
-        var videoTracks = typeof videoSource.getVideoTracks === 'function'
-            ? videoSource.getVideoTracks().filter(function (track) {
-                return track && track.readyState !== 'ended';
-            })
-            : [];
+    if (!stream && !S.remoteDisplayStream && !S.remotePlaybackStream) return;
+    var videoEl = document.getElementById('commsRemoteVideo');
+    if (videoEl) S.els.remoteVideo = videoEl;
+    var display = (S.remoteDisplayStream && !isLocalMedia(S.remoteDisplayStream) && liveVideoTracks(S.remoteDisplayStream).length)
+        ? S.remoteDisplayStream
+        : null;
+    var playback = (S.remotePlaybackStream && liveVideoTracks(S.remotePlaybackStream).length)
+        ? S.remotePlaybackStream
+        : null;
+    var fallback = (stream && !isLocalMedia(stream) && liveVideoTracks(stream).length) ? stream : null;
+    var videoSource = display || playback || fallback;
+    if (S.els.remoteVideo && videoSource) {
+        var videoTracks = liveVideoTracks(videoSource);
         var sig = remoteVideoSignature(videoSource);
         // Mute only this element so autoplay can paint the picture.
         // Remote speech stays on the separate audio element.
@@ -323,7 +356,12 @@ function bindRemoteMedia(stream) {
         S.els.remoteVideo.setAttribute('playsinline', '');
         S.els.remoteVideo.autoplay = true;
         S.els.remoteVideo.style.visibility = '';
-        if (videoTracks.length && S._remoteVideoSig !== sig) {
+        var current = S.els.remoteVideo.srcObject;
+        var currentHasTrack = current && typeof current.getVideoTracks === 'function'
+            && current.getVideoTracks().some(function (track) {
+                return track && videoTracks.some(function (kept) { return kept.id === track.id; });
+            });
+        if (videoTracks.length && (!currentHasTrack || S._remoteVideoSig !== sig)) {
             S._remoteVideoSig = sig;
             var sameIds = videoSource.getVideoTracks().every(function (track) {
                 return videoTracks.some(function (kept) { return kept.id === track.id; });
@@ -408,12 +446,10 @@ async function ensurePeerConnection(videoEnabled) {
         if (S.localStream && S.localStream.getTracks().some(function (local) {
             return local && local.id === track.id;
         })) return;
-        var inbound = ev.streams && ev.streams[0] ? ev.streams[0] : null;
-        if (track.kind === 'video' && inbound && typeof inbound.getVideoTracks === 'function' && inbound.getVideoTracks().length) {
-            S.remoteDisplayStream = inbound;
-        }
+        var inbound = ev.streams && ev.streams[0] && !isLocalMedia(ev.streams[0]) ? ev.streams[0] : null;
+        rememberRemoteVideoTrack(track, inbound);
         var merged = api.mergeRemoteTrack(track, inbound);
-        api.bindRemoteMedia(S.remoteDisplayStream || merged);
+        api.bindRemoteMedia(merged);
         api.unlockRemotePlayback();
         api.ensureRemoteAudioPlaying();
         if (ev.track && ev.track.kind === 'video') {

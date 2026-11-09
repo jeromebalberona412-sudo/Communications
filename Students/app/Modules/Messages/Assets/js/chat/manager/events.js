@@ -523,6 +523,9 @@ function unlockOutgoingRingGesture() {
             ctx._commsUnlocked = true;
         }
     } catch (err) { /* autoplay unlock is best-effort */ }
+    if (state.activeId && window.CommsWebRTC && typeof window.CommsWebRTC.primeOutgoingRingtone === 'function') {
+        window.CommsWebRTC.primeOutgoingRingtone();
+    }
 }
 
 els.voiceBtn.addEventListener('click', function () {

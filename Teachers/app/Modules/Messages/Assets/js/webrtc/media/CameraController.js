@@ -337,8 +337,13 @@ function syncCameraUi() {
     var remoteLive = typeof api.hasLiveRemoteVideo === 'function' && api.hasLiveRemoteVideo();
     var videoCall = typeof api.isVideoCallType === 'function' && api.isVideoCallType();
     if (S.els.remoteVideoOff) {
+        var attached = S.els.remoteVideo && S.els.remoteVideo.srcObject
+            && typeof S.els.remoteVideo.srcObject.getVideoTracks === 'function'
+            && S.els.remoteVideo.srcObject.getVideoTracks().some(function (track) {
+                return track && track.readyState !== 'ended';
+            });
         var cameraOff = !!videoCall && S.remoteCameraEnabled === false;
-        var connecting = !!videoCall && S.remoteCameraEnabled !== false && !remoteLive;
+        var connecting = !!videoCall && S.remoteCameraEnabled !== false && !remoteLive && !attached;
         var showRemotePlaceholder = cameraOff || connecting;
         S.els.remoteVideoOff.hidden = !showRemotePlaceholder;
         S.els.remoteVideoOff.setAttribute('aria-hidden', showRemotePlaceholder ? 'false' : 'true');

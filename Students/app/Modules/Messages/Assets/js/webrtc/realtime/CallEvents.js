@@ -263,18 +263,9 @@ async function handleSignal(payload) {
         var isRenego = !!(payload.renegotiate) || (S.callConnected && S.pc && S.pc.signalingState === 'have-local-offer');
         if (S.role === 'callee' && !isRenego) return;
 
-        if (S.pc && payload.sdp && (S.pc.signalingState === 'have-local-offer' || S.pc.signalingState === 'stable')) {
+        if (payload.sdp) {
             try {
-                if (S.pc.signalingState === 'have-local-offer') {
-                    var remoteAnswer = api.plainDescription
-                        ? api.plainDescription(payload.sdp, 'answer')
-                        : payload.sdp;
-                    await S.pc.setRemoteDescription(new RTCSessionDescription(remoteAnswer));
-                }
-                while (S.iceQueue.length) {
-                    try { await S.pc.addIceCandidate(S.iceQueue.shift()); } catch (iceErr) { /* stale */ }
-                }
-                api.refreshRemoteFromReceivers();
+                await api.applyRemoteAnswer(payload.sdp);
             } catch (e) { /* ignore duplicate/stale SDP */ }
         }
 
@@ -299,13 +290,59 @@ async function handleSignal(payload) {
 
     if ((payload.type === 'ice' || payload.type === 'ice-candidate') && payload.candidate) {
         if (!api.sameCall(payload)) return;
-        var remoteReady = !!(S.pc && (S.pc.currentRemoteDescription || S.pc.remoteDescription));
-        if (!S.pc || !remoteReady) {
-            S.iceQueue.push(payload.candidate);
-        } else {
-            try { await S.pc.addIceCandidate(payload.candidate); } catch (e) { /* ignore */ }
-        }
+        try { await api.addRemoteIceCandidate(payload.candidate); } catch (e) { /* ignore */ }
     }
+}
+
+function iceInit(raw) {
+    if (!raw) return null;
+    if (typeof raw === 'string') return { candidate: raw };
+    return {
+        candidate: raw.candidate || '',
+        sdpMid: raw.sdpMid == null ? null : raw.sdpMid,
+        sdpMLineIndex: raw.sdpMLineIndex == null ? null : raw.sdpMLineIndex,
+        usernameFragment: raw.usernameFragment || undefined
+    };
+}
+
+async function addRemoteIceCandidate(raw) {
+    var init = iceInit(raw);
+    if (!init || !init.candidate) return;
+    var remoteReady = !!(S.pc && (S.pc.currentRemoteDescription || S.pc.remoteDescription));
+    if (!S.pc || !remoteReady) {
+        S.iceQueue.push(init);
+        return;
+    }
+    await S.pc.addIceCandidate(new RTCIceCandidate(init));
+}
+
+async function flushIceQueue() {
+    if (!S.pc || !(S.pc.currentRemoteDescription || S.pc.remoteDescription)) return;
+    var pending = S.iceQueue.slice();
+    S.iceQueue = [];
+    var i;
+    for (i = 0; i < pending.length; i += 1) {
+        var init = iceInit(pending[i]);
+        if (!init || !init.candidate) continue;
+        try { await S.pc.addIceCandidate(new RTCIceCandidate(init)); } catch (e) { /* stale */ }
+    }
+}
+
+async function applyRemoteAnswer(sdp) {
+    if (!S.pc || !sdp) return false;
+    if (S.pc.signalingState !== 'have-local-offer') {
+        if (!(S.pc.signalingState === 'stable' && (S.pc.currentRemoteDescription || S.pc.remoteDescription))) {
+            S.pendingRemoteAnswer = sdp;
+        }
+        return false;
+    }
+    var remoteAnswer = api.plainDescription ? api.plainDescription(sdp, 'answer') : sdp;
+    await S.pc.setRemoteDescription(new RTCSessionDescription(remoteAnswer));
+    S.pendingRemoteAnswer = null;
+    await api.flushIceQueue();
+    api.refreshRemoteFromReceivers();
+    api.unlockRemotePlayback();
+    return true;
 }
 
 function handleCallRow(payload) {
@@ -533,6 +570,9 @@ function startRingingPoll() {
 
 
 api.applyPeerAnswered = applyPeerAnswered;
+api.applyRemoteAnswer = applyRemoteAnswer;
+api.addRemoteIceCandidate = addRemoteIceCandidate;
+api.flushIceQueue = flushIceQueue;
 api.handleSignal = handleSignal;
 api.handleCallRow = handleCallRow;
 api.syncIncomingFromServer = syncIncomingFromServer;

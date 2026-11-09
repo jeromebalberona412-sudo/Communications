@@ -235,16 +235,11 @@ function startOscillatorRing(incoming) {
             api.playToneBurst(S.ringCtx, [440, 480], now, 0.42, 0.24);
             api.playToneBurst(S.ringCtx, [440, 480], now + 0.52, 0.42, 0.24);
         } else {
-            api.playToneBurst(S.ringCtx, [440], now, 1.05, 0.2);
-            api.playToneBurst(S.ringCtx, [480], now + 1.05, 1.05, 0.2);
+            api.playToneBurst(S.ringCtx, [440, 480], now, 1.15, 0.18);
         }
     }
     scheduleCycle();
-    S.ringTimer = setInterval(scheduleCycle, incoming ? 2800 : 4000);
-}
-
-function outgoingRingAudible() {
-    return !!(S.ringtonePlaying && S.ringMode === 'outgoing' && S.ringTimer && S.ringOscillators.length);
+    S.ringTimer = setInterval(scheduleCycle, incoming ? 2800 : 3600);
 }
 
 function startRingtone(mode, callId) {
@@ -257,13 +252,18 @@ function startRingtone(mode, callId) {
     if (incoming && (S.startingCall || S.callConnected) && S.currentCall && Number(S.currentCall.id) === id) {
         return;
     }
-    if (!incoming && outgoingRingAudible() && (!id || !S.ringingCallId || Number(S.ringingCallId) === Number(id))) {
+    if (S.ringtonePlaying && S.ringMode === mode) {
         if (id) S.ringingCallId = id;
+        api.ensureRingAudio();
+        if (S.ringAudio && S.ringAudio.paused) {
+            var again = S.ringAudio.play();
+            if (again && typeof again.catch === 'function') {
+                again.catch(function () {
+                    if (S.ringtonePlaying && S.ringMode === mode) api.startOscillatorRing(incoming);
+                });
+            }
+        }
         return;
-    }
-    if (S.ringtonePlaying && S.ringingCallId != null && id && Number(S.ringingCallId) === id && S.ringMode === mode) {
-        if (incoming && S.ringAudio && !S.ringAudio.paused) return;
-        if (!incoming && outgoingRingAudible()) return;
     }
     if (S.ringtonePlaying) {
         api.stopRingtone();
@@ -271,16 +271,6 @@ function startRingtone(mode, callId) {
     S.ringtonePlaying = true;
     S.ringMode = mode;
     S.ringingCallId = id || null;
-    if (!incoming) {
-        // Ringback is a long two-tone, not the recipient's double-burst.
-        if (S.ringAudio) {
-            try { S.ringAudio.pause(); } catch (ePause) { /* ignore */ }
-        }
-        api.unlockCallAudio();
-        api.startOscillatorRing(false);
-        api.stopVibration();
-        return;
-    }
     api.ensureRingAudio();
 
     if (S.ringAudio) {
@@ -626,9 +616,10 @@ api.unlockCallAudio = unlockCallAudio;
 api.ensureRingAudio = ensureRingAudio;
 api.makeRingtoneDataUri = makeRingtoneDataUri;
 function primeOutgoingRingtone() {
-    if (S.callConnected) return;
+    if (S.callConnected || S.currentCall || S.startingCall || S.pendingStart) return;
     api.bindRingtoneUnlock();
     api.unlockCallAudio();
+    api.ensureRingAudio();
     api.startRingtone('outgoing');
 }
 

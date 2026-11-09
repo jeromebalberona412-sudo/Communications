@@ -421,9 +421,12 @@
     }
 
     .comms-local-pip {
-        width: min(22vw, 160px);
-        bottom: max(5rem, calc(env(safe-area-inset-bottom, 0px) + 4.25rem));
+        top: max(0.65rem, env(safe-area-inset-top, 0px));
         right: max(0.75rem, env(safe-area-inset-right, 0px));
+        bottom: auto;
+        width: min(28vw, 180px);
+        max-width: 34vw;
+        aspect-ratio: 16 / 9;
     }
 
     .comms-call-controls {
