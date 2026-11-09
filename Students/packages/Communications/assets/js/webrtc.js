@@ -643,7 +643,9 @@ import {
         stopCallHeartbeat();
         var intervalMs = Math.max(10000, (Number(window.__COMMS_CALL_HEARTBEAT__) || 30) * 1000);
         callHeartbeatTimer = setInterval(function () {
-            if (!currentCall || !currentCall.id || !callConnected) return;
+            if (!currentCall || !currentCall.id) return;
+            var cid = Number(currentCall.id);
+            if (!callConnected && !startingCall && !answeredCallIds[cid]) return;
             var r = routes();
             if (!r.callHeartbeat || !window.Comms || typeof window.Comms.api !== 'function') return;
             window.Comms.api(window.Comms.route(r.callHeartbeat, currentCall.id), {
@@ -1547,7 +1549,9 @@ import {
         }
         hideEnded();
         // Never let a stale in-call shell block the Decline/Answer modal.
-        if (els.inCall && !els.inCall.hidden && !callConnected && !startingCall) {
+        if (els.inCall && !els.inCall.hidden && !callConnected && !startingCall
+            && !(currentCall && currentCall.id && answeredCallIds[Number(currentCall.id)])
+            && !pc) {
             els.inCall.hidden = true;
         }
         // Extract caller_profile from signaling payload
@@ -1787,7 +1791,7 @@ import {
                 }
                 callConnected = true;
                 clearConnectionTimeout();
-                setCallStatus('Connected');
+                keepActiveCallVisible('Connected');
                 maybeStartConnectedTimer();
                 refreshRemoteFromReceivers();
                 attachLocalVideo();
@@ -1812,6 +1816,7 @@ import {
             if (pc && pc.connectionState === 'connected') {
                 callConnected = true;
                 clearConnectionTimeout();
+                keepActiveCallVisible('Connected');
                 maybeStartConnectedTimer();
                 refreshRemoteFromReceivers();
                 attachLocalVideo();
@@ -2153,11 +2158,55 @@ import {
         }
     }
 
-    function showInCall(call, statusText) {
+    function remountCallEls() {
+        els.inCall = document.getElementById('commsInCall') || els.inCall;
+        els.incoming = document.getElementById('commsIncomingCall') || els.incoming;
+        els.remoteVideo = document.getElementById('commsRemoteVideo') || els.remoteVideo;
+        els.localVideo = document.getElementById('commsLocalVideo') || els.localVideo;
+        els.remoteAudio = document.getElementById('commsRemoteAudio') || els.remoteAudio;
+        els.timer = document.getElementById('commsCallTimer') || els.timer;
+        els.callStatus = document.getElementById('commsCallStatus') || els.callStatus;
+        els.peerName = document.getElementById('commsCallPeerName') || els.peerName;
+        els.localVideoOff = document.getElementById('commsLocalVideoOff') || els.localVideoOff;
+        els.remoteVideoOff = document.getElementById('commsRemoteVideoOff') || els.remoteVideoOff;
+        if (els.inCall && els.inCall.parentNode !== document.body) {
+            document.body.appendChild(els.inCall);
+        }
+    }
+
+    function keepActiveCallVisible(statusText) {
+        remountCallEls();
         if (!els.inCall) return;
         hideEnded();
         if (els.incoming) els.incoming.hidden = true;
         els.inCall.hidden = false;
+        els.inCall.removeAttribute('hidden');
+        document.documentElement.classList.add('comms-in-call');
+        document.body.classList.add('comms-in-call');
+        if (statusText) setCallStatus(statusText);
+        if (els.timer) {
+            els.timer.hidden = false;
+            if (!callStartedAt) els.timer.textContent = '00:00';
+            else renderTimer();
+        }
+        attachLocalVideo();
+        if (remoteStream) bindRemoteMedia(remoteStream);
+    }
+
+    function isLiveAcceptedCall() {
+        if (startingCall || callConnected || pc || pendingStart) return true;
+        if (els.inCall && !els.inCall.hidden && currentCall) return true;
+        if (currentCall && currentCall.id != null && answeredCallIds[Number(currentCall.id)]) return true;
+        return false;
+    }
+
+    function showInCall(call, statusText) {
+        remountCallEls();
+        if (!els.inCall) return;
+        hideEnded();
+        if (els.incoming) els.incoming.hidden = true;
+        els.inCall.hidden = false;
+        els.inCall.removeAttribute('hidden');
         document.documentElement.classList.add('comms-in-call');
         document.body.classList.add('comms-in-call');
         if (els.peerName) {
@@ -2712,10 +2761,18 @@ import {
                 attachLocalVideo();
                 syncCameraUi();
             }
-            if (!call._remoteOffer) {
-                await waitForRemoteOffer(2500);
+            if (!call._remoteOffer && currentCall && currentCall._remoteOffer) {
+                call._remoteOffer = currentCall._remoteOffer;
             }
-            if (call._remoteOffer) {
+            if (!call._remoteOffer) {
+                await waitForRemoteOffer(8000);
+            }
+            if (!call._remoteOffer && currentCall && currentCall._remoteOffer) {
+                call._remoteOffer = currentCall._remoteOffer;
+            }
+            keepActiveCallVisible('Connecting...');
+            startCallHeartbeat();
+            if (call._remoteOffer && pc) {
                 await pc.setRemoteDescription(call._remoteOffer);
                 var answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
@@ -2728,8 +2785,6 @@ import {
                     caller_type: call.caller_type,
                     receiver_id: call.receiver_id,
                     receiver_type: call.receiver_type,
-                    // Shared timing reference so the caller shows the same
-                    // duration as the callee.
                     started_at: call.started_at || call.answered_at || null,
                     server_time: call.server_time || null
                 });
@@ -2739,32 +2794,25 @@ import {
                 setCallStatus('Connecting...');
                 attachLocalVideo();
                 signalMediaState();
-                refreshCallChat(call.conversation_id);
             } else {
-                toast('Call signal was incomplete. Ask the caller to try again.', 'error');
-                await updateCallStatus(call.id, 'ended');
-                var peerName = (call.peer && call.peer.name) || '';
-                var incompleteId = call.id;
-                var incompleteConv = call.conversation_id;
-                currentCall = null;
-                await cleanupMediaOnly();
-                showCallEnded('ended', peerName, incompleteId);
-                refreshCallChat(incompleteConv);
+                setCallStatus('Connecting...');
+                keepActiveCallVisible('Connecting...');
             }
         } catch (err) {
             toast(err.message || 'Unable to accept call.', 'error');
-            if (call && call.id) {
-                try { await updateCallStatus(call.id, 'rejected'); } catch (e) { /* ignore */ }
+            keepActiveCallVisible('Connecting...');
+            if (!pc && !localStream) {
+                if (call && call.id) {
+                    try { await updateCallStatus(call.id, 'rejected'); } catch (e) { /* ignore */ }
+                }
+                var peer = (call && call.peer && call.peer.name) || '';
+                var failId = call && call.id;
+                var failConv = call && call.conversation_id;
+                currentCall = null;
+                await cleanupMediaOnly();
+                showCallEnded('rejected', peer, failId);
+                refreshCallChat(failConv);
             }
-            var peer = (call && call.peer && call.peer.name) || '';
-            var failId = call && call.id;
-            var failConv = call && call.conversation_id;
-            currentCall = null;
-            await cleanupMediaOnly();
-            showCallEnded('rejected', peer, failId);
-            refreshCallChat(failConv);
-        } finally {
-            startingCall = false;
         }
     }
 
@@ -2937,13 +2985,14 @@ import {
         var cid = currentCall && currentCall.id != null ? Number(currentCall.id) : null;
         if (cid != null) rememberCallId(answeredCallIds, cid);
         if (peerAnsweredFor != null && cid != null && peerAnsweredFor === cid) {
+            keepActiveCallVisible(callConnected ? 'Connected' : 'Connecting...');
             attachLocalVideo();
             return;
         }
         peerAnsweredFor = cid;
         startingCall = true;
         role = 'caller';
-        setCallStatus('Connecting...');
+        keepActiveCallVisible('Connecting...');
         armConnectionTimeout();
         attachLocalVideo();
         updateCameraUi();
@@ -2954,6 +3003,7 @@ import {
             setCallStatus('Connected');
             maybeStartConnectedTimer();
         }
+        startCallHeartbeat();
         signalMediaState();
     }
 
@@ -3273,6 +3323,8 @@ import {
                     });
                 }
                 applyPeerAnswered();
+            } else if (currentCall && Number(currentCall.id) === Number(row.id)) {
+                keepActiveCallVisible(callConnected ? 'Connected' : 'Connecting...');
             }
             return;
         }
@@ -3324,6 +3376,7 @@ import {
     function syncIncomingFromServer(conversationId) {
         resetCallerRoleIfIdle();
         if (isOutboundCallerBusy()) return;
+        if (isLiveAcceptedCall()) return;
         if (els.incoming && !els.incoming.hidden) return;
         if (isActivelyInCall(null) && callConnected) return;
         var r = routes();
@@ -3334,11 +3387,13 @@ import {
         incomingSyncTimer = window.setTimeout(function () {
             resetCallerRoleIfIdle();
             if (isOutboundCallerBusy()) return;
+            if (isLiveAcceptedCall()) return;
             if (isActivelyInCall(null) && callConnected) return;
             window.Comms.api(url, { method: 'GET', dedupe: true }).then(function (data) {
                 reconcileWithServerState(data);
                 resetCallerRoleIfIdle();
                 if (isOutboundCallerBusy()) return;
+                if (isLiveAcceptedCall()) return;
                 if (els.incoming && !els.incoming.hidden) return;
                 if (isActivelyInCall(null) && callConnected) return;
                 var me = myIdentity();
@@ -3412,15 +3467,17 @@ import {
 
         // The server says we are not in a call: release any local call state.
         if (!activeId) {
+            if (isLiveAcceptedCall()) {
+                keepActiveCallVisible(callConnected ? 'Connected' : 'Connecting...');
+                return;
+            }
             if (currentCall && currentCall.id) {
                 var staleId = Number(currentCall.id);
                 if (staleId !== lastEndedCallId && !isCallAlreadyHandled(staleId)) {
-                    // Only release when the server really has no active call.
-                    if (!callConnected) {
+                    if (!callConnected && !startingCall && !pc) {
                         markCallTerminal(staleId);
                         currentCall = null;
                         role = null;
-                        if (els.inCall) els.inCall.hidden = true;
                     }
                 }
             }
@@ -3452,6 +3509,7 @@ import {
             if (document.visibilityState === 'hidden') return;
             resetCallerRoleIfIdle();
             if (isOutboundCallerBusy()) return;
+            if (isLiveAcceptedCall()) return;
             if (els.incoming && !els.incoming.hidden) return;
             if (isActivelyInCall(null) && callConnected) return;
             syncIncomingFromServer(null);

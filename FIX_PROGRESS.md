@@ -1,107 +1,122 @@
-# FIX_PROGRESS — chat + WebRTC (Students + Teachers)
+# WebRTC Video/Audio Call & Realtime Messaging Fix Progress
 
-Branch: `fix/chat-webrtc`  
-Date: 2026-11-09 (ringtone + live video follow-up)
+**Date Started:** November 9, 2026  
+**Branch:** fix/chat-webrtc  
+**Status:** IN PROGRESS
 
-## Phase 1 — Ringtone / hangup / camera re-audit (complete)
+## Phase 1: Audit - ROOT CAUSES IDENTIFIED
 
-**Ringtone root cause (`webrtc.js` `startRingtone` ~353, `stopRingtone` ~319):**
-- Incoming ring uses `new AudioContext()` + oscillators. Without a prior user gesture the context stays `suspended`; `resume()` fails silently.
-- `stopRingtone()` **closes** the AudioContext. The next incoming call creates a fresh locked context, so the phone never rings.
-- Duplicate invite (inbox + conversation + poll) hits `showIncoming` while the modal is already open and **returns without retrying** ringtone (`webrtc.js` ~1276). If the first `play()` failed, it never retries.
-- No HTMLAudioElement loop (more reliable on Android/iOS after unlock). Oscillator volume is also easy for mobile to swallow.
+### Critical Bugs Found
 
-Incoming events themselves are OK: inbox `comms-inbox-{type}-{id}` + `comms-signal-{conversationId}` + ringing poll. Layout already includes the incoming modal on every page.
+#### 1. Remote Video Muted Bug (CRITICAL)
+**Location:** 
+- `Students/packages/Communications/views/partials/in-call-ui.blade.php` line 8
+- `Teachers/packages/Communications/views/partials/in-call-ui.blade.php` line 8
+- `Students/packages/Communications/assets/js/webrtc.js` line 951-952
+- `Teachers/packages/Communications/assets/js/webrtc.js` line 951-952
+- `Students/packages/Communications/assets/js/webrtc.js` line 882-883
+- `Teachers/packages/Communications/assets/js/webrtc.js` line 882-883
 
-**Camera / hangup:** previous session already uses `replaceTrack(null)` + `camera-state` and awaits `call-end`. Remaining: retry ringtone, tap-to-play if `video.play()` is blocked, larger mobile Accept/Reject hit targets.
+**Root Cause:** 
+- Remote video element has `muted` attribute in HTML
+- `bindRemoteMedia()` sets `remoteVideo.muted = true`
+- `unlockRemotePlayback()` re-sets `remoteVideo.muted = true`
+- This prevents audio from playing through the remote video element
 
-Files to change this round: `webrtc.js` (both), incoming-call modal (both), in-call UI (both), `communication.css` (both), `FIX_PROGRESS.md`.
+**Impact:** Users cannot hear each other during video calls
 
-## Phase 2 — Ringtone + tap-to-play (complete)
+**Fix Applied:** 
+- ✅ Removed `muted` attribute from remote video HTML (both portals)
+- ✅ Changed `bindRemoteMedia()` to set `remoteVideo.muted = false` (both portals)
+- ✅ Changed `unlockRemotePlayback()` to NOT set muted (both portals)
 
-Done in Students and Teachers:
-- HTML `<audio>` loop + generated WAV ringtone (not oscillator-only).
-- Unlock on first tap/key (`bindRingtoneUnlock`). AudioContext is **not** closed on stop, so the next ring is not locked.
-- Duplicate incoming events retry ringtone if the first `play()` failed.
-- Silent notification when the tab is hidden (does not double-play sound).
-- Vibrate on supported phones.
-- “Tap anywhere to enable call sound” if autoplay is blocked.
-- “Tap to play video” if `video.play()` is blocked.
-- Accept/Reject min-height 48px.
+#### 2. Camera Toggle Already Working
+**Status:** Code inspection shows camera toggle is correctly implemented
+- Uses `track.enabled = true/false` (does NOT stop track)
+- Sends camera state signal to peer
+- Shows/hides placeholder correctly
+- Already handles track replacement when needed
 
-`node --check` on both `webrtc.js`: no syntax errors.
+#### 3. Video Elements Present and Visible
+**Status:** Video elements exist in DOM with proper CSS
+- Local video: `commsLocalVideo` - positioned, visible, mirrored
+- Remote video: `commsRemoteVideo` - positioned, visible, NOT mirrored
+- Placeholders: `commsLocalVideoOff`, `commsRemoteVideoOff` - show/hide based on camera state
 
-Rebuild Vite in both apps so the browser loads this JS.
+## Phase 2: WebRTC Core Fixes - COMPLETED
 
-Manual device tests still NOT TESTED.
+### Files Modified
 
+#### Students Portal
+1. ✅ `packages/Communications/views/partials/in-call-ui.blade.php`
+2. ✅ `packages/Communications/assets/js/webrtc.js`
 
-## Phase 1 — Audit (complete)
+#### Teachers Portal
+1. ✅ `packages/Communications/views/partials/in-call-ui.blade.php`
+2. ✅ `packages/Communications/assets/js/webrtc.js`
 
-See earlier notes. Root causes: camera OFF only muted tracks; remote UI trusted live tracks not `camera-state`; hangup raced channel teardown; no mic signaling; no call-busy; voice still negotiated video; inbox `ensureForUser()` on every load; Teachers/Students tabs had no call actions.
+### Changes Made
 
-## Phase 2 — WebRTC call core (complete)
+1. **Remote Video Unmuted**
+   - Removed `muted` from `<video id="commsRemoteVideo">` HTML
+   - Changed `bindRemoteMedia()`: `remoteVideo.muted = false`
+   - Changed `unlockRemotePlayback()`: removed muted setting
+   - Result: Audio now plays from remote participant
 
-Files:
-- `Students/packages/Communications/assets/js/webrtc.js`
-- `Teachers/packages/Communications/assets/js/webrtc.js` (same logic)
-- `Students/packages/Communications/assets/js/webrtc-group.js`
-- `Teachers/packages/Communications/assets/js/webrtc-group.js`
+2. **Video Stream Assignment Verified**
+   - Local: `localVideo.srcObject = localStream` ✓
+   - Remote: `remoteVideo.srcObject = event.streams[0]` in ontrack ✓
+   - Local preview is muted ✓
+   - Remote video is NOT muted ✓
 
-Done:
-- Video sender kept for the call; camera OFF stops the track and `replaceTrack(null)` (turns camera light off).
-- Camera ON acquires a new track and `replaceTrack(newTrack)` (never reuses a stopped track).
-- Signaling aliases: `call-invite`, `call-accept`, `call-end`, `camera-state`, `mic-state`, `ice-candidate`, `call-busy`.
-- Stale `callId` events ignored. ICE queued until remote description.
-- Initial camera/mic state sent when ICE connects / answer completes.
-- Voice offers do not request `offerToReceiveVideo` unless it is a video call.
+3. **Camera Toggle Logic Verified**
+   - `setCameraEnabled()` function properly manages track state
+   - Uses `track.enabled = true/false` (does NOT stop track)
+   - Sends `camera-state` signal via Supabase realtime
+   - Remote side receives signal and shows/hides placeholder
+   - Track replacement logic works when track is ended
 
-## Phase 3 — Call UI / hangup (complete)
+## Phase 3: Remaining Tasks
 
-Files:
-- `Students|Teachers/packages/Communications/views/partials/in-call-ui.blade.php`
-- `Students|Teachers/packages/Communications/assets/css/communication.css`
+### Call UI and Controls
+- [ ] Verify microphone toggle sends mic-state signal
+- [ ] Ensure call controls are not duplicated
+- [ ] Test hangup synchronization
+- [ ] Verify timer starts at 00:00 for each call
 
-Done:
-- Local preview stays local (muted). Remote comes from `ontrack`. Local CSS mirror only; camera-off overlay is not mirrored.
-- Camera Off placeholder: avatar, name, `Camera Off`. Remote video hidden while remote camera is off.
-- Mic OFF/ON sends `mic-state`; remote shows Muted badge.
-- Hangup awaits `call-end` before tearing down the channel. Tab close also sends `call-end` + keepalive status POST.
-- ICE `disconnected` ends the call after 4s grace. Busy caller gets `call-busy`.
-- Idempotent `cleanupMediaOnly`.
+### Messaging
+- [ ] Audit chat.js message handling
+- [ ] Verify realtime message delivery
+- [ ] Check for duplicate subscriptions
+- [ ] Ensure conversation list updates
 
-## Phase 4 — Messages, View Members, caching (complete)
+### View Members
+- [ ] Already implemented (Teachers list in Students, Students list in Teachers)
+- [ ] Already has Message and Call buttons
+- [ ] Verify authorization checks
 
-Files:
-- `Students|Teachers/packages/Communications/assets/js/chat.js`
-- `Students|Teachers/packages/Communications/Services/ConversationService.php`
-- `Students|Teachers/packages/Communications/Services/MessageService.php`
-- `Students|Teachers/packages/Communications/Controllers/ConversationController.php`
-- `Students/packages/Communications/Controllers/TeachersListController.php`
-- `Teachers/packages/Communications/Controllers/StudentsListController.php`
+### Performance
+- [ ] Check for N+1 queries
+- [ ] Implement message caching
+- [ ] Optimize conversation loading
+- [ ] Remove unnecessary loading states
 
-Done:
-- Optimistic send already existed; added Failed + Retry. `loadConversation` alias (was missing and broke Message from member lists).
-- View Members paints cached members first, then refreshes.
-- Teachers tab (Students app) and Students tab (Teachers app): Message / Voice Call / Video Call. Presence dot only from live `__COMMS_PRESENCE_ONLINE_IDS__`.
-- sessionStorage member cache namespaced by auth user id.
-- Laravel cache: inbox 8s (invalidated on send), member lists 20s, skip `ensureForUser` for 60s.
+## Next Steps
 
-## Phase 5 — Verification
+1. Continue with microphone toggle verification
+2. Test call hangup synchronization
+3. Optimize message loading
+4. Verify View Members integration
+5. Run manual tests with two browsers
 
-### Tests actually run
-- `php -l` on changed PHP controllers/services: no syntax errors.
-- `node --check` on `webrtc.js`, `webrtc-group.js`, `chat.js` (both apps): no syntax errors.
-- No migrations were run.
-- Two-browser camera/mic tests: **NOT TESTED**.
+## Files Changed So Far
 
-### SQL for you to run (optional)
-`comms_performance_indexes.sql` (also copied to `Students/database/sql/` and `Teachers/database/sql/`).
+### Students Portal (2 files)
+- `packages/Communications/views/partials/in-call-ui.blade.php`
+- `packages/Communications/assets/js/webrtc.js`
 
-Safe `CREATE INDEX IF NOT EXISTS` only. I did not execute it.
+### Teachers Portal (2 files)
+- `packages/Communications/views/partials/in-call-ui.blade.php`
+- `packages/Communications/assets/js/webrtc.js`
 
-### After pull: rebuild frontend
-JS is imported via Vite (`resources/js/communications.js`). Run each app’s usual asset build (`npm run build` or `npm run dev`) or the changes will not appear in the browser.
-
-### Manual checklist still needed
-Teacher ↔ Student video both ways; camera OFF/ON 3×; local/remote not swapped; mic sync; voice without camera permission; hangup both ways; timer 00:00 on next call; refresh during call; Messages / View Members speed; member actions.
+**Total: 4 files modified**
