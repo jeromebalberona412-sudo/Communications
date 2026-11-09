@@ -12,6 +12,9 @@ import {
 (function () {
     'use strict';
 
+    console.info('[CALL] build 2026-11-09-a | Teachers webrtc.js loaded');
+    window.CALL_DEBUG = true;
+
     if (window.CommsWebRTC) {
         return;
     }
@@ -1702,10 +1705,23 @@ import {
     }
 
     function maybeStartConnectedTimer() {
-        if (!callConnected) return;
+        if (window.CALL_DEBUG) {
+            console.log('[CALL] maybeStartConnectedTimer called', {
+                callConnected: callConnected,
+                currentCallId: currentCall && currentCall.id,
+                started_at: currentCall && currentCall.started_at,
+                answered_at: currentCall && currentCall.answered_at,
+                role: role
+            });
+        }
+        if (!callConnected) {
+            if (window.CALL_DEBUG) console.warn('[CALL] maybeStartConnectedTimer ABORTED: callConnected=false');
+            return;
+        }
         var ts = currentCall && (currentCall.started_at || currentCall.answered_at);
         // FIX: If server didn't provide timestamp, use current time to start timer
         if (!ts) {
+            if (window.CALL_DEBUG) console.log('[CALL] maybeStartConnectedTimer: no server timestamp, using now');
             ts = new Date().toISOString();
         }
         startTimer(ts, currentCall && currentCall.server_time);

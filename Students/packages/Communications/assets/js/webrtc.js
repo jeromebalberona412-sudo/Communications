@@ -12,12 +12,15 @@ import {
 (function () {
     'use strict';
 
+    console.info('[CALL] build 2026-11-09-a | Students webrtc.js loaded');
+    window.CALL_DEBUG = true;
+
     if (window.CommsWebRTC) {
         return;
     }
 
     var RING_TIMEOUT_MS = 30000;
-    var CALL_START_DELAY_MS = 400;
+    var CALL_START_DELAY_MS = 3000;
     var CONNECTION_TIMEOUT_MS = 30000;
 
     var pc = null;
@@ -54,23 +57,11 @@ import {
     var cameraPending = null;
     var cameraChain = Promise.resolve();
     var remoteCameraEnabled = true;
-    var remoteMicEnabled = true;
-    var videoSender = null;
-    var iceDisconnectTimer = null;
-    var cleaningCall = false;
     var clockOffsetMs = 0;
 
     var ringCtx = null;
     var ringTimer = null;
     var ringOscillators = [];
-    var ringAudio = null;
-    var ringtonePlaying = false;
-    var ringMode = null;
-    var ringingCallId = null;
-    var peerAnsweredFor = null;
-    var ringUnlockBound = false;
-    var ringNotify = null;
-    var timerCallId = null;
 
     var HTTPS_PORT_BY_HTTP = {
         '8000': '8440',
@@ -125,11 +116,6 @@ import {
         els.endedRedial = document.getElementById('commsCallEndedRedial');
         els.muteBtn = document.getElementById('commsMuteBtn');
         els.cameraBtn = document.getElementById('commsCameraBtn');
-        els.localVideo = document.getElementById('commsLocalVideo');
-        els.remoteVideo = document.getElementById('commsRemoteVideo');
-        els.remoteAudio = document.getElementById('commsRemoteAudio');
-        els.localVideoOff = document.getElementById('commsLocalVideoOff');
-        els.remoteVideoOff = document.getElementById('commsRemoteVideoOff');
         els.incoming = document.getElementById('commsIncomingCall');
         els.inCall = document.getElementById('commsInCall');
         els.ended = document.getElementById('commsCallEnded');
@@ -324,118 +310,7 @@ import {
         }
     }
 
-    function ringHint(show) {
-        var hint = document.getElementById('commsRingtoneHint');
-        if (hint) hint.hidden = !show;
-    }
-
-    function bindRingtoneUnlock() {
-        if (ringUnlockBound) return;
-        ringUnlockBound = true;
-        var unlock = function () {
-            unlockCallAudio();
-        };
-        document.addEventListener('pointerdown', unlock, true);
-        document.addEventListener('keydown', unlock, true);
-        document.addEventListener('touchstart', unlock, { capture: true, passive: true });
-        document.addEventListener('visibilitychange', function () {
-            if (document.visibilityState !== 'visible' || !ringtonePlaying || !ringAudio) return;
-            if (!ringAudio.paused) return;
-            var resume = ringAudio.play();
-            if (resume && typeof resume.catch === 'function') resume.catch(function () {});
-        });
-    }
-
-    function unlockCallAudio() {
-        var AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (AudioCtx && !ringCtx) {
-            try { ringCtx = new AudioCtx(); } catch (e1) { /* ignore */ }
-        }
-        if (ringCtx && ringCtx.state === 'suspended') {
-            ringCtx.resume().catch(function () { /* ignore */ });
-        }
-        if (ringtonePlaying && ringAudio) {
-            try {
-                ringAudio.muted = false;
-                ringAudio.volume = 1;
-                if (ringAudio.paused) {
-                    var p = ringAudio.play();
-                    if (p && typeof p.catch === 'function') p.catch(function () {});
-                }
-            } catch (ePlay) { /* ignore */ }
-        }
-    }
-
-    function ensureRingAudio() {
-        if (ringAudio) return ringAudio;
-        ringAudio = document.getElementById('commsRingtoneAudio');
-        if (!ringAudio) {
-            ringAudio = document.createElement('audio');
-            ringAudio.id = 'commsRingtoneAudio';
-            ringAudio.setAttribute('playsinline', '');
-            ringAudio.setAttribute('preload', 'auto');
-            ringAudio.hidden = true;
-            document.body.appendChild(ringAudio);
-        }
-        ringAudio.loop = true;
-        ringAudio.preload = 'auto';
-        ringAudio.playsInline = true;
-        ringAudio.setAttribute('playsinline', '');
-        ringAudio.muted = false;
-        ringAudio.volume = 1;
-        if (!ringAudio.src) {
-            try {
-                ringAudio.src = makeRingtoneDataUri();
-            } catch (e) { /* ignore */ }
-        }
-        return ringAudio;
-    }
-
-    function makeRingtoneDataUri() {
-        var sampleRate = 8000;
-        var seconds = 2.4;
-        var n = sampleRate * seconds;
-        var dataSize = n * 2;
-        var buf = new ArrayBuffer(44 + dataSize);
-        var view = new DataView(buf);
-        var writeStr = function (offset, str) {
-            for (var i = 0; i < str.length; i += 1) view.setUint8(offset + i, str.charCodeAt(i));
-        };
-        writeStr(0, 'RIFF');
-        view.setUint32(4, 36 + dataSize, true);
-        writeStr(8, 'WAVE');
-        writeStr(12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, 1, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * 2, true);
-        view.setUint16(32, 2, true);
-        view.setUint16(34, 16, true);
-        writeStr(36, 'data');
-        view.setUint32(40, dataSize, true);
-        for (var s = 0; s < n; s += 1) {
-            var t = s / sampleRate;
-            var cycle = t % 2.4;
-            var on = cycle < 0.42 || (cycle > 0.52 && cycle < 0.94);
-            var amp = on ? 0.42 : 0;
-            var sample = (Math.sin(2 * Math.PI * 440 * t) + Math.sin(2 * Math.PI * 480 * t)) * 0.5 * amp;
-            view.setInt16(44 + s * 2, Math.max(-1, Math.min(1, sample)) * 32767, true);
-        }
-        var bytes = new Uint8Array(buf);
-        var binary = '';
-        for (var b = 0; b < bytes.length; b += 1) binary += String.fromCharCode(bytes[b]);
-        return 'data:audio/wav;base64,' + btoa(binary);
-    }
-
-    function stopRingtone(callId) {
-        if (callId != null && ringingCallId != null && Number(callId) !== Number(ringingCallId)) {
-            return;
-        }
-        ringtonePlaying = false;
-        ringMode = null;
-        ringingCallId = null;
-        ringHint(false);
+    function stopRingtone() {
         if (ringTimer) {
             clearInterval(ringTimer);
             ringTimer = null;
@@ -444,48 +319,14 @@ import {
             try { osc.stop(); } catch (e) { /* ignore */ }
         });
         ringOscillators = [];
-        if (ringAudio) {
-            try {
-                ringAudio.pause();
-                ringAudio.muted = true;
-                ringAudio.currentTime = 0;
-            } catch (e2) { /* ignore */ }
+        if (ringCtx) {
+            try { ringCtx.close(); } catch (e) { /* ignore */ }
+            ringCtx = null;
         }
-        // Keep AudioContext open so the next ring is not blocked by autoplay.
-        if (ringNotify) {
-            try { ringNotify.close(); } catch (e3) { /* ignore */ }
-            ringNotify = null;
-        }
-        stopVibration();
-    }
-
-    var vibeTimer = null;
-
-    function stopVibration() {
-        if (vibeTimer) {
-            clearInterval(vibeTimer);
-            vibeTimer = null;
-        }
-        try {
-            if (navigator.vibrate) navigator.vibrate(0);
-        } catch (e4) { /* ignore */ }
-    }
-
-    function startIncomingVibration() {
-        stopVibration();
-        if (!navigator.vibrate) return;
-        try { navigator.vibrate([220, 120, 220, 400, 220, 120, 220]); } catch (eV) { /* ignore */ }
-        vibeTimer = setInterval(function () {
-            if (!ringtonePlaying || ringMode !== 'incoming') {
-                stopVibration();
-                return;
-            }
-            try { navigator.vibrate([220, 120, 220, 400]); } catch (e2) { /* ignore */ }
-        }, 1800);
     }
 
     function playToneBurst(ctx, freqs, when, duration, volume) {
-        var level = Math.max(0.01, Math.min(Number(volume) || 0.18, 0.28));
+        var level = Math.max(0.01, Math.min(Number(volume) || 0.14, 0.2));
         freqs.forEach(function (freq) {
             var osc = ctx.createOscillator();
             var gain = ctx.createGain();
@@ -503,98 +344,36 @@ import {
         });
     }
 
-    function startOscillatorRing(incoming) {
+    function startRingtone(mode) {
+        stopRingtone();
         var AudioCtx = window.AudioContext || window.webkitAudioContext;
         if (!AudioCtx) return;
-        if (!ringCtx) {
-            try { ringCtx = new AudioCtx(); } catch (e) { return; }
+
+        try {
+            ringCtx = new AudioCtx();
+        } catch (e) {
+            return;
         }
+
         if (ringCtx.state === 'suspended') {
             ringCtx.resume().catch(function () { /* ignore */ });
         }
+
+        var incoming = mode === 'incoming';
+
         function scheduleCycle() {
-            if (!ringtonePlaying || !ringCtx) return;
+            if (!ringCtx) return;
             var now = ringCtx.currentTime;
             if (incoming) {
-                playToneBurst(ringCtx, [440, 480], now, 0.42, 0.24);
-                playToneBurst(ringCtx, [440, 480], now + 0.52, 0.42, 0.24);
+                playToneBurst(ringCtx, [440, 480], now, 0.42, 0.22);
+                playToneBurst(ringCtx, [440, 480], now + 0.52, 0.42, 0.22);
             } else {
-                playToneBurst(ringCtx, [440, 480], now, 1.15, 0.18);
+                playToneBurst(ringCtx, [440, 480], now, 1.15, 0.16);
             }
         }
-        if (ringTimer) {
-            clearInterval(ringTimer);
-            ringTimer = null;
-        }
+
         scheduleCycle();
         ringTimer = setInterval(scheduleCycle, incoming ? 2800 : 3600);
-    }
-
-    function startRingtone(mode, callId) {
-        bindRingtoneUnlock();
-        var incoming = mode === 'incoming';
-        var id = callId != null ? Number(callId) : (incomingCallId || (currentCall && currentCall.id) || 0);
-        if (incoming && id && (answeredCallIds[id] || dismissedRingIds[id])) {
-            return;
-        }
-        if (incoming && (startingCall || callConnected) && currentCall && Number(currentCall.id) === id) {
-            return;
-        }
-        if (ringtonePlaying && ringingCallId != null && id && Number(ringingCallId) === id) {
-            return;
-        }
-        if (ringtonePlaying && ringMode === mode) {
-            if (id) ringingCallId = id;
-            return;
-        }
-        if (ringtonePlaying) {
-            stopRingtone();
-        }
-        ringtonePlaying = true;
-        ringMode = mode;
-        ringingCallId = id || null;
-        ensureRingAudio();
-
-        if (ringAudio) {
-            try {
-                ringAudio.loop = true;
-                ringAudio.muted = false;
-                ringAudio.volume = 1;
-                var playPromise = ringAudio.play();
-                if (playPromise && typeof playPromise.then === 'function') {
-                    playPromise.then(function () {
-                        ringHint(false);
-                    }).catch(function () {
-                        if (!ringtonePlaying) return;
-                        startOscillatorRing(incoming);
-                        ringHint(true);
-                    });
-                }
-            } catch (ePlay) {
-                startOscillatorRing(incoming);
-                ringHint(true);
-            }
-        } else {
-            startOscillatorRing(incoming);
-            ringHint(true);
-        }
-
-        if (incoming) {
-            startIncomingVibration();
-        } else {
-            stopVibration();
-        }
-
-        if (incoming && document.hidden && window.Notification && Notification.permission === 'granted') {
-            try {
-                if (ringNotify) ringNotify.close();
-                ringNotify = new Notification('Incoming call', {
-                    body: (els.incomingPeer && els.incomingPeer.textContent) || 'Incoming call',
-                    silent: true,
-                    tag: 'comms-incoming-call'
-                });
-            } catch (eN) { /* ignore */ }
-        }
     }
 
     /**
@@ -610,8 +389,7 @@ import {
             ? Math.max(RING_TIMEOUT_MS, (Number(window.__COMMS_CALL_RING_TTL__) || 60) * 1000)
             : RING_TIMEOUT_MS;
         ringTimeout = setTimeout(function () {
-            if (!currentCall || callConnected || startingCall) return;
-            if (currentCall.id != null && answeredCallIds[Number(currentCall.id)]) return;
+            if (!currentCall || callConnected) return;
             finishUnanswered('missed');
         }, ttl);
     }
@@ -628,7 +406,7 @@ import {
         connectionTimeout = setTimeout(function () {
             if (!currentCall) return;
             var state = pc && (pc.connectionState || pc.iceConnectionState);
-            if (state === 'connected' || state === 'completed' || callConnected) return;
+            if (state === 'connected' || state === 'completed') return;
             toast('Call could not connect in time.', 'error');
             endCall();
         }, CONNECTION_TIMEOUT_MS);
@@ -643,9 +421,7 @@ import {
         stopCallHeartbeat();
         var intervalMs = Math.max(10000, (Number(window.__COMMS_CALL_HEARTBEAT__) || 30) * 1000);
         callHeartbeatTimer = setInterval(function () {
-            if (!currentCall || !currentCall.id) return;
-            var cid = Number(currentCall.id);
-            if (!callConnected && !startingCall && !answeredCallIds[cid]) return;
+            if (!currentCall || !currentCall.id || !callConnected) return;
             var r = routes();
             if (!r.callHeartbeat || !window.Comms || typeof window.Comms.api !== 'function') return;
             window.Comms.api(window.Comms.route(r.callHeartbeat, currentCall.id), {
@@ -661,25 +437,6 @@ import {
             clearInterval(callHeartbeatTimer);
             callHeartbeatTimer = null;
         }
-    }
-
-    /**
-     * FIX BUG #3: Force stop call timer and reset state
-     * Called before starting any new call to ensure clean state
-     * 
-     * VERIFIED: stopCallTimer() properly clears callTimer, callStartedAt, and 
-     * lastCallDurationMs before new call. This prevents timer continuation from 
-     * previous calls.
-     */
-    function stopCallTimer() {
-        if (callTimer) {
-            clearInterval(callTimer);
-            callTimer = null;
-        }
-        timerCallId = null;
-        callStartedAt = null;
-        lastCallDurationMs = 0;
-        if (els.timer) els.timer.textContent = '00:00';
     }
 
     function endedCopy(reason, endedByRole) {
@@ -777,16 +534,10 @@ import {
 
     function setCallPeerAvatar(call) {
         var peer = (call && call.peer) || {};
-        var name = peer.name || 'Participant';
-        var src = peer.profile_image_url || peer.avatar_url || '';
-        paintAvatar(els.callAvatar, name, src);
+        paintAvatar(els.callAvatar, peer.name, peer.profile_image_url || peer.avatar_url || '');
         var remoteOffAvatar = document.getElementById('commsRemoteVideoOffAvatar');
         if (remoteOffAvatar) {
-            paintAvatar(remoteOffAvatar, name, src);
-        }
-        var remoteOffName = document.getElementById('commsRemoteVideoOffName');
-        if (remoteOffName) {
-            remoteOffName.textContent = name;
+            remoteOffAvatar.textContent = String(peer.name || 'U').trim().charAt(0).toUpperCase() || 'U';
         }
     }
 
@@ -834,7 +585,7 @@ import {
         if (callKey && summaryShownFor[callKey]) {
             return;
         }
-        if (els.ended && !els.ended.hidden && callKey && Number(lastEndedCallId) === Number(callId)) {
+        if (callId != null && Number(callId) === Number(lastEndedCallId) && !callPayload) {
             return;
         }
         if (callId != null) lastEndedCallId = callId;
@@ -973,78 +724,20 @@ import {
     }
 
     function signalPeer(payload) {
-        if (!window.CommsRealtime) return Promise.resolve();
-        
-        // Allow signaling even when currentCall is null (hangup / busy).
-        var conversationId = (currentCall && currentCall.conversation_id) || payload.conversation_id;
-        var callId = (currentCall && currentCall.id) || payload.call_id;
-        
-        if (!conversationId) {
-            console.warn('Cannot signal: no conversation_id available');
-            return Promise.resolve();
-        }
-        
+        if (!window.CommsRealtime || !currentCall) return Promise.resolve();
         var me = myIdentity();
         payload.from_user_id = me.id;
         payload.from_user_type = me.type;
         payload.from_name = me.name || payload.from_name;
-        payload.call_id = payload.call_id || callId;
-        payload.conversation_id = payload.conversation_id || conversationId;
-        
+        payload.call_id = payload.call_id || currentCall.id;
+        payload.conversation_id = payload.conversation_id || currentCall.conversation_id;
         var targets = signalTargets();
-        subscribeCallChannel(conversationId);
-        return window.CommsRealtime.broadcastSignal(conversationId, payload, {
-            peerId: targets.peerId || payload.to_user_id || payload.peerId,
-            peerType: targets.peerType || payload.to_user_type || payload.peerType,
+        subscribeCallChannel(currentCall.conversation_id);
+        return window.CommsRealtime.broadcastSignal(currentCall.conversation_id, payload, {
+            peerId: targets.peerId,
+            peerType: targets.peerType,
             peers: targets.peers
         });
-    }
-
-    function signalMediaState() {
-        if (!currentCall) return;
-        var micOn = true;
-        if (localStream && typeof localStream.getAudioTracks === 'function') {
-            var audioTracks = localStream.getAudioTracks();
-            micOn = !audioTracks.length || audioTracks.some(function (t) { return t.enabled; });
-        }
-        signalPeer({
-            type: 'camera-state',
-            call_id: currentCall.id,
-            conversation_id: currentCall.conversation_id,
-            enabled: !!cameraEnabled
-        });
-        signalPeer({
-            type: 'mic-state',
-            call_id: currentCall.id,
-            conversation_id: currentCall.conversation_id,
-            enabled: !!micOn
-        });
-    }
-
-    function findVideoSender() {
-        if (!pc) return null;
-        if (videoSender && pc.getSenders().indexOf(videoSender) !== -1) {
-            return videoSender;
-        }
-        var senders = pc.getSenders();
-        var i;
-        for (i = 0; i < senders.length; i += 1) {
-            if (senders[i] && senders[i].track && senders[i].track.kind === 'video') {
-                videoSender = senders[i];
-                return videoSender;
-            }
-        }
-        var txs = pc.getTransceivers();
-        for (i = 0; i < txs.length; i += 1) {
-            var t = txs[i];
-            var recvKind = t.receiver && t.receiver.track && t.receiver.track.kind;
-            var sendKind = t.sender && t.sender.track && t.sender.track.kind;
-            if (recvKind === 'video' || sendKind === 'video') {
-                videoSender = t.sender || null;
-                return videoSender;
-            }
-        }
-        return videoSender;
     }
 
     function setCameraUi(enabled) {
@@ -1069,11 +762,10 @@ import {
     }
 
     function hasLiveRemoteVideo() {
-        if (!remoteCameraEnabled) return false;
-        var stream = (els.remoteVideo && els.remoteVideo.srcObject) || remoteStream;
+        var stream = els.remoteVideo && els.remoteVideo.srcObject;
         if (!stream || typeof stream.getVideoTracks !== 'function') return false;
         return stream.getVideoTracks().some(function (track) {
-            return !!(track && track.readyState === 'live' && track.enabled !== false);
+            return !!(track && track.readyState === 'live');
         });
     }
 
@@ -1095,14 +787,12 @@ import {
         // The self-view element is never hidden: the camera-off placeholder is
         // layered on top of it so the video element and its stream stay intact.
         syncCameraUi();
-        var remoteVideoLive = remoteCameraEnabled && hasLiveRemoteVideo();
+        var remoteVideoLive = hasLiveRemoteVideo();
         var isVideoCall = isVideoCallType();
         if (els.inCall) {
             els.inCall.classList.toggle('is-connected', !!callConnected);
             els.inCall.classList.toggle('has-remote-video', remoteVideoLive);
-            els.inCall.classList.toggle('is-video-call', isVideoCall);
-            els.inCall.classList.toggle('is-remote-camera-off', !remoteCameraEnabled);
-            els.inCall.classList.toggle('is-remote-mic-off', !remoteMicEnabled);
+            els.inCall.classList.toggle('is-video-call', isVideoCall || remoteVideoLive);
         }
         if (els.callCenter) {
             els.callCenter.hidden = false;
@@ -1151,12 +841,6 @@ import {
         els.localVideo.classList.toggle('is-cam-portrait', !camLandscape);
     }
 
-    function showTapToPlay(show) {
-        var btn = document.getElementById('commsTapToPlay');
-        if (!btn) return;
-        btn.hidden = !show;
-    }
-
     function unlockRemotePlayback() {
         try {
             var Ctx = window.AudioContext || window.webkitAudioContext;
@@ -1168,16 +852,12 @@ import {
         ensureRemoteAudioPlaying();
         if (els.remoteVideo) {
             try {
-                els.remoteVideo.muted = false;
-                els.remoteVideo.removeAttribute('muted');
+                els.remoteVideo.muted = true;
+                els.remoteVideo.setAttribute('muted', '');
                 els.remoteVideo.playsInline = true;
                 var vp = els.remoteVideo.play();
-                if (vp && typeof vp.then === 'function') {
-                    vp.then(function () { showTapToPlay(false); }).catch(function () { showTapToPlay(true); });
-                }
-            } catch (e2) {
-                showTapToPlay(true);
-            }
+                if (vp && typeof vp.catch === 'function') vp.catch(function () {});
+            } catch (e2) { /* ignore */ }
         }
     }
 
@@ -1195,49 +875,33 @@ import {
         } catch (e) { /* ignore */ }
     }
 
-    function dropRemoteTracksOfKind(kind, exceptId) {
-        if (!remoteStream || typeof remoteStream.getTracks !== 'function') return;
-        remoteStream.getTracks().forEach(function (existing) {
-            if (!existing || existing.kind !== kind) return;
-            if (exceptId && existing.id === exceptId) return;
-            if (existing._commsUnmuteHandler) {
-                existing.removeEventListener('unmute', existing._commsUnmuteHandler);
-                delete existing._commsUnmuteHandler;
-            }
-            if (existing._commsEndedHandler) {
-                existing.removeEventListener('ended', existing._commsEndedHandler);
-                delete existing._commsEndedHandler;
-            }
-            try { remoteStream.removeTrack(existing); } catch (eRm) { /* ignore */ }
-        });
-    }
-
     function mergeRemoteTrack(track, inboundStream) {
         if (!remoteStream) remoteStream = new MediaStream();
         if (track && !remoteStream.getTracks().some(function (t) { return t.id === track.id; })) {
-            dropRemoteTracksOfKind(track.kind, track.id);
             remoteStream.addTrack(track);
-
+            
+            // Store listener refs for cleanup
             var unmuteHandler = function () {
-                if (track.kind === 'video') remoteCameraEnabled = true;
                 bindRemoteMedia(remoteStream);
+                scheduleRemoteVideoUiRefresh();
             };
             var endedHandler = function () {
                 try { remoteStream.removeTrack(track); } catch (err) { /* ignore */ }
-                refreshRemoteFromReceivers();
+                bindRemoteMedia(remoteStream);
             };
-
+            
             track.addEventListener('unmute', unmuteHandler);
             track.addEventListener('ended', endedHandler);
+            
+            // Store handlers on track object for later removal
             track._commsUnmuteHandler = unmuteHandler;
             track._commsEndedHandler = endedHandler;
         }
         if (inboundStream && typeof inboundStream.getTracks === 'function') {
             inboundStream.getTracks().forEach(function (t) {
-                if (!t) return;
-                if (remoteStream.getTracks().some(function (x) { return x.id === t.id; })) return;
-                dropRemoteTracksOfKind(t.kind, t.id);
-                remoteStream.addTrack(t);
+                if (!remoteStream.getTracks().some(function (x) { return x.id === t.id; })) {
+                    remoteStream.addTrack(t);
+                }
             });
         }
         return remoteStream;
@@ -1255,37 +919,20 @@ import {
         els.inCall.classList.toggle('is-remote-landscape', !portrait);
     }
 
-    function refreshRemoteFromReceivers() {
-        if (!pc) {
-            if (remoteStream) bindRemoteMedia(remoteStream);
-            return;
-        }
-        pc.getReceivers().forEach(function (recv) {
-            if (recv && recv.track && recv.track.readyState !== 'ended') {
-                mergeRemoteTrack(recv.track, null);
-            }
-        });
-        if (remoteStream) bindRemoteMedia(remoteStream);
-    }
-
     function bindRemoteMedia(stream) {
         if (!stream) return;
         if (els.remoteVideo) {
-            els.remoteVideo.muted = false;
-            els.remoteVideo.removeAttribute('muted');
+            els.remoteVideo.muted = true;
+            els.remoteVideo.setAttribute('muted', '');
             els.remoteVideo.playsInline = true;
             els.remoteVideo.autoplay = true;
-            els.remoteVideo.style.visibility = '';
-            els.remoteVideo.srcObject = null;
-            els.remoteVideo.srcObject = stream;
+            if (els.remoteVideo.srcObject !== stream) {
+                els.remoteVideo.srcObject = stream;
+            }
             try {
                 var vp = els.remoteVideo.play();
-                if (vp && typeof vp.catch === 'function') {
-                    vp.catch(function () { showTapToPlay(true); });
-                }
-            } catch (e) {
-                showTapToPlay(true);
-            }
+                if (vp && typeof vp.catch === 'function') vp.catch(function () {});
+            } catch (e) { /* ignore */ }
             if (!els.remoteVideo._commsMetricsBound) {
                 els.remoteVideo._commsMetricsBound = true;
                 els.remoteVideo.addEventListener('loadedmetadata', applyRemoteVideoMetrics);
@@ -1318,8 +965,7 @@ import {
     function setCallStatus(text) {
         if (els.callStatus) els.callStatus.textContent = text || '';
         if (els.timer) {
-            els.timer.hidden = false;
-            if (!callStartedAt) els.timer.textContent = '00:00';
+            els.timer.hidden = !callConnected;
         }
     }
 
@@ -1382,11 +1028,10 @@ import {
         return {
             iceServers: [
                 { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:stun2.l.google.com:19302' },
                 { urls: 'stun:stun.cloudflare.com:3478' }
-            ],
-            bundlePolicy: 'max-bundle',
-            rtcpMuxPolicy: 'require',
-            iceCandidatePoolSize: 4
+            ]
         };
     }
 
@@ -1409,13 +1054,13 @@ import {
         rememberCallId(dismissedRingIds, id);
         rememberCallId(answeredCallIds, id);
         rememberCallId(shownIncomingIds, id);
+        lastEndedCallId = id;
     }
 
     function isCallAlreadyHandled(callId) {
         var id = callId != null ? Number(callId) : 0;
         if (!id) return false;
         if (dismissedRingIds[id] || answeredCallIds[id]) return true;
-        if (startingCall && currentCall && Number(currentCall.id) === id) return true;
         if (shownIncomingIds[id] && incomingCallId !== id) return true;
         if (lastEndedCallId != null && Number(lastEndedCallId) === id) return true;
         return false;
@@ -1549,9 +1194,7 @@ import {
         }
         hideEnded();
         // Never let a stale in-call shell block the Decline/Answer modal.
-        if (els.inCall && !els.inCall.hidden && !callConnected && !startingCall
-            && !(currentCall && currentCall.id && answeredCallIds[Number(currentCall.id)])
-            && !pc) {
+        if (els.inCall && !els.inCall.hidden && !callConnected && !startingCall) {
             els.inCall.hidden = true;
         }
         // Extract caller_profile from signaling payload
@@ -1609,7 +1252,7 @@ import {
             currentCall = null;
             els.incoming.hidden = false;
             els.incoming.removeAttribute('hidden');
-            startRingtone('incoming', callId);
+            startRingtone('incoming');
             clearRingTimeout();
             ringTimeout = setTimeout(function () {
                 if (call.id != null) dismissedRingIds[Number(call.id)] = true;
@@ -1633,13 +1276,13 @@ import {
         }
         els.incoming.hidden = false;
         els.incoming.removeAttribute('hidden');
-        startRingtone('incoming', callId);
+        startRingtone('incoming');
         armRingTimeout(true);
     }
 
     function hideIncoming() {
         if (els.incoming) els.incoming.hidden = true;
-        if (ringMode === 'incoming') stopRingtone();
+        // Ringtone may continue for outgoing ring UI; stop only if not showing in-call ringing.
     }
 
     function formatTimer(ms) {
@@ -1673,44 +1316,31 @@ import {
     function startTimer(serverStartedAt, serverTime) {
         applyServerClock(serverTime);
 
-        if (!callConnected) {
-            return;
-        }
-
-        var nextStarted = Date.now() + clockOffsetMs;
-        if (serverStartedAt) {
-            var parsed = Date.parse(serverStartedAt);
-            if (!isNaN(parsed)) nextStarted = parsed;
-        }
-        var cid = currentCall && currentCall.id != null ? Number(currentCall.id) : null;
-        if (callTimer && timerCallId != null && cid != null && timerCallId === cid
-            && callStartedAt && Math.abs(callStartedAt - nextStarted) < 1500) {
-            renderTimer();
-            return;
-        }
-
+        // FIX BUG #3: ALWAYS clear existing timer first to prevent multiple intervals
         if (callTimer) {
             clearInterval(callTimer);
             callTimer = null;
         }
-        timerCallId = cid;
-        callStartedAt = nextStarted;
+
+        // FIX BUG #3: Always set fresh timestamp for each call
+        if (serverStartedAt) {
+            var parsed = Date.parse(serverStartedAt);
+            if (!isNaN(parsed)) {
+                callStartedAt = parsed;
+            } else {
+                // Fallback if server time is invalid
+                callStartedAt = Date.now() + clockOffsetMs;
+            }
+        } else {
+            // No server time provided - use local time
+            callStartedAt = Date.now() + clockOffsetMs;
+        }
+        
+        // Start fresh timer interval
         renderTimer();
         callTimer = setInterval(function () {
             renderTimer();
         }, 250);
-    }
-
-    function maybeStartConnectedTimer() {
-        if (!callConnected) return;
-        var ts = currentCall && (currentCall.started_at || currentCall.answered_at);
-        // FIX: If server didn't provide timestamp, use current time to start timer
-        if (!ts) {
-            ts = new Date().toISOString();
-        }
-        startTimer(ts, currentCall && currentCall.server_time);
-        if (els.timer) els.timer.hidden = false;
-        startCallHeartbeat();
     }
 
     /**
@@ -1740,13 +1370,7 @@ import {
     }
 
     async function ensurePeerConnection(videoEnabled) {
-        if (pc) {
-            attachLocalVideo();
-            if (videoEnabled && localStream && !findLiveVideoTrack()) {
-                try { await applyCameraState(true); } catch (eCam) { /* keep audio call */ }
-            }
-            return pc;
-        }
+        if (pc) return pc;
 
         if (typeof RTCPeerConnection === 'undefined') {
             throw new Error('WebRTC is not supported in this browser.');
@@ -1763,7 +1387,7 @@ import {
         pc.onicecandidate = function (ev) {
             if (!ev.candidate || !currentCall) return;
             signalPeer({
-                type: 'ice-candidate',
+                type: 'ice',
                 call_id: currentCall.id,
                 conversation_id: currentCall.conversation_id,
                 candidate: ev.candidate
@@ -1789,75 +1413,42 @@ import {
         pc.oniceconnectionstatechange = function () {
             var st = pc && pc.iceConnectionState;
             if (st === 'connected' || st === 'completed') {
-                if (iceDisconnectTimer) {
-                    clearTimeout(iceDisconnectTimer);
-                    iceDisconnectTimer = null;
-                }
                 callConnected = true;
                 clearConnectionTimeout();
-                keepActiveCallVisible('Connected');
-                maybeStartConnectedTimer();
-                refreshRemoteFromReceivers();
-                attachLocalVideo();
+                setCallStatus('Connected');
                 unlockRemotePlayback();
                 updateCameraUi();
-                signalMediaState();
             }
-            if (st === 'disconnected' || st === 'failed') {
-                if (iceDisconnectTimer) clearTimeout(iceDisconnectTimer);
-                iceDisconnectTimer = setTimeout(function () {
-                    iceDisconnectTimer = null;
-                    if (!pc || !currentCall) return;
-                    var now = pc.iceConnectionState;
-                    if (now === 'failed') {
-                        toast('Call connection failed.', 'error');
-                        endCall();
-                    }
-                }, 8000);
+            if (st === 'failed') {
+                if (!currentCall) return;
+                toast('Call connection failed.', 'error');
+                endCall();
             }
         };
         pc.onconnectionstatechange = function () {
             if (pc && pc.connectionState === 'connected') {
-                callConnected = true;
                 clearConnectionTimeout();
-                keepActiveCallVisible('Connected');
-                maybeStartConnectedTimer();
-                refreshRemoteFromReceivers();
-                attachLocalVideo();
                 unlockRemotePlayback();
                 updateCameraUi();
-                signalMediaState();
             }
             if (pc && pc.connectionState === 'failed') {
-                if (iceDisconnectTimer) clearTimeout(iceDisconnectTimer);
-                iceDisconnectTimer = setTimeout(function () {
-                    iceDisconnectTimer = null;
-                    if (!pc || !currentCall) return;
-                    if (pc.connectionState === 'failed') {
-                        toast('Call connection failed.', 'error');
-                        endCall();
-                    }
-                }, 8000);
+                if (!currentCall) return;
+                toast('Call connection failed.', 'error');
+                endCall();
             }
         };
 
-        videoSender = null;
         localStream.getTracks().forEach(function (track) {
-            var sender = pc.addTrack(track, localStream);
-            if (track.kind === 'video') videoSender = sender;
+            pc.addTrack(track, localStream);
         });
-        if (videoEnabled && !videoSender) {
-            try {
-                var videoTx = pc.addTransceiver('video', { direction: 'sendrecv' });
-                videoSender = videoTx.sender;
-            } catch (eVid) { /* ignore */ }
-        }
         var kinds = {};
         pc.getTransceivers().forEach(function (t) {
-            var kind = (t.receiver && t.receiver.track && t.receiver.track.kind)
-                || (t.sender && t.sender.track && t.sender.track.kind);
+            var kind = t.receiver && t.receiver.track && t.receiver.track.kind;
             if (kind) kinds[kind] = true;
         });
+        if (!kinds.video) {
+            try { pc.addTransceiver('video', { direction: 'recvonly' }); } catch (e) { /* ignore */ }
+        }
         if (!kinds.audio) {
             try { pc.addTransceiver('audio', { direction: 'recvonly' }); } catch (e2) { /* ignore */ }
         }
@@ -1900,22 +1491,24 @@ import {
         cameraPending = target;
 
         cameraChain = cameraChain.then(function () {
+            // A newer click arrived while we were working: honour the latest.
             var wanted = cameraPending;
             return applyCameraState(wanted);
         }).catch(function (err) {
             toast((err && err.message) || 'Unable to toggle camera.', 'error');
             syncCameraUi();
         }).then(function () {
+            if (cameraPending !== null && cameraPending !== cameraEnabled) {
+                return setCameraEnabled(cameraPending);
+            }
+            // Tell the peer so it can show the camera-off placeholder.
             if (currentCall) {
                 signalPeer({
-                    type: 'camera-state',
+                    type: 'camera',
                     call_id: currentCall.id,
                     conversation_id: currentCall.conversation_id,
                     enabled: !!cameraEnabled
                 });
-            }
-            if (cameraPending !== null && cameraPending !== cameraEnabled) {
-                return applyCameraState(cameraPending);
             }
             return null;
         });
@@ -1929,60 +1522,57 @@ import {
         }
 
         cameraBusy = true;
-        cameraEnabled = !!enabled;
         syncCameraUi();
 
         try {
             var liveTrack = findLiveVideoTrack();
             var needsRenegotiate = false;
-            var sender = findVideoSender();
 
             if (!enabled) {
-                // FIX BUG #4: Stop tracks completely when turning camera OFF
-                // Don't just disable - this ensures clean restart when turning ON
+                // Keep the track (and the sender) in place; only mute it.
                 localStream.getVideoTracks().forEach(function (track) {
-                    try { track.stop(); } catch (eStop) {}
-                    try { localStream.removeTrack(track); } catch (eRem) {}
+                    track.enabled = false;
                 });
-                if (sender && sender.track) {
-                    try { sender.replaceTrack(null); } catch (eRep) {}
-                }
-                videoSender = null;
                 cameraEnabled = false;
-                attachLocalVideo();
                 syncCameraUi();
+                // FIX BUG #2: Update local video element to reflect camera off state
+                attachLocalVideo();
                 return;
             }
 
-            // FIX BUG #4: When turning ON, always get fresh stream since we stopped tracks
-            // Don't try to reuse stopped tracks
-            var devices = assertMediaReady();
-            var camStream;
-            try {
-                camStream = await devices.getUserMedia(videoOnlyConstraints());
-            } catch (gumErr) {
-                var name = (gumErr && gumErr.name) || '';
-                cameraEnabled = false;
-                if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-                    throw new Error('Camera permission was denied.');
-                }
-                if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-                    throw new Error('No camera was found on this device.');
-                }
-                if (name === 'NotReadableError' || name === 'TrackStartError') {
-                    throw new Error('Camera is already in use by another app.');
-                }
-                throw new Error((gumErr && gumErr.message) || 'Unable to start the camera.');
+            if (liveTrack) {
+                // Fast path: the original camera track is still usable.
+                localStream.getVideoTracks().forEach(function (track) {
+                    track.enabled = true;
+                });
+                liveTrack.enabled = true;
+                await attachVideoTrackToSender(liveTrack);
+                cameraEnabled = true;
+                syncCameraUi();
+                // FIX BUG #2: Update local video element to show camera on
+                attachLocalVideo();
+                // FIX BUG #2: Force video element to play after re-enabling
+                try {
+                    var lp = els.localVideo.play();
+                    if (lp && typeof lp.catch === 'function') {
+                        lp.catch(function () {});
+                    }
+                } catch (ePlay) { /* ignore */ }
+                return;
             }
+
+            // Slow path: the track was ended. Acquire a new one and replace it.
+            var devices = assertMediaReady();
+            var camStream = await devices.getUserMedia(videoOnlyConstraints());
             await prepareLocalStream(camStream);
             var newTrack = camStream.getVideoTracks()[0];
             if (!newTrack) {
                 throw new Error('No camera was found on this device.');
             }
 
-            // Clean up old tracks if any exist
+            // Drop dead tracks so the stream never accumulates duplicates.
             localStream.getVideoTracks().forEach(function (track) {
-                if (track !== newTrack) {
+                if (track !== newTrack && track.readyState === 'ended') {
                     try { localStream.removeTrack(track); } catch (e) {}
                     try { track.stop(); } catch (e2) {}
                 }
@@ -1990,6 +1580,7 @@ import {
             if (!localStream.getVideoTracks().some(function (t) { return t.id === newTrack.id; })) {
                 localStream.addTrack(newTrack);
             }
+            // Stop any extra camera track the device handed us.
             camStream.getVideoTracks().forEach(function (track) {
                 if (track !== newTrack) {
                     try { track.stop(); } catch (e3) {}
@@ -1999,8 +1590,8 @@ import {
             newTrack.enabled = true;
             needsRenegotiate = await attachVideoTrackToSender(newTrack);
             cameraEnabled = true;
-            attachLocalVideo();
             syncCameraUi();
+            attachLocalVideo();
         } finally {
             cameraBusy = false;
             syncCameraUi();
@@ -2030,13 +1621,16 @@ import {
     async function attachVideoTrackToSender(track) {
         if (!pc || !track) return false;
 
-        var sender = findVideoSender();
+        var sender = pc.getSenders().find(function (s) {
+            return s && s.track && s.track.kind === 'video';
+        });
 
         if (sender) {
+            // Replacing a video track with another video track does not need
+            // a new offer: the transceiver already negotiated video.
             if (sender.track !== track) {
                 await sender.replaceTrack(track);
             }
-            videoSender = sender;
             return false;
         }
 
@@ -2048,11 +1642,11 @@ import {
         if (videoTx && videoTx.sender) {
             await videoTx.sender.replaceTrack(track);
             try { videoTx.direction = 'sendrecv'; } catch (eDir) { /* ignore */ }
-            videoSender = videoTx.sender;
-            return videoTx.currentDirection === 'inactive' || videoTx.currentDirection === 'recvonly';
+            return true;
         }
 
-        videoSender = pc.addTrack(track, localStream);
+        // No video sender yet: add the track and let the offer carry it.
+        pc.addTrack(track, localStream);
         return true;
     }
 
@@ -2065,13 +1659,10 @@ import {
      */
     function attachLocalVideo() {
         if (!els.localVideo || !localStream) return;
-        if (els.localVideo.srcObject !== localStream || cameraEnabled) {
-            els.localVideo.srcObject = null;
+        if (els.localVideo.srcObject !== localStream) {
             els.localVideo.srcObject = localStream;
         }
         // FIX BUG #1: Ensure all required video attributes are set
-        // VERIFIED: attachLocalVideo() sets muted, playsInline, autoplay, and hidden 
-        // attributes (lines 1687-1693). Local preview displays correctly.
         els.localVideo.muted = true;
         els.localVideo.setAttribute('muted', '');
         els.localVideo.playsInline = true;
@@ -2095,8 +1686,8 @@ import {
         var on = !!cameraEnabled;
         setCameraUi(on);
         if (els.cameraBtn) {
-            els.cameraBtn.classList.remove('is-busy');
-            els.cameraBtn.removeAttribute('aria-busy');
+            els.cameraBtn.classList.toggle('is-busy', !!cameraBusy);
+            els.cameraBtn.setAttribute('aria-busy', cameraBusy ? 'true' : 'false');
         }
         if (els.localVideo) {
             // The self-view stays mounted; only its state class changes.
@@ -2108,23 +1699,19 @@ import {
             var localOffAvatar = document.getElementById('commsLocalVideoOffAvatar');
             if (localOffAvatar) {
                 var me = myIdentity();
-                var root = getCallRoot();
-                var meSrc = root ? (root.dataset.currentUserAvatar || '') : '';
-                paintAvatar(localOffAvatar, me.name || 'You', meSrc);
+                var parts = String(me.name || 'You').trim().split(/\s+/).filter(Boolean);
+                var initials = parts.slice(0, 2).map(function (part) {
+                    return part.charAt(0).toUpperCase();
+                }).join('');
+                localOffAvatar.textContent = initials || 'U';
             }
         }
         if (els.remoteVideoOff) {
             els.remoteVideoOff.hidden = remoteCameraEnabled;
-            els.remoteVideoOff.setAttribute('aria-hidden', remoteCameraEnabled ? 'true' : 'false');
         }
         if (els.inCall) {
             els.inCall.classList.toggle('is-remote-camera-off', !remoteCameraEnabled);
             els.inCall.classList.toggle('is-local-camera-off', !on);
-            els.inCall.classList.toggle('is-remote-mic-off', !remoteMicEnabled);
-        }
-        var remoteMicOff = document.getElementById('commsRemoteMicOff');
-        if (remoteMicOff) {
-            remoteMicOff.hidden = remoteMicEnabled;
         }
     }
 
@@ -2153,57 +1740,11 @@ import {
         }
     }
 
-    function remountCallEls() {
-        els.inCall = document.getElementById('commsInCall') || els.inCall;
-        els.incoming = document.getElementById('commsIncomingCall') || els.incoming;
-        els.remoteVideo = document.getElementById('commsRemoteVideo') || els.remoteVideo;
-        els.localVideo = document.getElementById('commsLocalVideo') || els.localVideo;
-        els.remoteAudio = document.getElementById('commsRemoteAudio') || els.remoteAudio;
-        els.timer = document.getElementById('commsCallTimer') || els.timer;
-        els.callStatus = document.getElementById('commsCallStatus') || els.callStatus;
-        els.peerName = document.getElementById('commsCallPeerName') || els.peerName;
-        els.localVideoOff = document.getElementById('commsLocalVideoOff') || els.localVideoOff;
-        els.remoteVideoOff = document.getElementById('commsRemoteVideoOff') || els.remoteVideoOff;
-        if (els.inCall && els.inCall.parentNode !== document.body) {
-            document.body.appendChild(els.inCall);
-        }
-    }
-
-    function keepActiveCallVisible(statusText) {
-        remountCallEls();
-        if (!els.inCall) return;
-        hideEnded();
-        if (els.incoming) els.incoming.hidden = true;
-        els.inCall.hidden = false;
-        els.inCall.removeAttribute('hidden');
-        document.documentElement.classList.add('comms-in-call');
-        document.body.classList.add('comms-in-call');
-        if (statusText) setCallStatus(statusText);
-        if (els.timer) {
-            els.timer.hidden = false;
-            if (!callStartedAt) els.timer.textContent = '00:00';
-            else renderTimer();
-        }
-        attachLocalVideo();
-        if (remoteStream) bindRemoteMedia(remoteStream);
-    }
-
-    function isLiveAcceptedCall() {
-        if (startingCall || callConnected || pc || pendingStart) return true;
-        if (els.inCall && !els.inCall.hidden && currentCall) return true;
-        if (currentCall && currentCall.id != null && answeredCallIds[Number(currentCall.id)]) return true;
-        return false;
-    }
-
     function showInCall(call, statusText) {
-        remountCallEls();
         if (!els.inCall) return;
         hideEnded();
         if (els.incoming) els.incoming.hidden = true;
         els.inCall.hidden = false;
-        els.inCall.removeAttribute('hidden');
-        document.documentElement.classList.add('comms-in-call');
-        document.body.classList.add('comms-in-call');
         if (els.peerName) {
             els.peerName.textContent = (call.peer && call.peer.name) || 'Call';
         }
@@ -2218,6 +1759,9 @@ import {
                 els.timer.textContent = '00:00';
             }
         }
+        if (callConnected && !callStartedAt) {
+            startTimer();
+        }
         setMuteUi(false);
         updateCameraUi();
         syncLocalPipLayout();
@@ -2225,20 +1769,13 @@ import {
     }
 
     async function cleanupMediaOnly() {
-        if (cleaningCall && !pc && !localStream) {
-            return;
-        }
-        cleaningCall = true;
         clearPendingStart();
         clearRingTimeout();
         clearConnectionTimeout();
         stopCallHeartbeat();
-        if (iceDisconnectTimer) {
-            clearTimeout(iceDisconnectTimer);
-            iceDisconnectTimer = null;
-        }
-        stopRingtone();
+        if (ringTimer || ringCtx) stopRingtone();
         
+        // FIX BUG #3: Always clear timer properly
         clearInterval(callTimer);
         callTimer = null;
         lastCallDurationMs = callElapsedMs();
@@ -2247,12 +1784,7 @@ import {
         cameraEnabled = false;
         wantsVideo = false;
         callConnected = false;
-        peerAnsweredFor = null;
-        remoteCameraEnabled = true;
-        remoteMicEnabled = true;
-        videoSender = null;
-        cameraPending = null;
-        cameraBusy = false;
+        // Critical: stale role=caller blocked ringing poll / syncIncomingFromServer.
         role = null;
         startingCall = false;
         
@@ -2301,8 +1833,6 @@ import {
             audioUnlockCtx = null;
         }
         // FIX BUG #4 & #5: Clear ICE queue to prevent stale candidates
-        // VERIFIED: cleanupMediaOnly() clears iceQueue (line 1859) and calls 
-        // teardownCallChannel() (line 1883) to prevent stale state.
         iceQueue = [];
         
         remoteStream = null;
@@ -2334,13 +1864,6 @@ import {
             els.callCenter.hidden = false;
         }
         if (els.incoming) els.incoming.hidden = true;
-        if (els.remoteVideoOff) els.remoteVideoOff.hidden = true;
-        if (els.localVideoOff) els.localVideoOff.hidden = true;
-        var remoteMicOffEl = document.getElementById('commsRemoteMicOff');
-        if (remoteMicOffEl) remoteMicOffEl.hidden = true;
-        document.documentElement.classList.remove('comms-in-call');
-        document.body.classList.remove('comms-in-call');
-        cleaningCall = false;
     }
 
     function publishCallNotice(data) {
@@ -2348,8 +1871,7 @@ import {
         if (!notice || !window.CommsChat || typeof window.CommsChat.publishSentMessage !== 'function') return;
         var peers = (data.call && data.call.invitees) || [];
         window.CommsChat.publishSentMessage(notice, peers);
-        if (typeof window.CommsChat.appendMessage === 'function'
-            && typeof window.CommsChat.publishSentMessage !== 'function') {
+        if (typeof window.CommsChat.appendMessage === 'function') {
             window.CommsChat.appendMessage(notice);
         }
     }
@@ -2379,19 +1901,17 @@ import {
         clearRingTimeout();
         stopRingtone();
 
-        try {
-            await signalPeer({
-                type: 'call-end',
-                reason: status,
-                ended_by_role: role || (status === 'cancelled' ? 'caller' : 'callee'),
-                call_id: callSnapshot.id,
-                conversation_id: callSnapshot.conversation_id,
-                caller_id: callSnapshot.caller_id,
-                caller_type: callSnapshot.caller_type,
-                receiver_id: callSnapshot.receiver_id,
-                receiver_type: callSnapshot.receiver_type
-            });
-        } catch (hangupErr) { /* still clean up locally */ }
+        var signalPromise = signalPeer({
+            type: 'hangup',
+            reason: status,
+            ended_by_role: role || (status === 'cancelled' ? 'caller' : 'callee'),
+            call_id: callSnapshot.id,
+            conversation_id: callSnapshot.conversation_id,
+            caller_id: callSnapshot.caller_id,
+            caller_type: callSnapshot.caller_type,
+            receiver_id: callSnapshot.receiver_id,
+            receiver_type: callSnapshot.receiver_type
+        });
         currentCall = null;
         await cleanupMediaOnly();
         var serverCall = callSnapshot.id
@@ -2399,6 +1919,7 @@ import {
             : null;
         showCallEnded(status, peerName, callSnapshot.id, null, serverCall);
         refreshCallChat(callSnapshot.conversation_id);
+        signalPromise.catch(function () {});
     }
 
     function clearPendingStart() {
@@ -2528,8 +2049,10 @@ import {
         if (!window.Comms || startingCall) return;
         startingCall = true;
         
-        // FIX BUG #3: Force stop any existing timer before starting new call
-        stopCallTimer();
+        // Ensure timer is fully reset before starting new call (REVIEW FIX #1)
+        clearInterval(callTimer);
+        callTimer = null;
+        callStartedAt = null;
         
         var r = routes();
         try {
@@ -2580,7 +2103,7 @@ import {
             // Subscribe + ring peer immediately (do not wait for getUserMedia / SDP).
             var channelReady = subscribeCallChannel(conversationId);
             var ringSignal = signalPeer({
-                type: 'call-invite',
+                type: 'incoming-call',
                 call_id: currentCall.id,
                 conversation_id: conversationId,
                 call_type: callType,
@@ -2595,16 +2118,9 @@ import {
             await Promise.all([channelReady, ringSignal]);
             setCallStatus('Ringing...');
             await ensurePeerConnection(wantsVideo);
-            if (wantsVideo) {
-                cameraEnabled = true;
-                var outTrack = findLiveVideoTrack();
-                if (outTrack) outTrack.enabled = true;
-                attachLocalVideo();
-                syncCameraUi();
-            }
             var offer = await pc.createOffer({
                 offerToReceiveAudio: true,
-                offerToReceiveVideo: !!wantsVideo
+                offerToReceiveVideo: true
             });
             await pc.setLocalDescription(offer);
             await signalPeer({
@@ -2673,13 +2189,11 @@ import {
                     clearInterval(timer);
                     resolve(false);
                 }
-            }, 20);
+            }, 50);
         });
     }
 
     async function acceptIncoming() {
-        stopRingtone();
-        clearRingTimeout();
         if (typeof window.CommsWebRTC !== 'undefined'
             && typeof window.CommsWebRTC.__acceptGroupIfPending === 'function') {
             try {
@@ -2687,6 +2201,7 @@ import {
                 if (groupHandled) {
                     hideIncoming();
                     stopRingtone();
+                    clearRingTimeout();
                     return;
                 }
             } catch (err) {
@@ -2717,57 +2232,45 @@ import {
         if (acceptedCallId) rememberCallId(answeredCallIds, acceptedCallId);
         answeredCall = call;
 
-        // FIX BUG #3: Force stop any existing timer before accepting new call
-        stopCallTimer();
+        // Ensure timer is fully reset before starting new call (REVIEW FIX #1)
+        clearInterval(callTimer);
+        callTimer = null;
+        callStartedAt = null;
 
         clearRingTimeout();
         stopRingtone();
         hideIncoming();
         try {
             assertMediaReady();
+            await subscribeCallChannel(call.conversation_id);
+            callConnected = true;
             showInCall(call, 'Connecting...');
             unlockRemotePlayback();
             armConnectionTimeout();
-            wantsVideo = call.call_type === 'video';
-            var acceptJobs = [
-                subscribeCallChannel(call.conversation_id),
-                signalPeer({
-                    type: 'call-accept',
-                    call_id: call.id,
-                    conversation_id: call.conversation_id,
-                    caller_id: call.caller_id,
-                    caller_type: call.caller_type,
-                    receiver_id: call.receiver_id,
-                    receiver_type: call.receiver_type
-                }),
-                ensurePeerConnection(wantsVideo)
-            ];
+            signalPeer({
+                type: 'call-accepted',
+                call_id: call.id,
+                conversation_id: call.conversation_id,
+                caller_id: call.caller_id,
+                caller_type: call.caller_type,
+                receiver_id: call.receiver_id,
+                receiver_type: call.receiver_type
+            });
             updateCallStatus(call.id, 'accepted').then(function (accepted) {
                 if (accepted && currentCall && Number(currentCall.id) === Number(accepted.id)) {
                     currentCall = Object.assign({}, currentCall, accepted);
                     answeredCall = currentCall;
+                    if (accepted.started_at || accepted.answered_at) {
+                        startTimer(accepted.started_at || accepted.answered_at, accepted.server_time);
+                    }
                 }
             }).catch(function () {});
-            await Promise.all(acceptJobs);
-            if (wantsVideo) {
-                cameraEnabled = true;
-                var pickupTrack = findLiveVideoTrack();
-                if (pickupTrack) pickupTrack.enabled = true;
-                attachLocalVideo();
-                syncCameraUi();
-            }
-            if (!call._remoteOffer && currentCall && currentCall._remoteOffer) {
-                call._remoteOffer = currentCall._remoteOffer;
-            }
+            wantsVideo = call.call_type === 'video';
+            await ensurePeerConnection(wantsVideo);
             if (!call._remoteOffer) {
                 await waitForRemoteOffer(8000);
             }
-            if (!call._remoteOffer && currentCall && currentCall._remoteOffer) {
-                call._remoteOffer = currentCall._remoteOffer;
-            }
-            keepActiveCallVisible('Connecting...');
-            startCallHeartbeat();
-            if (call._remoteOffer && pc) {
+            if (call._remoteOffer) {
                 await pc.setRemoteDescription(call._remoteOffer);
                 var answer = await pc.createAnswer();
                 await pc.setLocalDescription(answer);
@@ -2780,34 +2283,46 @@ import {
                     caller_type: call.caller_type,
                     receiver_id: call.receiver_id,
                     receiver_type: call.receiver_type,
+                    // Shared timing reference so the caller shows the same
+                    // duration as the callee.
                     started_at: call.started_at || call.answered_at || null,
                     server_time: call.server_time || null
                 });
                 while (iceQueue.length) {
                     await pc.addIceCandidate(iceQueue.shift());
                 }
-                setCallStatus('Connecting...');
-                attachLocalVideo();
-                signalMediaState();
+                setCallStatus('Connected');
+                startTimer(
+                    call.started_at || call.answered_at,
+                    call.server_time
+                );
+                startCallHeartbeat();
+                refreshCallChat(call.conversation_id);
             } else {
-                setCallStatus('Connecting...');
-                keepActiveCallVisible('Connecting...');
+                toast('Call signal was incomplete. Ask the caller to try again.', 'error');
+                await updateCallStatus(call.id, 'ended');
+                var peerName = (call.peer && call.peer.name) || '';
+                var incompleteId = call.id;
+                var incompleteConv = call.conversation_id;
+                currentCall = null;
+                await cleanupMediaOnly();
+                showCallEnded('ended', peerName, incompleteId);
+                refreshCallChat(incompleteConv);
             }
         } catch (err) {
             toast(err.message || 'Unable to accept call.', 'error');
-            keepActiveCallVisible('Connecting...');
-            if (!pc && !localStream) {
-                if (call && call.id) {
-                    try { await updateCallStatus(call.id, 'rejected'); } catch (e) { /* ignore */ }
-                }
-                var peer = (call && call.peer && call.peer.name) || '';
-                var failId = call && call.id;
-                var failConv = call && call.conversation_id;
-                currentCall = null;
-                await cleanupMediaOnly();
-                showCallEnded('rejected', peer, failId);
-                refreshCallChat(failConv);
+            if (call && call.id) {
+                try { await updateCallStatus(call.id, 'rejected'); } catch (e) { /* ignore */ }
             }
+            var peer = (call && call.peer && call.peer.name) || '';
+            var failId = call && call.id;
+            var failConv = call && call.conversation_id;
+            currentCall = null;
+            await cleanupMediaOnly();
+            showCallEnded('rejected', peer, failId);
+            refreshCallChat(failConv);
+        } finally {
+            startingCall = false;
         }
     }
 
@@ -2908,118 +2423,46 @@ import {
         var callSnapshot = currentCall;
         if (callSnapshot.id != null) markCallTerminal(callSnapshot.id);
         rememberCallContext(callSnapshot);
-        
-        // CRITICAL FIX: Stop all media/UI immediately
         stopRingtone();
-        stopVibration();
-        stopCallTimer();
         hideIncoming();
-        
-        // Send hangup signal BEFORE nulling currentCall
-        try {
-            await signalPeer({
-                type: 'call-end',
-                reason: 'ended',
-                ended_by_role: role || 'caller',
-                call_id: callSnapshot.id,
-                conversation_id: callSnapshot.conversation_id,
-                caller_id: callSnapshot.caller_id,
-                caller_type: callSnapshot.caller_type,
-                receiver_id: callSnapshot.receiver_id,
-                receiver_type: callSnapshot.receiver_type
-            });
-        } catch (err) {
-            console.error('Failed to send hangup signal:', err);
-        }
-        
-        // Clean up local state immediately
+        var signalPromise = signalPeer({
+            type: 'hangup',
+            reason: 'ended',
+            ended_by_role: role || 'caller',
+            call_id: callSnapshot.id,
+            conversation_id: callSnapshot.conversation_id,
+            caller_id: callSnapshot.caller_id,
+            caller_type: callSnapshot.caller_type,
+            receiver_id: callSnapshot.receiver_id,
+            receiver_type: callSnapshot.receiver_type
+        });
         currentCall = null;
-        role = null;
         await cleanupMediaOnly();
-        
-        // CRITICAL FIX: Show "Call Ended" UI immediately, update server status in background
-        showCallEnded('ended', peerName, callSnapshot.id, role, null);
-        
-        // Update server status in background (don't block UI)
-        withTimeout(updateCallStatus(callSnapshot.id, 'ended'), 4000).then(function(serverCall) {
-            if (serverCall && serverCall.duration_seconds != null) {
-                var endedEl = document.querySelector('[data-call-ended-id="' + callSnapshot.id + '"]');
-                if (endedEl && serverCall.duration_seconds > 0) {
-                    var durationText = formatCallDuration(serverCall.duration_seconds);
-                    var durationDisplay = endedEl.querySelector('.call-duration');
-                    if (durationDisplay) durationDisplay.textContent = durationText;
-                }
-            }
-        }).catch(function() { /* ignore */ });
-        
+        // The server owns the end timestamp and the duration.
+        var serverCall = await withTimeout(updateCallStatus(callSnapshot.id, 'ended'), 4000);
+        showCallEnded('ended', peerName, callSnapshot.id, role, serverCall);
         refreshCallChat(callSnapshot.conversation_id);
+        signalPromise.catch(function () {});
     }
 
     function sameCall(payload) {
-        if (!payload || payload.call_id == null) return false;
-        if (!currentCall) return false;
+        if (!payload || payload.call_id == null || !currentCall) return true;
         return Number(currentCall.id) === Number(payload.call_id);
-    }
-
-    function signalType(payload) {
-        var t = String((payload && payload.type) || '');
-        if (t === 'call-invite') return 'incoming-call';
-        if (t === 'call-accept') return 'call-accepted';
-        if (t === 'call-end' || t === 'call-reject') return 'hangup';
-        if (t === 'camera-state') return 'camera';
-        if (t === 'mic-state' || t === 'mic') return 'mic';
-        if (t === 'ice-candidate') return 'ice';
-        if (t === 'busy') return 'call-busy';
-        return t;
-    }
-
-    function replyBusy(payload) {
-        if (!payload || !payload.conversation_id || !window.CommsRealtime) return;
-        var me = myIdentity();
-        window.CommsRealtime.broadcastSignal(payload.conversation_id, {
-            type: 'call-busy',
-            call_id: payload.call_id,
-            conversation_id: payload.conversation_id,
-            from_user_id: me.id,
-            from_user_type: me.type
-        }, {
-            peerId: payload.from_user_id || payload.caller_id,
-            peerType: payload.from_user_type || payload.caller_type
-        });
     }
 
     function applyPeerAnswered() {
         stopRingtone();
-        stopVibration();
         clearRingTimeout();
-        var cid = currentCall && currentCall.id != null ? Number(currentCall.id) : null;
-        if (cid != null) rememberCallId(answeredCallIds, cid);
-        if (peerAnsweredFor != null && cid != null && peerAnsweredFor === cid) {
-            keepActiveCallVisible(callConnected ? 'Connected' : 'Connecting...');
-            attachLocalVideo();
-            return;
-        }
-        peerAnsweredFor = cid;
-        startingCall = true;
+        callConnected = true;
         role = 'caller';
-        keepActiveCallVisible('Connecting...');
+        setCallStatus('Connecting...');
         armConnectionTimeout();
-        attachLocalVideo();
         updateCameraUi();
         unlockRemotePlayback();
-        var ice = pc && (pc.iceConnectionState || pc.connectionState);
-        if (ice === 'connected' || ice === 'completed') {
-            callConnected = true;
-            setCallStatus('Connected');
-            maybeStartConnectedTimer();
-        }
-        startCallHeartbeat();
-        signalMediaState();
     }
 
     async function handleSignal(payload) {
         if (!payload || !payload.type) return;
-        payload = Object.assign({}, payload, { type: signalType(payload) });
 
         if (payload.type === 'incoming-call' || payload.type === 'offer') {
             var meOffer = myIdentity();
@@ -3031,39 +2474,13 @@ import {
             // Terminal calls: ignore BOTH stale incoming-call AND late offers (except renegotiation
             // while actively in that same call). Late offers after Decline used to re-open the modal.
             if (signalCallId && isCallAlreadyHandled(signalCallId)) {
-                var sameActiveCall = currentCall && Number(currentCall.id) === signalCallId;
-                if (payload.type === 'offer' && payload.sdp && sameActiveCall) {
-                    currentCall._remoteOffer = payload.sdp;
-                    if (pc && startingCall && pc.signalingState === 'stable') {
-                        try {
-                            await pc.setRemoteDescription(payload.sdp);
-                            var lateAnswer = await pc.createAnswer();
-                            await pc.setLocalDescription(lateAnswer);
-                            await signalPeer({
-                                type: 'answer',
-                                call_id: currentCall.id,
-                                conversation_id: currentCall.conversation_id,
-                                sdp: lateAnswer,
-                                caller_id: currentCall.caller_id,
-                                caller_type: currentCall.caller_type,
-                                receiver_id: currentCall.receiver_id,
-                                receiver_type: currentCall.receiver_type
-                            });
-                            attachLocalVideo();
-                            signalMediaState();
-                        } catch (lateOfferErr) { /* waitForRemoteOffer may still apply */ }
-                    }
-                    if (!(callConnected && pc)) return;
-                } else if (!(payload.type === 'offer' && payload.sdp && isActivelyInCall(signalCallId) && callConnected)) {
+                if (payload.type === 'offer' && payload.sdp && isActivelyInCall(signalCallId) && callConnected) {
+                    // fall through to renegotiation block below
+                } else {
                     return;
                 }
             }
             if (signalCallId && isActivelyInCall(signalCallId) && payload.type === 'incoming-call') {
-                return;
-            }
-            if (callConnected && currentCall && payload.type === 'incoming-call'
-                && Number(currentCall.id) !== Number(payload.call_id)) {
-                replyBusy(payload);
                 return;
             }
             if (callConnected && currentCall && payload.type === 'incoming-call') {
@@ -3128,117 +2545,60 @@ import {
             return;
         }
 
-        if (payload.type === 'call-busy') {
-            if (payload.call_id != null && currentCall && Number(currentCall.id) !== Number(payload.call_id)) return;
-            if (!currentCall || callConnected) return;
-            toast('The other person is on another call.', 'error');
-            await finishUnanswered('rejected');
-            return;
-        }
-
         if (payload.type === 'call-accepted' || payload.type === 'accepted') {
-            if (payload.call_id != null && currentCall && Number(currentCall.id) !== Number(payload.call_id)) {
-                return;
-            }
             var meAccept = myIdentity();
             var iAmCallerAccept = currentCall
                 && Number(currentCall.caller_id) === meAccept.id
-                && (!meAccept.type || portalTypesMatch(currentCall.caller_type, meAccept.type)
-                    || Number(currentCall.caller_id) === meAccept.id);
-            if (role === 'callee' && !iAmCallerAccept) return;
-            if (!currentCall && payload.call_id == null) return;
+                && portalTypesMatch(currentCall.caller_type, meAccept.type);
+            if ((!iAmCallerAccept && role !== 'caller') || !sameCall(payload)) return;
             role = 'caller';
             applyPeerAnswered();
             return;
         }
 
-        if (payload.type === 'hangup' || payload.type === 'call-end') {
-            // FIX BUG #3: Handle both 'hangup' (old) and 'call-end' (new) signal types
-            var hangupMatchesIncoming = incomingCallId != null
-                && payload.call_id != null
-                && Number(incomingCallId) === Number(payload.call_id);
-            if (currentCall && payload.call_id != null && Number(currentCall.id) !== Number(payload.call_id)
-                && !hangupMatchesIncoming) {
-                return;
-            }
-            if (!currentCall && !hangupMatchesIncoming && !(els.inCall && !els.inCall.hidden)
-                && !(els.incoming && !els.incoming.hidden)) {
-                if (payload.call_id != null) markCallTerminal(payload.call_id);
+        if (payload.type === 'hangup') {
+            if (currentCall && payload.call_id != null && Number(currentCall.id) !== Number(payload.call_id)) {
                 return;
             }
             var reason = payload.reason || 'ended';
             var peerName = (currentCall && currentCall.peer && currentCall.peer.name) || '';
             var hangupId = (currentCall && currentCall.id) || payload.call_id;
             var hangupConv = (currentCall && currentCall.conversation_id) || payload.conversation_id;
-            
-            // CRITICAL FIX: Mark call as terminal and cleanup IMMEDIATELY
             if (hangupId != null) markCallTerminal(hangupId);
-            stopCallTimer();
-            stopRingtone();
-            stopVibration();
-            hideIncoming();
-            
             currentCall = null;
             role = null;
             await cleanupMediaOnly();
-            
-            // CRITICAL FIX: Show "Call Ended" UI IMMEDIATELY, fetch server state in background
-            // Don't await server fetch - it can take up to 4 seconds
-            showCallEnded(reason, peerName, hangupId, payload.ended_by_role, null);
-            
-            // Fetch authoritative timestamps in background and update UI if different
-            withTimeout(fetchCallState(hangupId), 4000).then(function(serverState) {
-                if (serverState && serverState.duration_seconds != null) {
-                    // Update duration display if server has more accurate data
-                    var endedEl = document.querySelector('[data-call-ended-id="' + hangupId + '"]');
-                    if (endedEl && serverState.duration_seconds > 0) {
-                        var durationText = formatCallDuration(serverState.duration_seconds);
-                        var durationDisplay = endedEl.querySelector('.call-duration');
-                        if (durationDisplay) durationDisplay.textContent = durationText;
-                    }
-                }
-            }).catch(function() { /* ignore server fetch errors */ });
-            
+            // The peer already ended the call server-side: read the
+            // authoritative timestamps and duration from the server.
+            var serverState = await withTimeout(fetchCallState(hangupId), 4000);
+            showCallEnded(reason, peerName, hangupId, payload.ended_by_role, serverState);
             refreshCallChat(hangupConv);
             return;
         }
 
-        if (payload.type === 'camera-state' || payload.type === 'camera') {
-            if (currentCall && payload.call_id != null && Number(currentCall.id) !== Number(payload.call_id)) {
-                return;
-            }
+        if (payload.type === 'camera') {
+            // The peer switched their camera: show the placeholder instead of
+            // a frozen/black frame, but keep the remote element and its
+            // stream mounted so it recovers instantly.
             remoteCameraEnabled = payload.enabled !== false;
-            refreshRemoteFromReceivers();
+            if (remoteStream) {
+                bindRemoteMedia(remoteStream);
+            }
             unlockRemotePlayback();
             updateCameraUi();
-            return;
-        }
-
-        if (payload.type === 'mic-state' || payload.type === 'mic') {
-            if (currentCall && payload.call_id != null && Number(currentCall.id) !== Number(payload.call_id)) {
-                return;
-            }
-            remoteMicEnabled = payload.enabled !== false;
-            updateCameraUi();
+            scheduleRemoteVideoUiRefresh();
             return;
         }
 
         if (payload.type === 'answer') {
-            if (payload.call_id != null && currentCall && Number(currentCall.id) !== Number(payload.call_id)) {
-                return;
-            }
-            if (!currentCall) return;
-            stopRingtone();
-            stopVibration();
+            if (!sameCall(payload)) return;
 
             var isRenego = !!(payload.renegotiate) || (callConnected && pc && pc.signalingState === 'have-local-offer');
-            if (role === 'callee' && !isRenego) return;
+            if (role !== 'caller' && !isRenego) return;
 
-            if (pc && payload.sdp && (pc.signalingState === 'have-local-offer' || pc.signalingState === 'stable')) {
+            if (pc && payload.sdp && pc.signalingState === 'have-local-offer') {
                 try {
-                    if (pc.signalingState === 'have-local-offer') {
-                        await pc.setRemoteDescription(payload.sdp);
-                    }
+                    await pc.setRemoteDescription(payload.sdp);
                     while (iceQueue.length) {
                         await pc.addIceCandidate(iceQueue.shift());
                     }
@@ -3252,19 +2612,33 @@ import {
                 return;
             }
 
-            if (role === 'callee' && !isRenego) return;
+            if (role !== 'caller') return;
             applyPeerAnswered();
-            if (payload.started_at || payload.answered_at) {
-                currentCall = Object.assign({}, currentCall || {}, {
-                    started_at: payload.started_at || payload.answered_at,
-                    server_time: payload.server_time || null
+            setCallStatus('Connected');
+            // The peer sends the authoritative start timestamp so both sides
+            // show the same duration.
+            var answerStartedAt = payload.started_at
+                || (currentCall && (currentCall.started_at || currentCall.answered_at));
+            var answerServerTime = payload.server_time
+                || (currentCall && currentCall.server_time)
+                || null;
+            if (answerStartedAt) {
+                startTimer(answerStartedAt, answerServerTime);
+            } else {
+                // Fall back to the server record when the peer did not send it.
+                fetchCallState(currentCall && currentCall.id).then(function (state) {
+                    if (state && (state.started_at || state.answered_at)) {
+                        startTimer(state.started_at || state.answered_at, state.server_time);
+                    }
                 });
             }
+            // The caller also keeps the call alive on the server.
+            startCallHeartbeat();
             refreshCallChat(currentCall && currentCall.conversation_id);
             return;
         }
 
-        if ((payload.type === 'ice' || payload.type === 'ice-candidate') && payload.candidate) {
+        if (payload.type === 'ice' && payload.candidate) {
             if (!sameCall(payload)) return;
             if (!pc || !pc.remoteDescription) {
                 iceQueue.push(payload.candidate);
@@ -3303,11 +2677,6 @@ import {
             return;
         }
 
-        if (row.status === 'ringing' && currentCall && Number(currentCall.id) === Number(row.id)
-            && (answeredCallIds[Number(row.id)] || startingCall || callConnected || peerAnsweredFor === Number(row.id))) {
-            return;
-        }
-
         if (row.status === 'ringing' && isReceiver && !isGroupRow) {
             if (row.id != null && (isCallAlreadyHandled(row.id) || isActivelyInCall(row.id))) return;
             role = 'callee';
@@ -3330,9 +2699,7 @@ import {
             if (row.id != null) markCallTerminal(row.id);
             hideIncoming();
             stopRingtone();
-            stopVibration();
-            var mineOutgoing = isCaller || (role === 'caller' && currentCall && Number(currentCall.id) === Number(row.id));
-            if (mineOutgoing) {
+            if (isCaller) {
                 role = 'caller';
                 if (!currentCall || Number(currentCall.id) !== Number(row.id)) {
                     currentCall = Object.assign({}, currentCall || {}, {
@@ -3346,8 +2713,6 @@ import {
                     });
                 }
                 applyPeerAnswered();
-            } else if (currentCall && Number(currentCall.id) === Number(row.id)) {
-                keepActiveCallVisible(callConnected ? 'Connected' : 'Connecting...');
             }
             return;
         }
@@ -3356,14 +2721,6 @@ import {
             if (row.id != null) markCallTerminal(row.id);
             hideIncoming();
             stopRingtone();
-            if (row.id != null && summaryShownFor[String(row.id)]) {
-                if (currentCall && Number(currentCall.id) === Number(row.id)) {
-                    currentCall = null;
-                    cleanupMediaOnly();
-                }
-                refreshCallChat(row.conversation_id);
-                return;
-            }
             if (currentCall && Number(currentCall.id) === Number(row.id)) {
                 var peerName = (currentCall.peer && currentCall.peer.name) || '';
                 var rowId = row.id;
@@ -3399,7 +2756,6 @@ import {
     function syncIncomingFromServer(conversationId) {
         resetCallerRoleIfIdle();
         if (isOutboundCallerBusy()) return;
-        if (isLiveAcceptedCall()) return;
         if (els.incoming && !els.incoming.hidden) return;
         if (isActivelyInCall(null) && callConnected) return;
         var r = routes();
@@ -3410,13 +2766,11 @@ import {
         incomingSyncTimer = window.setTimeout(function () {
             resetCallerRoleIfIdle();
             if (isOutboundCallerBusy()) return;
-            if (isLiveAcceptedCall()) return;
             if (isActivelyInCall(null) && callConnected) return;
             window.Comms.api(url, { method: 'GET', dedupe: true }).then(function (data) {
                 reconcileWithServerState(data);
                 resetCallerRoleIfIdle();
                 if (isOutboundCallerBusy()) return;
-                if (isLiveAcceptedCall()) return;
                 if (els.incoming && !els.incoming.hidden) return;
                 if (isActivelyInCall(null) && callConnected) return;
                 var me = myIdentity();
@@ -3490,17 +2844,15 @@ import {
 
         // The server says we are not in a call: release any local call state.
         if (!activeId) {
-            if (isLiveAcceptedCall()) {
-                keepActiveCallVisible(callConnected ? 'Connected' : 'Connecting...');
-                return;
-            }
             if (currentCall && currentCall.id) {
                 var staleId = Number(currentCall.id);
                 if (staleId !== lastEndedCallId && !isCallAlreadyHandled(staleId)) {
-                    if (!callConnected && !startingCall && !pc) {
+                    // Only release when the server really has no active call.
+                    if (!callConnected) {
                         markCallTerminal(staleId);
                         currentCall = null;
                         role = null;
+                        if (els.inCall) els.inCall.hidden = true;
                     }
                 }
             }
@@ -3532,7 +2884,6 @@ import {
             if (document.visibilityState === 'hidden') return;
             resetCallerRoleIfIdle();
             if (isOutboundCallerBusy()) return;
-            if (isLiveAcceptedCall()) return;
             if (els.incoming && !els.incoming.hidden) return;
             if (isActivelyInCall(null) && callConnected) return;
             syncIncomingFromServer(null);
@@ -3577,14 +2928,8 @@ import {
     mountCallUiToBody();
 
     document.addEventListener('click', function (e) {
-        if (e.target && e.target.closest('#commsTapToPlay')) {
-            e.preventDefault();
+        if (e.target && e.target.closest('#commsInCall')) {
             unlockRemotePlayback();
-            showTapToPlay(false);
-            return;
-        }
-        if (e.target && e.target.closest('#commsIncomingCall') && ringtonePlaying) {
-            unlockCallAudio();
         }
         var acceptBtn = e.target && e.target.closest('#commsAcceptCall');
         var rejectBtn = e.target && e.target.closest('#commsRejectCall');
@@ -3652,14 +2997,6 @@ import {
                 t.enabled = nextEnabled;
             });
             setMuteUi(!nextEnabled);
-            if (currentCall) {
-                signalPeer({
-                    type: 'mic-state',
-                    call_id: currentCall.id,
-                    conversation_id: currentCall.conversation_id,
-                    enabled: !!nextEnabled
-                });
-            }
         });
     }
     if (els.cameraBtn) {
@@ -3694,7 +3031,6 @@ import {
     }
 
     showSecureContextBanner();
-    bindRingtoneUnlock();
 
     window.addEventListener('orientationchange', syncLocalPipLayout);
     window.addEventListener('resize', syncLocalPipLayout);
@@ -3709,40 +3045,20 @@ import {
         }
         if (!currentCall || !currentCall.id) return;
         var callId = currentCall.id;
-        var convId = currentCall.conversation_id;
         var status = callConnected ? 'ended' : (role === 'caller' ? 'cancelled' : 'rejected');
-        try {
-            signalPeer({
-                type: 'call-end',
-                reason: status,
-                ended_by_role: role || 'caller',
-                call_id: callId,
-                conversation_id: convId,
-                caller_id: currentCall.caller_id,
-                caller_type: currentCall.caller_type,
-                receiver_id: currentCall.receiver_id,
-                receiver_type: currentCall.receiver_type
-            });
-        } catch (eSig) { /* ignore */ }
         var r = routes();
-        if (!r.callStatus) {
-            currentCall = null;
-            callConnected = false;
-            role = null;
-            return;
-        }
+        if (!r.callStatus) return;
         var url = window.Comms && typeof window.Comms.route === 'function'
             ? window.Comms.route(r.callStatus, callId)
             : null;
-        if (!url) {
-            currentCall = null;
-            callConnected = false;
-            role = null;
-            return;
-        }
+        if (!url) return;
         var token = document.querySelector('meta[name="csrf-token"]');
         var body = JSON.stringify({ status: status });
         try {
+            if (navigator.sendBeacon) {
+                var blob = new Blob([body], { type: 'application/json' });
+                // sendBeacon cannot set CSRF easily for JSON — fall through to keepalive fetch
+            }
             fetch(url, {
                 method: 'POST',
                 headers: {
@@ -3780,8 +3096,7 @@ import {
         suggestedHttpsUrl: suggestedHttpsUrl,
         __paintIncoming: showIncoming,
         __showEnded: showCallEnded,
-        __startTimer: startTimer,
-        __stopCallTimer: stopCallTimer
+        __startTimer: startTimer
     };
 
     startRingingPoll();
