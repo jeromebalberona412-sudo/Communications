@@ -20,7 +20,7 @@ class DefaultGroupChatService
 
     public const TYPE_SK_FEDERATIONS = 'SK_FEDERATIONS';
 
-    /** Shared Students + Teachers group (iLearnU Capstone). */
+    /** Shared Students + Teachers group chat. */
     public const TYPE_CAPSTONE = 'CAPSTONE_2';
 
     public const MAX_SK_OFFICIALS = 260;

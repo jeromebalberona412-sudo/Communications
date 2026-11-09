@@ -1,6 +1,6 @@
 # Teachers
 
-Teacher sign-in, dashboard, and student account management for iLearnU. This application is separate from Students and is the owner of the shared `users` migration.
+Teacher sign-in, dashboard, and student account management for Messages. This application is separate from Students and is the owner of the shared `users` migration.
 
 ## Requirements
 

@@ -315,7 +315,7 @@
         if (Array.isArray(conv.members) && conv.members.length) {
             paintGroupInfoModal(mode, conv);
         } else {
-            els.groupModalBody.innerHTML = '<p class="comms-muted">Loading members…</p>';
+            els.groupModalBody.innerHTML = '';
         }
 
         if (!opts.skipFetch && routes.conversationMembers) {

@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>@yield('title', 'Dashboard') — iLearnU</title>
+    <title>@yield('title', 'Dashboard') — {{ config('app.name', 'Messages') }}</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Source+Sans+3:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -57,7 +57,7 @@
             <main class="app-main" id="main-content">
                 @yield('content')
             </main>
-            <footer class="app-footer">Laguna University Learning Management System</footer>
+            <footer class="app-footer">{{ config('app.name', 'Messages') }}</footer>
         </div>
     </div>
     <div class="sidebar-backdrop" data-sidebar-backdrop hidden></div>

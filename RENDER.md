@@ -19,7 +19,7 @@ Students is verified live: `https://communications-chats.onrender.com/login` →
 ### Teachers env vars
 
 ```
-APP_NAME=iLearnU Teachers
+APP_NAME=Messages
 APP_ENV=production
 APP_DEBUG=false
 APP_KEY=base64:...

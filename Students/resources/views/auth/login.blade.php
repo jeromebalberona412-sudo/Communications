@@ -4,19 +4,17 @@
 
 @section('content')
     <div class="auth-layout">
-        <section class="auth-brand" aria-label="iLearnU">
+        <section class="auth-brand" aria-label="{{ config('app.name', 'Messages') }}">
             <div class="auth-mark">
-                <div class="auth-seal">iLU</div>
-                <h1 class="auth-wordmark">iLearnU</h1>
-                <p class="auth-university">Laguna University</p>
-                <p class="auth-motto">Integrity Towards Excellence</p>
+                <div class="auth-seal">M</div>
+                <h1 class="auth-wordmark">{{ config('app.name', 'Messages') }}</h1>
             </div>
         </section>
         <section class="auth-panel">
             <div class="auth-card">
                 <p class="auth-kicker">Welcome to</p>
-                <h2 class="auth-title">iLearnU</h2>
-                <p class="auth-subtitle">Laguna University Learning Management System</p>
+                <h2 class="auth-title">{{ config('app.name', 'Messages') }}</h2>
+                <p class="auth-subtitle">Sign in to continue</p>
                 <p class="auth-role">COLLEGE STUDENT</p>
 
                 @if ($errors->any())

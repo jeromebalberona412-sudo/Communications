@@ -2,9 +2,10 @@
 
 .floating-chat-container {
     position: fixed;
-    bottom: 0;
+    top: 0;
     right: 0;
-    z-index: 9999;
+    bottom: 0;
+    z-index: 9000;
     pointer-events: none;
 }
 
@@ -100,9 +101,37 @@
     flex-shrink: 0;
 }
 
+.floating-chat-back {
+    flex-shrink: 0;
+}
+
+.floating-chat-presence-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 4px;
+    border-radius: 50%;
+    background: #31a24c;
+    vertical-align: middle;
+}
+
+.floating-chat-msg.is-call-start .floating-chat-msg-body {
+    background: #d1f4e0;
+    color: #0b6b3a;
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+}
+
+.floating-chat-msg.is-call-ended .floating-chat-msg-body {
+    background: #fde2e1;
+    color: #c0392b;
+    border-radius: 999px;
+    padding: 0.35rem 0.85rem;
+}
+
 .floating-chat-btn {
-    width: 28px;
-    height: 28px;
+    width: 44px;
+    height: 44px;
     border: 0;
     background: transparent;
     color: #fff;

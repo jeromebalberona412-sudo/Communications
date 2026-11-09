@@ -567,6 +567,9 @@ class CallService
             if (Schema::hasColumn($call->getTable(), 'end_reason')) {
                 $call->end_reason = $status;
             }
+            if (Schema::hasColumn($call->getTable(), 'ended_by')) {
+                $call->ended_by = (int) $user->id;
+            }
             if ($status === Call::STATUS_ENDED) {
                 $call->duration_seconds = $this->durationBetween($call, $call->ended_at);
             } else {
@@ -749,7 +752,7 @@ class CallService
         return match ($status) {
             Call::STATUS_ACCEPTED => $label.' answered',
             Call::STATUS_ENDED => $label.' ended'
-                .($call->duration_seconds ? ' · '.$this->formatDuration((int) $call->duration_seconds) : ''),
+                .($call->duration_seconds !== null ? ' · '.$this->formatDuration((int) $call->duration_seconds) : ''),
             Call::STATUS_MISSED => 'Call ended. No pickup.',
             Call::STATUS_REJECTED => $label.' declined',
             Call::STATUS_CANCELLED => $label.' cancelled',

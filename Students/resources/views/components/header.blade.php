@@ -9,7 +9,7 @@
     >
         <span class="sidebar-toggle-icon" aria-hidden="true"></span>
     </button>
-    <div class="app-header-title">iLearnU</div>
+    <div class="app-header-title">{{ config('app.name', 'Messages') }}</div>
     <div class="app-header-actions">
         <div class="comms-header-msg">
             <button

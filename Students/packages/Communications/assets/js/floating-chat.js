@@ -120,35 +120,34 @@
             ? (memberCount > 0 ? memberCount + ' members' : 'Group')
             : (online ? 'Online' : '');
 
+        var statusInner = isGroup
+            ? escapeHtml(statusText)
+            : (online ? '<span class="floating-chat-presence-dot" aria-hidden="true"></span> Active now' : '');
+
         var html = '<div class="floating-chat-window" id="floatingChat' + conversationId + '" data-conversation-id="' + conversationId + '">' +
             '<div class="floating-chat-header">' +
+            '<button type="button" class="floating-chat-btn floating-chat-back" data-action="back" title="Back" aria-label="Back">' +
+            '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>' +
+            '</button>' +
             '<div class="floating-chat-peer">' +
             '<img class="floating-chat-avatar" src="' + escapeHtml(peerAvatar) + '" alt="" width="32" height="32" ' +
             'onerror="this.onerror=null;this.src=\'' + escapeHtml(defaultAvatar(peerName)) + '\'">' +
             '<div class="floating-chat-peer-info">' +
             '<div class="floating-chat-peer-name" title="' + escapeHtml(peerName) + '">' + escapeHtml(peerName) + '</div>' +
-            (statusText ? '<div class="floating-chat-peer-status">' + escapeHtml(statusText) + '</div>' : '') +
+            (statusInner ? '<div class="floating-chat-peer-status">' + statusInner + '</div>' : '') +
             '</div></div>' +
             '<div class="floating-chat-actions">' +
-            (!isGroup ? '<button type="button" class="floating-chat-btn" data-action="voice" title="Voice call" aria-label="Voice call">' +
+            '<button type="button" class="floating-chat-btn" data-action="voice" title="Voice call" aria-label="Voice call">' +
             '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.81.36 1.6.68 2.35a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.75.32 1.54.55 2.35.68A2 2 0 0 1 22 16.92z"/></svg>' +
-            '</button>' : '') +
-            (!isGroup ? '<button type="button" class="floating-chat-btn" data-action="video" title="Video call" aria-label="Video call">' +
-            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>' +
-            '</button>' : '') +
-            '<button type="button" class="floating-chat-btn" data-action="minimize" title="Minimize" aria-label="Minimize">' +
-            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 12h12"/></svg>' +
             '</button>' +
-            '<button type="button" class="floating-chat-btn" data-action="expand" title="Open in Messages" aria-label="Open in Messages">' +
-            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h6v6"/><path d="M10 14L21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>' +
+            '<button type="button" class="floating-chat-btn" data-action="video" title="Video call" aria-label="Video call">' +
+            '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>' +
             '</button>' +
             '<button type="button" class="floating-chat-btn" data-action="close" title="Close" aria-label="Close">' +
             '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>' +
             '</button>' +
             '</div></div>' +
-            '<div class="floating-chat-body" id="floatingChatBody' + conversationId + '">' +
-            '<div class="floating-chat-loading">Loading messages...</div>' +
-            '</div>' +
+            '<div class="floating-chat-body" id="floatingChatBody' + conversationId + '"></div>' +
             '<div class="floating-chat-typing" id="floatingChatTyping' + conversationId + '" hidden></div>' +
             '<form class="floating-chat-composer" id="floatingChatForm' + conversationId + '" autocomplete="off">' +
             '<button type="button" class="floating-chat-attach-btn" title="Attach" aria-label="Attach">' +
@@ -212,7 +211,8 @@
             if (!w || !w.el) return;
             w.el.classList.remove('is-mobile', 'is-minimized');
             w.el.style.right = (WINDOW_GAP + index * (WINDOW_WIDTH + WINDOW_GAP)) + 'px';
-            w.el.style.bottom = WINDOW_GAP + 'px';
+            w.el.style.top = '64px';
+            w.el.style.bottom = 'auto';
             w.el.style.width = WINDOW_WIDTH + 'px';
             w.el.style.height = WINDOW_HEIGHT_DESKTOP + 'px';
         });
@@ -257,7 +257,13 @@
         var url = routes.messages ? routes.messages.replace('__ID__', conversationId) : null;
         if (!url || !window.Comms) return;
 
-        bodyEl.innerHTML = '<div class="floating-chat-loading">Loading...</div>';
+        var cacheKey = messageCacheKey(conversationId);
+        var cached = readMessageCache(cacheKey);
+        if (cached && cached.length) {
+            renderMessages(bodyEl, cached);
+        } else if (!bodyEl.childNodes.length) {
+            bodyEl.innerHTML = '';
+        }
 
         window.Comms.api(url + '?per_page=20', { dedupe: true }).then(function (data) {
             var messages = (data && data.messages) || [];
@@ -266,26 +272,8 @@
                 return;
             }
 
-            // Render messages (newest first, then reverse for display)
-            var html = messages.reverse().map(function (m) {
-                var mine = Number(m.sender_id) === Number(currentUserId);
-                var time = formatTime(m.created_at);
-                var body = escapeHtml(m.body || '');
-                
-                if (m.message_type === 'call' || m.message_type === 'system') {
-                    return '<div class="floating-chat-msg is-system">' +
-                        '<div class="floating-chat-msg-body">' + body + '</div>' +
-                        '</div>';
-                }
-
-                return '<div class="floating-chat-msg ' + (mine ? 'is-mine' : 'is-theirs') + '">' +
-                    '<div class="floating-chat-msg-body">' + body + '</div>' +
-                    '<div class="floating-chat-msg-time">' + time + '</div>' +
-                    '</div>';
-            }).join('');
-
-            bodyEl.innerHTML = html;
-            bodyEl.scrollTop = bodyEl.scrollHeight;
+            writeMessageCache(cacheKey, messages);
+            renderMessages(bodyEl, messages);
         }).catch(function (err) {
             bodyEl.innerHTML = '<div class="floating-chat-empty">Unable to load messages</div>';
         });
@@ -601,9 +589,10 @@
             e.preventDefault();
 
             if (action === 'close') closeWindow(cid);
+            else if (action === 'back') goBackToList(cid);
             else if (action === 'minimize') minimizeWindow(cid);
             else if (action === 'expand') expandWindow(cid);
-            else if (action === 'voice') startCall(cid, 'audio');
+            else if (action === 'voice') startCall(cid, 'voice');
             else if (action === 'video') startCall(cid, 'video');
         });
 
@@ -664,11 +653,75 @@
         });
     }
 
-    // Start a call
-    function startCall(conversationId, callType) {
-        if (window.CommsWebRTC && typeof window.CommsWebRTC.startCall === 'function') {
-            window.CommsWebRTC.startCall(conversationId, callType);
+    function isCallActive() {
+        var inCall = document.getElementById('commsInCall');
+        if (inCall && !inCall.hidden) return true;
+        return !!(window.CommsWebRTC && typeof window.CommsWebRTC.__meshActive === 'function' && window.CommsWebRTC.__meshActive());
+    }
+
+    function goBackToList(conversationId) {
+        closeWindow(conversationId);
+        if (window.CommsHeaderChat && typeof window.CommsHeaderChat.open === 'function') {
+            window.CommsHeaderChat.open();
         }
+    }
+
+    function messageCacheKey(conversationId) {
+        return 'commsFloatMsgs.' + currentUserId + '.' + conversationId;
+    }
+
+    function readMessageCache(key) {
+        try {
+            var raw = sessionStorage.getItem(key);
+            if (!raw) return null;
+            var parsed = JSON.parse(raw);
+            return parsed && Array.isArray(parsed.messages) ? parsed.messages : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function writeMessageCache(key, messages) {
+        try {
+            sessionStorage.setItem(key, JSON.stringify({ messages: messages, ts: Date.now() }));
+        } catch (e) { /* ignore */ }
+    }
+
+    function renderMessages(bodyEl, messages) {
+        if (!bodyEl) return;
+        if (!messages.length) {
+            bodyEl.innerHTML = '<div class="floating-chat-empty">No messages yet</div>';
+            return;
+        }
+        var rows = messages.slice().reverse();
+        var html = rows.map(function (m) {
+            var mine = Number(m.sender_id) === Number(currentUserId);
+            var time = formatTime(m.created_at);
+            var body = escapeHtml(m.body || '');
+            if (m.message_type === 'call' || m.message_type === 'system') {
+                var pillClass = /no pickup|ended/i.test(body) ? ' is-call-ended' : ' is-call-start';
+                return '<div class="floating-chat-msg is-system' + pillClass + '">' +
+                    '<div class="floating-chat-msg-body">' + body + '</div>' +
+                    '</div>';
+            }
+            return '<div class="floating-chat-msg ' + (mine ? 'is-mine' : 'is-theirs') + '">' +
+                '<div class="floating-chat-msg-body">' + body + '</div>' +
+                '<div class="floating-chat-msg-time">' + time + '</div>' +
+                '</div>';
+        }).join('');
+        bodyEl.innerHTML = html;
+        bodyEl.scrollTop = bodyEl.scrollHeight;
+    }
+
+    function startCall(conversationId, callType) {
+        if (isCallActive()) return;
+        if (!window.CommsWebRTC || typeof window.CommsWebRTC.startCall !== 'function') return;
+        var type = callType === 'audio' ? 'voice' : callType;
+        var w = openWindows[String(conversationId)];
+        var conversation = w && w.isGroup
+            ? { id: Number(conversationId), conversation_type: 'group', is_default_group: true }
+            : null;
+        window.CommsWebRTC.startCall(conversationId, type, conversation);
     }
 
     // Initialize

@@ -69,6 +69,8 @@ class Call extends Model
         'ended_at',
         'duration_seconds',
         'end_reason',
+        'ended_by',
+        'is_group',
     ];
 
     protected function casts(): array

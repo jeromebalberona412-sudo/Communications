@@ -1,6 +1,6 @@
 # Students
 
-Student sign-in and dashboard for iLearnU. This application is separate from Teachers and uses the shared Supabase `users` table. Only accounts with role `students` can sign in.
+Student sign-in and dashboard for Messages. This application is separate from Teachers and uses the shared Supabase `users` table. Only accounts with role `students` can sign in.
 
 ## Requirements
 
