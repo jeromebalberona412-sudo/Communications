@@ -342,7 +342,7 @@ body.comms-header-chat-open {
 .comms-officials-wrap,
 .comms-app,
 .comms-shell {
-    min-height: calc(100vh - 8rem);
+    min-height: 0;
 }
 
 .comms-history-item {

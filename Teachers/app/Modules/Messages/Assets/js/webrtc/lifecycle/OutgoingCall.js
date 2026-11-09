@@ -156,11 +156,14 @@ function callErrorMessage(err) {
 }
 
 async function placeCall(conversationId, callType, conversation, receiverId) {
-    if (!window.Comms || S.startingCall) return;
+    if (!window.Comms || S.startingCall || S.callConnected) return;
     S.startingCall = true;
-    
-    // FIX BUG #3: Force stop any existing timer before starting new call
+
     api.stopCallTimer();
+    var earlyPeer = (conversation && conversation.other_user) || { name: 'Contact' };
+    S.role = 'caller';
+    S.callConnected = false;
+    api.showInCall({ peer: earlyPeer, call_type: callType }, 'Calling...');
     
     var r = api.routes();
     try {
@@ -179,6 +182,7 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
             dedupe: false
         });
         S.role = 'caller';
+        S.lifecycle = 'ringing';
         S.callConnected = false;
         S.lastEndedCallId = null;
         S.lastCallDurationMs = 0;
@@ -284,7 +288,7 @@ async function startCall(conversationId, callType, conversation, receiverId) {
         api.placeCall(conversationId, callType, conversation, receiverId);
         return;
     }
-    api.beginCallCountdown(conversationId, callType, conversation, receiverId);
+    api.placeCall(conversationId, callType, conversation, receiverId);
 }
 
 

@@ -333,12 +333,19 @@ function syncCameraUi() {
             api.paintAvatar(localOffAvatar, me.name || 'You', meSrc);
         }
     }
+    var remoteLive = typeof api.hasLiveRemoteVideo === 'function' && api.hasLiveRemoteVideo();
+    var videoCall = typeof api.isVideoCallType === 'function' && api.isVideoCallType();
     if (S.els.remoteVideoOff) {
-        S.els.remoteVideoOff.hidden = S.remoteCameraEnabled;
-        S.els.remoteVideoOff.setAttribute('aria-hidden', S.remoteCameraEnabled ? 'true' : 'false');
+        var showRemotePlaceholder = !!videoCall && !remoteLive;
+        S.els.remoteVideoOff.hidden = !showRemotePlaceholder;
+        S.els.remoteVideoOff.setAttribute('aria-hidden', showRemotePlaceholder ? 'false' : 'true');
+        var remoteLabel = S.els.remoteVideoOff.querySelector('.comms-video-off-label');
+        if (remoteLabel) {
+            remoteLabel.textContent = S.remoteCameraEnabled ? 'Connecting' : 'Camera Off';
+        }
     }
     if (S.els.inCall) {
-        S.els.inCall.classList.toggle('is-remote-camera-off', !S.remoteCameraEnabled);
+        S.els.inCall.classList.toggle('is-remote-camera-off', !S.remoteCameraEnabled && !remoteLive);
         S.els.inCall.classList.toggle('is-local-camera-off', !on);
         S.els.inCall.classList.toggle('is-remote-mic-off', !S.remoteMicEnabled);
     }

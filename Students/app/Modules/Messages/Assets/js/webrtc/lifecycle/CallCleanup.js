@@ -40,6 +40,9 @@ async function cleanupMediaOnly() {
     S.cameraBusy = false;
     S.role = null;
     S.startingCall = false;
+    S.acceptingCallId = null;
+    S.answerAppliedFor = null;
+    S.decliningCall = false;
     
     if (S.els.endBtn) api.setCtrlLabel(S.els.endBtn, 'End');
     if (S.els.muteBtn) {

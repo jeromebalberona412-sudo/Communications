@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Call answer check</title>
+</head>
+<body>
+<div id="commsRealtimeBoot" data-current-user-id="2" data-portal-user-type="teachers" data-current-user-name="Teacher One" data-routes="{}"></div>
+<div class="comms-modal" id="commsIncomingCall" hidden>
+  <p id="commsIncomingPeer"></p>
+  <p id="commsIncomingType"></p>
+  <h2 id="commsIncomingTitle">Incoming call</h2>
+  <div id="commsIncomingAvatar"></div>
+  <button type="button" id="commsRejectCall">Decline</button>
+  <button type="button" id="commsAcceptCall">Answer</button>
+  <audio id="commsRingtoneAudio"></audio>
+</div>
+<div class="comms-call-overlay" id="commsInCall" hidden>
+  <video id="commsRemoteVideo"></video>
+  <video id="commsLocalVideo" muted></video>
+  <div id="commsRemoteVideoOff" hidden><span class="comms-video-off-label">Camera Off</span><span id="commsRemoteVideoOffAvatar"></span><span id="commsRemoteVideoOffName"></span></div>
+  <div id="commsLocalVideoOff" hidden><span id="commsLocalVideoOffAvatar"></span></div>
+  <div id="commsCallCenter"><div id="commsCallPeerAvatar"></div></div>
+  <div id="commsCallPeerName"></div>
+  <div id="commsCallStatus"></div>
+  <div id="commsCallTimer" hidden>00:00</div>
+  <audio id="commsRemoteAudio"></audio>
+  <button type="button" id="commsMuteBtn"><span data-mute-icon></span><span class="comms-call-ctrl-label">Mute</span></button>
+  <button type="button" id="commsCameraBtn"><span data-camera-icon></span><span class="comms-call-ctrl-label">Camera</span></button>
+  <button type="button" id="commsEndCall"><span class="comms-call-ctrl-label">End</span></button>
+  <button type="button" id="commsTapToPlay" hidden>Tap</button>
+</div>
+<div class="comms-modal" id="commsCallEnded" hidden>
+  <button type="button" id="commsCallEndedX">X</button>
+  <div id="commsCallEndedAvatar"></div>
+  <p id="commsCallEndedPeer"></p>
+  <h2 id="commsCallEndedTitle"></h2>
+  <p id="commsCallEndedReason"></p>
+  <p id="commsCallEndedDuration" hidden></p>
+  <button type="button" id="commsCallEndedRedial">Redial</button>
+  <button type="button" id="commsCallEndedClose">Cancel</button>
+</div>
+<pre id="out">booting</pre>
+<script>
+window.__signals = [];
+window.__pcs = [];
+window.__mediaStarted = 0;
+var releaseMedia = function () {};
+var mediaGate = new Promise(function (resolve) { releaseMedia = resolve; });
+function fakeTrack(kind) {
+  return {
+    kind: kind,
+    enabled: true,
+    readyState: 'live',
+    stop: function () {},
+    addEventListener: function () {},
+    removeEventListener: function () {}
+  };
+}
+function fakeStream() {
+  var tracks = [fakeTrack('audio'), fakeTrack('video')];
+  return {
+    getTracks: function () { return tracks; },
+    getAudioTracks: function () { return [tracks[0]]; },
+    getVideoTracks: function () { return [tracks[1]]; }
+  };
+}
+navigator.mediaDevices = {
+  getUserMedia: function () {
+    window.__mediaStarted += 1;
+    return mediaGate.then(function () { return fakeStream(); });
+  }
+};
+window.RTCPeerConnection = function () {
+  this.signalingState = 'stable';
+  this.iceConnectionState = 'new';
+  this.connectionState = 'new';
+  this.localDescription = null;
+  this.remoteDescription = null;
+  this.currentRemoteDescription = null;
+  this.onicecandidate = null;
+  this.ontrack = null;
+  this.oniceconnectionstatechange = null;
+  this.onconnectionstatechange = null;
+  window.__pcs.push(this);
+};
+window.RTCPeerConnection.prototype.addTrack = function () { return {}; };
+window.RTCPeerConnection.prototype.addTransceiver = function () { return { sender: {} }; };
+window.RTCPeerConnection.prototype.getTransceivers = function () {
+  return [{ receiver: { track: fakeTrack('audio') }, sender: {} }];
+};
+window.RTCPeerConnection.prototype.setRemoteDescription = function (sdp) {
+  this.remoteDescription = sdp;
+  this.currentRemoteDescription = sdp;
+  this.signalingState = 'have-remote-offer';
+  return Promise.resolve();
+};
+window.RTCPeerConnection.prototype.createAnswer = function () {
+  return Promise.resolve({ type: 'answer', sdp: 'answer-sdp' });
+};
+window.RTCPeerConnection.prototype.setLocalDescription = function (sdp) {
+  this.localDescription = sdp;
+  if (sdp && sdp.type !== 'rollback') this.signalingState = 'stable';
+  return Promise.resolve();
+};
+window.RTCPeerConnection.prototype.addIceCandidate = function () { return Promise.resolve(); };
+window.RTCPeerConnection.prototype.close = function () {};
+
+window.Comms = {
+  api: function () { return Promise.resolve({ calls: [], call: { id: 1, status: 'accepted', started_at: null } }); },
+  route: function (url) { return url || '/api/calls'; },
+  showToast: function (message) { window.__toast = message; }
+};
+window.CommsRealtime = {
+  enabled: true,
+  ensureCallChannel: function () { return Promise.resolve(); },
+  teardownCallChannel: function () {},
+  broadcastSignal: function (conversationId, payload) {
+    window.__signals.push({ at: Date.now(), type: payload.type, reason: payload.reason, sdp: payload.sdp || null });
+    return Promise.resolve();
+  },
+  flushPendingSignals: function () {}
+};
+</script>
+<script>
+window.addEventListener('error', function (e) {
+  document.getElementById('out').textContent = 'ERROR ' + (e.message || e.error) + ' @ ' + (e.filename || '') + ':' + e.lineno;
+});
+window.addEventListener('unhandledrejection', function (e) {
+  document.getElementById('out').textContent = 'REJECT ' + (e.reason && (e.reason.stack || e.reason.message) || e.reason);
+});
+</script>
+<script type="module">
+import { bootCommunicationsWebrtc } from '../app/Modules/Messages/Assets/js/webrtc/bootstrap.js';
+
+function hidden(id) { return document.getElementById(id).hidden; }
+function types() { return window.__signals.map(function (s) { return s.type; }); }
+
+function wait(ms) { return new Promise(function (resolve) { setTimeout(resolve, ms); }); }
+var lines = [];
+function note(ok, msg) { lines.push((ok ? 'PASS' : 'FAIL') + ' ' + msg); }
+
+bootCommunicationsWebrtc();
+await wait(40);
+
+var offer = { type: 'offer', sdp: 'offer-sdp' };
+await window.CommsWebRTC.handleSignal({
+  type: 'offer',
+  call_id: 41,
+  conversation_id: 7,
+  call_type: 'video',
+  sdp: offer,
+  peer_name: 'jerome B',
+  caller_id: 1,
+  caller_type: 'students',
+  receiver_id: 2,
+  receiver_type: 'teachers'
+});
+await wait(40);
+note(!hidden('commsIncomingCall'), 'incoming modal is visible');
+note(hidden('commsCallTimer'), 'timer hidden while ringing');
+
+var beforeMedia = window.__mediaStarted;
+document.getElementById('commsAcceptCall').click();
+await wait(40);
+note(hidden('commsIncomingCall'), 'incoming modal closes on Answer');
+note(!hidden('commsInCall'), 'video call screen opens on Answer');
+note(document.getElementById('commsInCall').classList.contains('is-video-call') || !hidden('commsRemoteVideoOff'), 'video stage or placeholder is shown');
+note(hidden('commsCallTimer'), 'timer stays hidden before the connection');
+note(types().indexOf('call-accept') !== -1, 'accept signal is sent before media finishes');
+note(types().indexOf('answer') === -1, 'SDP answer waits for the peer connection');
+note(window.__mediaStarted >= beforeMedia + 1, 'camera request starts immediately');
+
+releaseMedia();
+await wait(120);
+var pc = window.__pcs[0];
+note(!!pc, 'peer connection created');
+note(types().indexOf('answer') !== -1, 'SDP answer is sent after media is ready');
+note(hidden('commsCallTimer'), 'timer still hidden while connecting');
+if (pc) {
+  pc.iceConnectionState = 'connected';
+  if (pc.oniceconnectionstatechange) pc.oniceconnectionstatechange();
+}
+await wait(40);
+note(!hidden('commsCallTimer'), 'timer shows only after ICE connects');
+note(document.getElementById('commsCallStatus').textContent === 'Connected', 'status is Connected');
+
+await window.CommsWebRTC.handleSignal({ type: 'call-end', reason: 'ended', call_id: 41, conversation_id: 7 });
+await wait(80);
+note(hidden('commsInCall'), 'active call closes when the other side hangs up');
+note(!hidden('commsCallEnded'), 'call ended modal opens');
+var beforeX = window.__signals.length;
+document.getElementById('commsCallEndedX').click();
+note(hidden('commsCallEnded'), 'X closes the ended modal');
+note(window.__signals.length === beforeX, 'X does not start another call');
+
+await window.CommsWebRTC.handleSignal({
+  type: 'offer',
+  call_id: 42,
+  conversation_id: 7,
+  call_type: 'video',
+  sdp: offer,
+  peer_name: 'jerome B',
+  caller_id: 1,
+  caller_type: 'students',
+  receiver_id: 2,
+  receiver_type: 'teachers'
+});
+await wait(40);
+note(!hidden('commsIncomingCall'), 'a later call can still be answered');
+var n = window.__signals.length;
+document.getElementById('commsRejectCall').click();
+await wait(40);
+note(hidden('commsIncomingCall'), 'Decline closes the modal immediately');
+note(!hidden('commsCallEnded'), 'Decline shows the ended modal');
+var endSig = window.__signals.slice(n).filter(function (s) { return s.type === 'call-end'; })[0];
+note(!!endSig && endSig.reason === 'rejected', 'Decline tells the caller the call was rejected');
+document.getElementById('commsCallEndedClose').click();
+note(hidden('commsCallEnded'), 'Cancel closes the ended modal');
+
+document.getElementById('out').textContent = lines.join('\n');
+document.body.dataset.done = lines.some(function (l) { return l.indexOf('FAIL') === 0; }) ? 'fail' : 'pass';
+</script>
+</body>
+</html>

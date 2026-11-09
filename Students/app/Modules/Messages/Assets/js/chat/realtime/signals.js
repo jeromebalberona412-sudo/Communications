@@ -14,8 +14,16 @@ function isOwnSignal(payload) {
     return portalTypesMatchJs(fromType, myType);
 }
 
+function isIncomingInvite(payload) {
+    var type = String((payload && payload.type) || '').toLowerCase();
+    return type === 'incoming-call' || type === 'call-invite' || type === 'offer';
+}
+
 function deliverSignal(payload) {
     if (!payload) return;
+    if (isIncomingInvite(payload)) {
+        loadWebrtc();
+    }
     if (window.CommsWebRTC && typeof window.CommsWebRTC.handleSignal === 'function') {
         window.CommsWebRTC.handleSignal(payload);
         return;

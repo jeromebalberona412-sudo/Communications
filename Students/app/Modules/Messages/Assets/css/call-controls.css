@@ -301,7 +301,7 @@
     justify-content: center;
 }
 
-@media (max-width: 900px) {
+@media (max-width: 768px) {
     .comms-shell {
         grid-template-columns: 1fr;
         min-height: var(--comms-shell-h);

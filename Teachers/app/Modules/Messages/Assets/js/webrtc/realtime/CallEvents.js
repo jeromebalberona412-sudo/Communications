@@ -9,6 +9,8 @@ import { callInfo, callWarn } from '../utils/CallLogger.js';
 
 function stunConfig() { return iceConfig(); }
 
+var ringingPollTimer = null;
+
 function applyPeerAnswered() {
     api.stopRingtone();
     api.stopVibration();
@@ -53,29 +55,14 @@ async function handleSignal(payload) {
         // while actively in that same call). Late offers after Decline used to re-open the modal.
         if (signalCallId && api.isCallAlreadyHandled(signalCallId)) {
             var sameActiveCall = S.currentCall && Number(S.currentCall.id) === signalCallId;
-            if (payload.type === 'offer' && payload.sdp && sameActiveCall) {
+            if (payload.type === 'offer' && payload.sdp && sameActiveCall && !S.decliningCall) {
                 S.currentCall._remoteOffer = payload.sdp;
-                if (S.pc && S.startingCall && S.pc.signalingState === 'stable') {
-                    try {
-                        await S.pc.setRemoteDescription(payload.sdp);
-                        var lateAnswer = await S.pc.createAnswer();
-                        await S.pc.setLocalDescription(lateAnswer);
-                        await api.signalPeer({
-                            type: 'answer',
-                            call_id: S.currentCall.id,
-                            conversation_id: S.currentCall.conversation_id,
-                            sdp: lateAnswer,
-                            caller_id: S.currentCall.caller_id,
-                            caller_type: S.currentCall.caller_type,
-                            receiver_id: S.currentCall.receiver_id,
-                            receiver_type: S.currentCall.receiver_type
-                        });
-                        api.attachLocalVideo();
-                        api.signalMediaState();
-                    } catch (lateOfferErr) { /* waitForRemoteOffer may still apply */ }
+                if (typeof api.tryCompleteCalleeAnswer === 'function') {
+                    api.tryCompleteCalleeAnswer();
                 }
-                if (!(S.callConnected && S.pc)) return;
-            } else if (!(payload.type === 'offer' && payload.sdp && api.isActivelyInCall(signalCallId) && S.callConnected)) {
+                return;
+            }
+            if (!(payload.type === 'offer' && payload.sdp && api.isActivelyInCall(signalCallId) && S.callConnected)) {
                 return;
             }
         }
@@ -124,6 +111,9 @@ async function handleSignal(payload) {
         if (payload.type === 'offer' && S.currentCall && S.currentCall._remoteOffer
             && Number(S.currentCall.id) === Number(payload.call_id)) {
             S.currentCall._remoteOffer = payload.sdp;
+            if (!payload.renegotiate && typeof api.tryCompleteCalleeAnswer === 'function') {
+                api.tryCompleteCalleeAnswer();
+            }
             return;
         }
         S.lastEndedCallId = null;
@@ -194,6 +184,8 @@ async function handleSignal(payload) {
         
         // CRITICAL FIX: Mark call as terminal and cleanup IMMEDIATELY
         if (hangupId != null) api.markCallTerminal(hangupId);
+        S.acceptGeneration = (S.acceptGeneration || 0) + 1;
+        S.acceptingCallId = null;
         api.stopCallTimer();
         api.stopRingtone();
         api.stopVibration();

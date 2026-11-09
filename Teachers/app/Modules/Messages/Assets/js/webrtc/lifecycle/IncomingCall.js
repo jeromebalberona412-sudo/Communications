@@ -456,6 +456,7 @@ function showIncoming(call) {
     api.rememberCallId(S.shownIncomingIds, callId);
 
     S.role = 'callee';
+    S.lifecycle = 'ringing';
     // Do not clear S.callConnected if we somehow got here during an active call.
     if (!api.isActivelyInCall(callId)) {
         S.callConnected = false;
@@ -502,8 +503,7 @@ function showIncoming(call) {
             ? (isVideo ? 'Group video call' : 'Group voice call')
             : (isVideo ? 'Video call' : 'Voice call');
     }
-    if (S.els.accept) S.els.accept.textContent = 'Answer';
-    if (S.els.reject) S.els.reject.textContent = 'Decline';
+    api.setIncomingActionState('idle');
 
     S.incomingCall = call;
     S.incomingCallId = callId;
@@ -551,6 +551,32 @@ function showIncoming(call) {
     api.armRingTimeout(true);
 }
 
+function setIncomingActionState(mode) {
+    var accept = document.getElementById('commsAcceptCall');
+    var reject = document.getElementById('commsRejectCall');
+    if (!accept || !reject) return;
+    if (mode === 'answering') {
+        accept.disabled = true;
+        reject.disabled = true;
+        accept.textContent = 'Connecting...';
+        accept.setAttribute('aria-busy', 'true');
+        return;
+    }
+    if (mode === 'declining') {
+        accept.disabled = true;
+        reject.disabled = true;
+        reject.textContent = 'Declining...';
+        reject.setAttribute('aria-busy', 'true');
+        return;
+    }
+    accept.disabled = false;
+    reject.disabled = false;
+    accept.textContent = 'Answer';
+    reject.textContent = 'Decline';
+    accept.removeAttribute('aria-busy');
+    reject.removeAttribute('aria-busy');
+}
+
 function hideIncoming() {
     if (S.els.incoming) S.els.incoming.hidden = true;
     if (S.ringMode === 'incoming') api.stopRingtone();
@@ -578,4 +604,5 @@ api.isActivelyInCall = isActivelyInCall;
 api.isOutboundCallerBusy = isOutboundCallerBusy;
 api.resetCallerRoleIfIdle = resetCallerRoleIfIdle;
 api.showIncoming = showIncoming;
+api.setIncomingActionState = setIncomingActionState;
 api.hideIncoming = hideIncoming;

@@ -21,6 +21,7 @@ function mountCallUiToBody() {
     S.els.reject = document.getElementById('commsRejectCall');
     S.els.endBtn = document.getElementById('commsEndCall');
     S.els.endedClose = document.getElementById('commsCallEndedClose');
+    S.els.endedDismiss = document.getElementById('commsCallEndedX');
     S.els.endedRedial = document.getElementById('commsCallEndedRedial');
     S.els.muteBtn = document.getElementById('commsMuteBtn');
     S.els.cameraBtn = document.getElementById('commsCameraBtn');

@@ -34,8 +34,8 @@ function reconcileWithServerState(data) {
 }
 
 function ringingPollIntervalMs() {
-    var ms = Number(window.__COMMS_CALL_POLL_MS__) || 8000;
-    return Math.max(4000, ms);
+    var ms = Number(window.__COMMS_CALL_POLL_MS__) || 2500;
+    return Math.max(2500, Math.min(ms, 8000));
 }
 
 function presenceOnlineKey(userId, portalType) {

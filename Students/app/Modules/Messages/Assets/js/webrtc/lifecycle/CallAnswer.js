@@ -1,13 +1,4 @@
-import { S, api, refreshEls } from '../core/CallStateManager.js';
-import {
-    mediaConstraints,
-    videoOnlyConstraints,
-    prepareLocalStream
-} from '../utils/media-constraints.js';
-import { RING_TIMEOUT_MS, CALL_START_DELAY_MS, CONNECTION_TIMEOUT_MS, ICE_FAIL_GRACE_MS, iceConfig } from '../utils/WebRTCConfig.js';
-import { callInfo, callWarn } from '../utils/CallLogger.js';
-
-function stunConfig() { return iceConfig(); }
+import { S, api } from '../core/CallStateManager.js';
 
 function waitForRemoteOffer(ms) {
     return new Promise(function (resolve) {
@@ -26,144 +17,195 @@ function waitForRemoteOffer(ms) {
                 clearInterval(timer);
                 resolve(false);
             }
-        }, 20);
+        }, 40);
     });
 }
 
+function callStillLive(generation, callId) {
+    return generation === S.acceptGeneration
+        && S.currentCall
+        && Number(S.currentCall.id) === Number(callId)
+        && !S.decliningCall;
+}
+
+/**
+ * Apply the caller's offer and send the SDP answer once.
+ * Safe to call from the answer click and from a late offer signal.
+ */
+async function tryCompleteCalleeAnswer() {
+    if (S.role === 'caller' || S.decliningCall) return false;
+    if (!S.currentCall || !S.pc || !S.currentCall._remoteOffer) return false;
+    var callId = Number(S.currentCall.id);
+    if (S.answerAppliedFor != null && Number(S.answerAppliedFor) === callId && S.pc.remoteDescription) {
+        return true;
+    }
+    if (S.negotiating) return false;
+    S.negotiating = true;
+    try {
+        if (S.pc.signalingState === 'have-local-offer') {
+            try { await S.pc.setLocalDescription({ type: 'rollback' }); } catch (rbErr) { /* ignore */ }
+        }
+        if (S.pc.signalingState === 'stable' && !S.pc.currentRemoteDescription) {
+            await S.pc.setRemoteDescription(S.currentCall._remoteOffer);
+        }
+        var call = S.currentCall;
+        var answerSdp = S.pc.localDescription;
+        if (S.pc.signalingState === 'have-remote-offer') {
+            answerSdp = await S.pc.createAnswer();
+            await S.pc.setLocalDescription(answerSdp);
+        }
+        if (!S.pc.currentRemoteDescription || !answerSdp) return false;
+        await api.signalPeer({
+            type: 'answer',
+            call_id: call.id,
+            conversation_id: call.conversation_id,
+            sdp: answerSdp,
+            caller_id: call.caller_id,
+            caller_type: call.caller_type,
+            receiver_id: call.receiver_id,
+            receiver_type: call.receiver_type,
+            started_at: call.started_at || call.answered_at || null,
+            server_time: call.server_time || null
+        });
+        S.answerAppliedFor = callId;
+        while (S.iceQueue.length && S.pc) {
+            try { await S.pc.addIceCandidate(S.iceQueue.shift()); } catch (iceErr) { /* stale candidate */ }
+        }
+        api.attachLocalVideo();
+        api.signalMediaState();
+        api.setCallStatus(S.callConnected ? 'Connected' : 'Connecting...');
+        api.keepActiveCallVisible(S.callConnected ? 'Connected' : 'Connecting...');
+        return true;
+    } catch (err) {
+        return false;
+    } finally {
+        S.negotiating = false;
+    }
+}
+
 async function acceptIncoming() {
-    api.stopRingtone();
-    api.clearRingTimeout();
-    if (typeof window.CommsWebRTC !== 'undefined'
+    var pendingGroup = window.__commsPendingGroupInvite;
+    var modalIsGroup = !!(S.incomingCall && (S.incomingCall.is_group_call || S.incomingCall._groupInvite));
+    if (S.decliningCall) return;
+    if (modalIsGroup && pendingGroup
+        && window.CommsWebRTC
         && typeof window.CommsWebRTC.__acceptGroupIfPending === 'function') {
+        api.setIncomingActionState('answering');
+        api.stopRingtone();
+        api.clearRingTimeout();
+        api.hideIncoming();
         try {
             var groupHandled = await window.CommsWebRTC.__acceptGroupIfPending();
-            if (groupHandled) {
-                api.hideIncoming();
-                api.stopRingtone();
-                return;
-            }
+            if (groupHandled) return;
         } catch (err) {
+            api.setIncomingActionState('idle');
             api.toast((err && err.message) || 'Unable to join group call.', 'error');
             return;
         }
     }
 
-    // Answer must apply to the exact call id shown in the modal.
     var modalCallId = S.incomingCallId != null ? Number(S.incomingCallId) : null;
     var source = (modalCallId != null && S.incomingCall && Number(S.incomingCall.id) === modalCallId)
         ? S.incomingCall
         : S.currentCall;
-    if (!source || S.startingCall) return;
-    if (modalCallId != null && Number(source.id) !== modalCallId) {
-        // The modal belongs to a different call — never answer the wrong one.
+    if (!source || source.id == null) {
+        api.toast('This call is no longer available.', 'error');
         return;
     }
-    if (modalCallId != null && S.answeredCallIds[modalCallId]) return;
+    if (modalCallId != null && Number(source.id) !== modalCallId) return;
 
-    // From here on the call object is the one the user accepted.
+    var callId = Number(source.id);
+    if (S.acceptingCallId != null && Number(S.acceptingCallId) === callId) return;
+    if (S.callConnected && S.currentCall && Number(S.currentCall.id) === callId) {
+        api.hideIncoming();
+        api.keepActiveCallVisible('Connected');
+        return;
+    }
+
     var call = Object.assign({}, S.currentCall || {}, source);
     S.currentCall = call;
-
+    S.role = 'callee';
+    S.callConnected = false;
+    S.acceptingCallId = callId;
+    S.acceptGeneration = (S.acceptGeneration || 0) + 1;
+    var generation = S.acceptGeneration;
     S.startingCall = true;
-    var acceptedCallId = call.id != null ? Number(call.id) : null;
-    if (acceptedCallId) api.markCallTerminal(acceptedCallId);
-    if (acceptedCallId) api.rememberCallId(S.answeredCallIds, acceptedCallId);
+    S.lifecycle = 'accepted';
     S.answeredCall = call;
-
-    // FIX BUG #3: Force stop any existing timer before accepting new call
+    api.rememberCallId(S.answeredCallIds, callId);
     api.stopCallTimer();
-
     api.clearRingTimeout();
     api.stopRingtone();
+    api.setIncomingActionState('answering');
     api.hideIncoming();
+    S.wantsVideo = call.call_type === 'video';
+    api.showInCall(call, 'Connecting...');
+    api.updateCameraUi();
+    api.unlockRemotePlayback();
+
+    var alive = function () { return callStillLive(generation, callId); };
+
+    api.signalPeer({
+        type: 'call-accept',
+        call_id: call.id,
+        conversation_id: call.conversation_id,
+        caller_id: call.caller_id,
+        caller_type: call.caller_type,
+        receiver_id: call.receiver_id,
+        receiver_type: call.receiver_type
+    }).catch(function () { /* realtime will retry on the next signal */ });
+
+    api.updateCallStatus(call.id, 'accepted').then(function (accepted) {
+        if (!alive() || !accepted) return;
+        S.currentCall = Object.assign({}, S.currentCall, accepted);
+        S.answeredCall = S.currentCall;
+        if (S.callConnected) api.maybeStartConnectedTimer();
+    }).catch(function () {});
+
+    api.subscribeCallChannel(call.conversation_id);
+
     try {
         api.assertMediaReady();
-        api.showInCall(call, 'Connecting...');
-        api.unlockRemotePlayback();
         api.armConnectionTimeout();
-        S.wantsVideo = call.call_type === 'video';
-        var acceptJobs = [
-            api.subscribeCallChannel(call.conversation_id),
-            api.signalPeer({
-                type: 'call-accept',
-                call_id: call.id,
-                conversation_id: call.conversation_id,
-                caller_id: call.caller_id,
-                caller_type: call.caller_type,
-                receiver_id: call.receiver_id,
-                receiver_type: call.receiver_type
-            }),
-            api.ensurePeerConnection(S.wantsVideo)
-        ];
-        api.updateCallStatus(call.id, 'accepted').then(function (accepted) {
-            if (accepted && S.currentCall && Number(S.currentCall.id) === Number(accepted.id)) {
-                S.currentCall = Object.assign({}, S.currentCall, accepted);
-                S.answeredCall = S.currentCall;
-            }
-        }).catch(function () {});
-        await Promise.all(acceptJobs);
+        S.lifecycle = 'connecting';
+        await api.ensurePeerConnection(!!S.wantsVideo);
+        if (!alive()) return;
         if (S.wantsVideo) {
             S.cameraEnabled = true;
-            var pickupTrack = api.findLiveVideoTrack();
+            var pickupTrack = api.findLiveVideoTrack && api.findLiveVideoTrack();
             if (pickupTrack) pickupTrack.enabled = true;
             api.attachLocalVideo();
             api.syncCameraUi();
         }
-        if (!call._remoteOffer && S.currentCall && S.currentCall._remoteOffer) {
-            call._remoteOffer = S.currentCall._remoteOffer;
-        }
-        if (!call._remoteOffer) {
-            await api.waitForRemoteOffer(8000);
-        }
-        if (!call._remoteOffer && S.currentCall && S.currentCall._remoteOffer) {
+        if (S.currentCall && S.currentCall._remoteOffer) {
             call._remoteOffer = S.currentCall._remoteOffer;
         }
         api.keepActiveCallVisible('Connecting...');
         api.startCallHeartbeat();
-        if (call._remoteOffer && S.pc) {
-            await S.pc.setRemoteDescription(call._remoteOffer);
-            var answer = await S.pc.createAnswer();
-            await S.pc.setLocalDescription(answer);
-            await api.signalPeer({
-                type: 'answer',
-                call_id: call.id,
-                conversation_id: call.conversation_id,
-                sdp: answer,
-                caller_id: call.caller_id,
-                caller_type: call.caller_type,
-                receiver_id: call.receiver_id,
-                receiver_type: call.receiver_type,
-                started_at: call.started_at || call.answered_at || null,
-                server_time: call.server_time || null
-            });
-            while (S.iceQueue.length) {
-                await S.pc.addIceCandidate(S.iceQueue.shift());
-            }
-            api.setCallStatus('Connecting...');
-            api.attachLocalVideo();
-            api.signalMediaState();
-        } else {
-            api.setCallStatus('Connecting...');
-            api.keepActiveCallVisible('Connecting...');
+        if (!S.currentCall._remoteOffer) {
+            await api.waitForRemoteOffer(12000);
+        }
+        if (!alive()) return;
+        var applied = await api.tryCompleteCalleeAnswer();
+        if (!alive()) return;
+        if (!applied) {
+            api.setCallStatus('Waiting for the other person...');
+            api.keepActiveCallVisible('Waiting for the other person...');
         }
     } catch (err) {
-        api.toast(err.message || 'Unable to accept call.', 'error');
-        api.keepActiveCallVisible('Connecting...');
-        if (!S.pc && !S.localStream) {
-            if (call && call.id) {
-                try { await api.updateCallStatus(call.id, 'rejected'); } catch (e) { /* ignore */ }
-            }
-            var peer = (call && call.peer && call.peer.name) || '';
-            var failId = call && call.id;
-            var failConv = call && call.conversation_id;
-            S.currentCall = null;
-            await api.cleanupMediaOnly();
-            api.showCallEnded('rejected', peer, failId);
-            api.refreshCallChat(failConv);
-        }
+        if (!alive()) return;
+        api.toast((err && err.message) || 'Unable to accept call.', 'error');
+        S.startingCall = false;
+        S.acceptingCallId = null;
+        var peer = (call.peer && call.peer.name) || '';
+        var failConv = call.conversation_id;
+        S.currentCall = null;
+        try { await api.cleanupMediaOnly(); } catch (cleanErr) { /* ignore */ }
+        api.showCallEnded('failed', peer, callId);
+        api.refreshCallChat(failConv);
     }
 }
 
-
 api.waitForRemoteOffer = waitForRemoteOffer;
+api.tryCompleteCalleeAnswer = tryCompleteCalleeAnswer;
 api.acceptIncoming = acceptIncoming;

@@ -1,14 +1,10 @@
-import { S, api, refreshEls } from '../core/CallStateManager.js';
-import {
-    mediaConstraints,
-    videoOnlyConstraints,
-    prepareLocalStream
-} from '../utils/media-constraints.js';
-import { RING_TIMEOUT_MS, CALL_START_DELAY_MS, CONNECTION_TIMEOUT_MS, ICE_FAIL_GRACE_MS, iceConfig } from '../utils/WebRTCConfig.js';
-import { callInfo, callWarn } from '../utils/CallLogger.js';
+import { S, api } from '../core/CallStateManager.js';
 
-function stunConfig() { return iceConfig(); }
-
+/**
+ * End a call that never connected.
+ * The modal and ringtone close immediately. Signaling and the server
+ * status update run after the UI has already moved on.
+ */
 async function finishUnanswered(reason) {
     if (!S.currentCall || S.callConnected) return;
     var callSnapshot = S.currentCall;
@@ -18,62 +14,75 @@ async function finishUnanswered(reason) {
     var status = reason === 'rejected' ? 'rejected'
         : (reason === 'cancelled' ? 'cancelled' : 'missed');
 
+    S.acceptGeneration = (S.acceptGeneration || 0) + 1;
+    S.acceptingCallId = null;
+    S.startingCall = false;
+    S.decliningCall = false;
+    S.currentCall = null;
+    S.incomingCall = null;
+    S.incomingCallId = null;
     api.clearRingTimeout();
     api.stopRingtone();
+    api.hideIncoming();
+    if (typeof api.setIncomingActionState === 'function') api.setIncomingActionState('idle');
+    api.showCallEnded(status, peerName, callSnapshot.id, null, null);
 
-    try {
-        await api.signalPeer({
-            type: 'call-end',
-            reason: status,
-            ended_by_role: S.role || (status === 'cancelled' ? 'caller' : 'callee'),
-            call_id: callSnapshot.id,
-            conversation_id: callSnapshot.conversation_id,
-            caller_id: callSnapshot.caller_id,
-            caller_type: callSnapshot.caller_type,
-            receiver_id: callSnapshot.receiver_id,
-            receiver_type: callSnapshot.receiver_type
-        });
-    } catch (hangupErr) { /* still clean up locally */ }
-    S.currentCall = null;
-    await api.cleanupMediaOnly();
-    var serverCall = callSnapshot.id
-        ? await api.withTimeout(api.updateCallStatus(callSnapshot.id, status), 4000)
-        : null;
-    api.showCallEnded(status, peerName, callSnapshot.id, null, serverCall);
+    api.signalPeer({
+        type: 'call-end',
+        reason: status,
+        ended_by_role: S.role || (status === 'cancelled' ? 'caller' : 'callee'),
+        call_id: callSnapshot.id,
+        conversation_id: callSnapshot.conversation_id,
+        caller_id: callSnapshot.caller_id,
+        caller_type: callSnapshot.caller_type,
+        receiver_id: callSnapshot.receiver_id,
+        receiver_type: callSnapshot.receiver_type
+    }).catch(function () { /* local UI already closed */ });
+
+    api.cleanupMediaOnly().catch(function () { /* ignore */ });
+    if (callSnapshot.id) {
+        api.updateCallStatus(callSnapshot.id, status).catch(function () { /* ignore */ });
+    }
     api.refreshCallChat(callSnapshot.conversation_id);
 }
 
 async function rejectIncoming() {
-    if (typeof window.CommsWebRTC !== 'undefined'
+    if (S.decliningCall) return;
+    var modalIsGroup = !!(S.incomingCall && (S.incomingCall.is_group_call || S.incomingCall._groupInvite));
+    if (modalIsGroup && window.__commsPendingGroupInvite
+        && window.CommsWebRTC
         && typeof window.CommsWebRTC.__rejectGroupIfPending === 'function') {
+        S.decliningCall = true;
+        api.setIncomingActionState('declining');
+        api.stopRingtone();
+        api.clearRingTimeout();
+        api.hideIncoming();
         try {
             var groupRejected = await window.CommsWebRTC.__rejectGroupIfPending();
             if (groupRejected) {
-                api.hideIncoming();
-                api.stopRingtone();
-                api.clearRingTimeout();
+                S.decliningCall = false;
                 return;
             }
-        } catch (e) { /* fall through */ }
+        } catch (e) { /* fall through to the 1:1 decline */ }
+        S.decliningCall = false;
     }
-    // Decline must update the exact call session shown in the modal.
+
     var modalCallId = S.incomingCallId != null ? Number(S.incomingCallId) : null;
     var source = (modalCallId != null && S.incomingCall && Number(S.incomingCall.id) === modalCallId)
         ? S.incomingCall
         : S.currentCall;
     if (!source) return;
-    if (modalCallId != null && Number(source.id) !== modalCallId) {
-        return;
-    }
+    if (modalCallId != null && Number(source.id) !== modalCallId) return;
+
+    S.decliningCall = true;
+    S.acceptGeneration = (S.acceptGeneration || 0) + 1;
     S.currentCall = Object.assign({}, S.currentCall || {}, source);
-    if (S.currentCall.id != null) api.markCallTerminal(S.currentCall.id);
+    api.setIncomingActionState('declining');
+    api.stopRingtone();
+    api.clearRingTimeout();
+    api.hideIncoming();
     await api.finishUnanswered('rejected');
 }
-
-/**
- * Ask the server for the terminal state of a call, but never block the UI
- * for long. The server owns the authoritative duration.
- */
 
 api.finishUnanswered = finishUnanswered;
 api.rejectIncoming = rejectIncoming;

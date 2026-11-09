@@ -16,12 +16,13 @@
                     </div>
                 </div>
                 <button type="button" class="comms-mark-all-read" id="commsMarkAllRead">
-                    <span class="comms-mark-all-read-label">Mark All as Read</span>
+                    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 4h16v16H4z" opacity="0"/><path d="M4 7l8 6 8-6"/><rect x="4" y="5" width="16" height="14" rx="2"/></svg>
+                    <span class="comms-mark-all-read-label">Mark all as read</span>
                 </button>
                 <label class="visually-hidden" for="commsUserSearch">Search teachers or students</label>
                 <div class="comms-search-wrap">
                     <svg class="comms-search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
-                    <input type="search" id="commsUserSearch" class="comms-search-input" placeholder="Search people" autocomplete="off">
+                    <input type="search" id="commsUserSearch" class="comms-search-input" placeholder="Search people or groups" autocomplete="off">
                     <div class="comms-search-results" id="commsSearchResults" hidden></div>
                 </div>
             </div>

@@ -278,6 +278,7 @@ async function ensurePeerConnection(videoEnabled) {
                 S.iceDisconnectTimer = null;
             }
             S.callConnected = true;
+            S.lifecycle = 'connected';
             api.clearConnectionTimeout();
             api.keepActiveCallVisible('Connected');
             api.maybeStartConnectedTimer();
@@ -303,6 +304,7 @@ async function ensurePeerConnection(videoEnabled) {
     S.pc.onconnectionstatechange = function () {
         if (S.pc && S.pc.connectionState === 'connected') {
             S.callConnected = true;
+            S.lifecycle = 'connected';
             api.clearConnectionTimeout();
             api.keepActiveCallVisible('Connected');
             api.maybeStartConnectedTimer();

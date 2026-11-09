@@ -60,7 +60,7 @@ export function bindCallControls() {
             api.redialLastCall();
             return;
         }
-        if (e.target && e.target.closest('#commsCallEndedClose')) {
+        if (e.target && e.target.closest('#commsCallEndedClose, #commsCallEndedX')) {
             e.preventDefault();
             api.hideEnded();
         }

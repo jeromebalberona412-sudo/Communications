@@ -16,6 +16,9 @@
 </div>
 
 <div class="comms-modal comms-modal--call-ended" id="commsCallEnded" hidden role="dialog" aria-modal="true" aria-labelledby="commsCallEndedTitle">
+    <button type="button" class="comms-ended-close" id="commsCallEndedX" aria-label="Close call ended">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>
+    </button>
     <div class="comms-modal-card comms-modal-card--ended">
         <div class="comms-ended-avatar" id="commsCallEndedAvatar" aria-hidden="true"></div>
         <p class="comms-ended-name" id="commsCallEndedPeer"></p>

@@ -8,25 +8,14 @@ import '../css/floating-chat.css';
 window.CommsLoadWebrtc = loadWebrtc;
 
 if (document.getElementById('commsApp')) {
+    document.body.classList.add('comms-messages-layout');
     import('./chat/ChatManager.js');
-    loadWebrtc();
 }
 
 if (document.getElementById('commsAutomationsApp')) {
     import('./chat/Automations.js');
 }
 
-function preloadWebrtcWhenIdle() {
-    var run = function () {
-        loadWebrtc();
-    };
-    if (typeof window.requestIdleCallback === 'function') {
-        window.requestIdleCallback(run, { timeout: 4000 });
-        return;
-    }
-    window.setTimeout(run, 2500);
-}
-
-if (document.getElementById('commsRealtimeBoot') && !document.getElementById('commsApp')) {
-    preloadWebrtcWhenIdle();
+if (document.getElementById('commsRealtimeBoot') || document.getElementById('commsApp')) {
+    loadWebrtc();
 }

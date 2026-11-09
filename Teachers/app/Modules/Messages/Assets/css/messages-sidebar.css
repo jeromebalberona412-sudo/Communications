@@ -18,11 +18,7 @@
 }
 
 .comms-app {
-    --comms-shell-h: calc(100vh - 70px);
-    margin: -0.5rem;
-    height: var(--comms-shell-h);
-    min-height: var(--comms-shell-h);
-    max-height: var(--comms-shell-h);
+    --comms-shell-h: 100%;
     color: var(--comms-text);
     overflow: hidden;
 }
@@ -53,15 +49,17 @@
 
 .comms-shell {
     display: grid;
-    grid-template-columns: minmax(220px, 300px) 1fr;
+    grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
     gap: 0;
     flex: 1 1 auto;
+    min-width: 0;
     min-height: 0;
     height: 100%;
     max-height: 100%;
+    width: 100%;
     background: var(--comms-bg, #fff);
-    border: 1px solid var(--comms-border, rgba(15, 23, 42, 0.08));
-    border-radius: 12px;
+    border: 0;
+    border-radius: 0;
     overflow: hidden;
 }
 
@@ -270,16 +268,19 @@
 .comms-mark-all-read {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    margin: 0 0 8px;
-    max-width: 100%;
+    justify-content: center;
+    gap: 8px;
+    margin: 10px 12px 0;
+    max-width: calc(100% - 24px);
     border: 1px solid rgba(15, 23, 42, 0.12);
     background: #fff;
     color: #111827;
     border-radius: 999px;
-    padding: 6px 12px;
-    font-size: 13px;
+    padding: 8px 14px;
+    font-size: 12px;
     font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
     line-height: 1.2;
     cursor: pointer;
 }
