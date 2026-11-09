@@ -152,9 +152,18 @@ import { loadWebrtc } from '../webrtc/load.js';
             '<div class="floating-chat-body" id="floatingChatBody' + conversationId + '"></div>' +
             '<div class="floating-chat-typing" id="floatingChatTyping' + conversationId + '" hidden></div>' +
             '<form class="floating-chat-composer" id="floatingChatForm' + conversationId + '" autocomplete="off">' +
-            '<button type="button" class="floating-chat-attach-btn" title="Attach" aria-label="Attach">' +
+            '<input type="file" class="floating-chat-visually-hidden floating-chat-camera-input" accept="image/*" capture="environment" tabindex="-1" aria-hidden="true">' +
+            '<input type="file" class="floating-chat-visually-hidden floating-chat-photo-input" accept="image/jpeg,image/png,image/webp,image/gif" multiple tabindex="-1" aria-hidden="true">' +
+            '<input type="file" class="floating-chat-visually-hidden floating-chat-file-input" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,application/pdf,image/*" multiple tabindex="-1" aria-hidden="true">' +
+            '<div class="floating-chat-attach-wrap">' +
+            '<button type="button" class="floating-chat-attach-btn" data-action="attach" title="Attach" aria-label="Attach" aria-expanded="false">' +
             '<span aria-hidden="true">+</span>' +
             '</button>' +
+            '<div class="floating-chat-attach-menu" hidden>' +
+            '<button type="button" data-action="camera">Camera</button>' +
+            '<button type="button" data-action="photos">Photos</button>' +
+            '<button type="button" data-action="files">Files</button>' +
+            '</div></div>' +
             '<textarea class="floating-chat-input" id="floatingChatInput' + conversationId + '" rows="1" placeholder="Type a message" aria-label="Type a message"></textarea>' +
             '<button type="submit" class="floating-chat-send-btn" title="Send" aria-label="Send message">' +
             '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>' +
@@ -311,6 +320,71 @@ import { loadWebrtc } from '../webrtc/load.js';
         });
     }
 
+    function callStatusClass(body) {
+        var text = String(body || '').toLowerCase();
+        var base = 'floating-chat-msg is-system comms-bubble--call';
+        if (text.indexOf('declined') !== -1) return base + ' comms-bubble--call-declined';
+        if (text.indexOf('cancelled') !== -1 || text.indexOf('canceled') !== -1) return base + ' comms-bubble--call-cancelled';
+        if (text.indexOf('missed') !== -1 || text.indexOf('no pickup') !== -1) return base + ' comms-bubble--call-missed';
+        if (text.indexOf('ended') !== -1) return base + ' comms-bubble--call-ended';
+        if (text.indexOf('answered') !== -1) return base + ' comms-bubble--call-answered';
+        if (text.indexOf('ringing') !== -1) return base + ' comms-bubble--call-ringing';
+        if (text.indexOf('started') !== -1) return base + ' comms-bubble--call-started';
+        return base;
+    }
+
+    function renderAttachmentHtml(attachments) {
+        if (!attachments || !attachments.length) return '';
+        return attachments.map(function (a) {
+            var url = a.url || a.download_url || '';
+            var name = a.file_name || 'File';
+            var isImg = a.file_type === 'image' || String(a.mime_type || '').indexOf('image/') === 0;
+            if (isImg && url) {
+                return '<a class="floating-chat-img-link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' +
+                    '<img class="floating-chat-img" src="' + escapeHtml(url) + '" alt="' + escapeHtml(name) + '"></a>';
+            }
+            return '<a class="floating-chat-file" href="' + escapeHtml(url) + '" target="_blank" rel="noopener">' + escapeHtml(name) + '</a>';
+        }).join('');
+    }
+
+    function sendFiles(conversationId, fileList) {
+        var files = Array.prototype.slice.call(fileList || []);
+        if (!files.length || !window.Comms) return;
+        var url = routes.messages ? routes.messages.replace('__ID__', conversationId) : null;
+        if (!url) return;
+        files.forEach(function (file) {
+            var isImage = String(file.type || '').indexOf('image/') === 0;
+            var blobUrl = isImage ? URL.createObjectURL(file) : '';
+            var tempId = 'temp-att-' + Date.now() + '-' + Math.random().toString(16).slice(2);
+            appendMessageToWindow(conversationId, {
+                id: tempId,
+                body: '',
+                sender_id: currentUserId,
+                mine: true,
+                created_at: new Date().toISOString(),
+                message_type: isImage ? 'image' : 'file',
+                attachments: [{
+                    file_name: file.name,
+                    file_type: isImage ? 'image' : 'file',
+                    mime_type: file.type,
+                    url: blobUrl || '',
+                    download_url: blobUrl || '#'
+                }]
+            });
+            var form = new FormData();
+            form.append('attachment', file, file.name);
+            window.Comms.api(url, { method: 'POST', body: form, dedupe: false }).then(function (data) {
+                var msg = (data && data.message) || {};
+                replaceMessageInWindow(conversationId, tempId, msg);
+            }).catch(function (err) {
+                markMessageFailed(conversationId, tempId);
+                if (window.Comms && typeof window.Comms.showToast === 'function') {
+                    window.Comms.showToast((err && err.message) || 'Failed to send file', 'error');
+                }
+            });
+        });
+    }
+
     // Append message to window
     function appendMessageToWindow(conversationId, message) {
         var w = openWindows[String(conversationId)];
@@ -325,15 +399,16 @@ import { loadWebrtc } from '../webrtc/load.js';
 
         if (message.message_type === 'call' || message.message_type === 'system') {
             var msgEl = document.createElement('div');
-            msgEl.className = 'floating-chat-msg is-system';
-            msgEl.innerHTML = '<div class="floating-chat-msg-body">' + body + '</div>';
+            msgEl.className = callStatusClass(message.body);
+            msgEl.innerHTML = '<div class="floating-chat-msg-body comms-call-text">' + body + '</div>';
             msgEl.dataset.messageId = message.id;
             bodyEl.appendChild(msgEl);
         } else {
             var msgEl = document.createElement('div');
             msgEl.className = 'floating-chat-msg ' + (mine ? 'is-mine' : 'is-theirs');
             msgEl.dataset.messageId = message.id;
-            msgEl.innerHTML = '<div class="floating-chat-msg-body">' + body + '</div>' +
+            msgEl.innerHTML = renderAttachmentHtml(message.attachments) +
+                (body ? '<div class="floating-chat-msg-body">' + body + '</div>' : '') +
                 '<div class="floating-chat-msg-time">' + time + '</div>';
             bodyEl.appendChild(msgEl);
         }
@@ -468,22 +543,15 @@ import { loadWebrtc } from '../webrtc/load.js';
         // Bind events
         bindWindowEvents(cid);
 
-        // Position and animate
         positionWindows();
-        setTimeout(function () {
-            if (el) el.classList.add('is-visible');
-        }, 10);
+        if (el) el.classList.add('is-visible');
 
-        // Load messages and subscribe to realtime
         loadMessages(cid);
         subscribeRealtime(cid);
         markConversationRead(cid);
 
-        // Focus input
         var input = el.querySelector('.floating-chat-input');
-        if (input) {
-            setTimeout(function () { input.focus(); }, 100);
-        }
+        if (input) input.focus();
 
         saveState();
     }
@@ -596,7 +664,48 @@ import { loadWebrtc } from '../webrtc/load.js';
             else if (action === 'expand') expandWindow(cid);
             else if (action === 'voice') startCall(cid, 'voice');
             else if (action === 'video') startCall(cid, 'video');
+            else if (action === 'attach') {
+                var menu = w.el.querySelector('.floating-chat-attach-menu');
+                if (menu) {
+                    menu.hidden = !menu.hidden;
+                    btn.setAttribute('aria-expanded', menu.hidden ? 'false' : 'true');
+                }
+            } else if (action === 'camera') {
+                hideAttachMenu(w.el);
+                var cam = w.el.querySelector('.floating-chat-camera-input');
+                if (cam) cam.click();
+            } else if (action === 'photos') {
+                hideAttachMenu(w.el);
+                var photos = w.el.querySelector('.floating-chat-photo-input');
+                if (photos) photos.click();
+            } else if (action === 'files') {
+                hideAttachMenu(w.el);
+                var files = w.el.querySelector('.floating-chat-file-input');
+                if (files) files.click();
+            }
         });
+
+        var cameraInput = w.el.querySelector('.floating-chat-camera-input');
+        var photoInput = w.el.querySelector('.floating-chat-photo-input');
+        var fileInput = w.el.querySelector('.floating-chat-file-input');
+        if (cameraInput) {
+            cameraInput.addEventListener('change', function () {
+                sendFiles(cid, cameraInput.files);
+                cameraInput.value = '';
+            });
+        }
+        if (photoInput) {
+            photoInput.addEventListener('change', function () {
+                sendFiles(cid, photoInput.files);
+                photoInput.value = '';
+            });
+        }
+        if (fileInput) {
+            fileInput.addEventListener('change', function () {
+                sendFiles(cid, fileInput.files);
+                fileInput.value = '';
+            });
+        }
 
         // Form submit
         var form = w.el.querySelector('.floating-chat-composer');
@@ -655,6 +764,14 @@ import { loadWebrtc } from '../webrtc/load.js';
         });
     }
 
+    function hideAttachMenu(el) {
+        if (!el) return;
+        var menu = el.querySelector('.floating-chat-attach-menu');
+        var btn = el.querySelector('[data-action="attach"]');
+        if (menu) menu.hidden = true;
+        if (btn) btn.setAttribute('aria-expanded', 'false');
+    }
+
     function isCallActive() {
         var inCall = document.getElementById('commsInCall');
         if (inCall && !inCall.hidden) return true;
@@ -701,13 +818,13 @@ import { loadWebrtc } from '../webrtc/load.js';
             var time = formatTime(m.created_at);
             var body = escapeHtml(m.body || '');
             if (m.message_type === 'call' || m.message_type === 'system') {
-                var pillClass = /no pickup|ended/i.test(body) ? ' is-call-ended' : ' is-call-start';
-                return '<div class="floating-chat-msg is-system' + pillClass + '">' +
-                    '<div class="floating-chat-msg-body">' + body + '</div>' +
+                return '<div class="' + callStatusClass(m.body) + '">' +
+                    '<div class="floating-chat-msg-body comms-call-text">' + body + '</div>' +
                     '</div>';
             }
             return '<div class="floating-chat-msg ' + (mine ? 'is-mine' : 'is-theirs') + '">' +
-                '<div class="floating-chat-msg-body">' + body + '</div>' +
+                renderAttachmentHtml(m.attachments) +
+                (body ? '<div class="floating-chat-msg-body">' + body + '</div>' : '') +
                 '<div class="floating-chat-msg-time">' + time + '</div>' +
                 '</div>';
         }).join('');
@@ -725,6 +842,10 @@ import { loadWebrtc } from '../webrtc/load.js';
         loadWebrtc().then(function (api) {
             if (api && typeof api.startCall === 'function') {
                 api.startCall(conversationId, type, conversation);
+            }
+        }).catch(function (err) {
+            if (window.Comms && typeof window.Comms.showToast === 'function') {
+                window.Comms.showToast((err && err.message) || 'Unable to start call', 'error');
             }
         });
     }
@@ -751,6 +872,14 @@ import { loadWebrtc } from '../webrtc/load.js';
         container.id = 'floatingChatContainer';
         container.className = 'floating-chat-container';
         document.body.appendChild(container);
+
+        document.addEventListener('click', function (e) {
+            if (e.target.closest('.floating-chat-attach-wrap')) return;
+            Object.keys(openWindows).forEach(function (cid) {
+                var w = openWindows[cid];
+                if (w) hideAttachMenu(w.el);
+            });
+        });
 
         // Restore state - ONLY if NOT on Messages page
         if (!isOnMessagesPage()) {

@@ -250,6 +250,29 @@
     padding: 0.25rem 0.5rem;
 }
 
+.floating-chat-msg.comms-bubble--call {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    max-width: 100%;
+    margin: 0.15rem auto;
+    padding: 0.45rem 0.9rem;
+    border-radius: 999px;
+    border: 1px solid #d0d5dd;
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+
+.floating-chat-msg.comms-bubble--call .floating-chat-msg-body {
+    background: transparent;
+    color: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    padding: 0;
+    white-space: nowrap;
+}
+
 .floating-chat-msg.is-failed .floating-chat-msg-body {
     opacity: 0.6;
     position: relative;
@@ -284,6 +307,78 @@
     background: #fff;
     border-top: 1px solid #e4e6eb;
     flex-shrink: 0;
+    overflow: visible;
+    position: relative;
+}
+
+.floating-chat-visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    border: 0 !important;
+}
+
+.floating-chat-attach-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+.floating-chat-attach-menu {
+    position: absolute;
+    left: 0;
+    bottom: calc(100% + 8px);
+    min-width: 148px;
+    border: 1px solid #e4e6eb;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+    padding: 6px;
+    z-index: 40;
+    display: grid;
+    gap: 4px;
+}
+
+.floating-chat-attach-menu[hidden] {
+    display: none !important;
+}
+
+.floating-chat-attach-menu button {
+    border: 0;
+    background: transparent;
+    color: #1c2430;
+    border-radius: 8px;
+    padding: 0.55rem 0.7rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+}
+
+.floating-chat-attach-menu button:hover,
+.floating-chat-attach-menu button:focus-visible {
+    background: #e8f8ee;
+    outline: none;
+}
+
+.floating-chat-img {
+    display: block;
+    max-width: 220px;
+    max-height: 180px;
+    border-radius: 12px;
+    object-fit: cover;
+}
+
+.floating-chat-file {
+    display: inline-block;
+    margin: 0 0.5rem 0.25rem;
+    color: #0039A8;
+    font-size: 0.82rem;
+    font-weight: 600;
 }
 
 .floating-chat-attach-btn {

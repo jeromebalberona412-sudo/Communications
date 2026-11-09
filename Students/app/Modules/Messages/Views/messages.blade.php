@@ -141,7 +141,7 @@
 
                 <form class="comms-composer" id="commsComposer" autocomplete="off">
                     <input type="file" id="commsPhotoInput" class="visually-hidden" accept="image/jpeg,image/png,image/webp,image/gif" multiple aria-hidden="true" tabindex="-1">
-                    <input type="file" id="commsCameraInput" class="visually-hidden" accept="image/*" aria-hidden="true" tabindex="-1">
+                    <input type="file" id="commsCameraInput" class="visually-hidden" accept="image/*" capture="environment" aria-hidden="true" tabindex="-1">
                     <input type="file" id="commsFileInput" class="visually-hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,application/pdf" multiple aria-hidden="true" tabindex="-1">
                     <div class="comms-composer-tools">
                         <div class="comms-attach-menu-wrap">

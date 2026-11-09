@@ -491,12 +491,13 @@ import { loadWebrtc } from '../webrtc/load.js';
 
     function callBubbleClass(body) {
         var text = String(body || '').toLowerCase();
-        if (text.indexOf('ended') !== -1) return 'comms-bubble--call comms-bubble--call-ended';
-        if (text.indexOf('missed') !== -1) return 'comms-bubble--call comms-bubble--call-missed';
         if (text.indexOf('declined') !== -1) return 'comms-bubble--call comms-bubble--call-declined';
         if (text.indexOf('cancelled') !== -1 || text.indexOf('canceled') !== -1) return 'comms-bubble--call comms-bubble--call-cancelled';
+        if (text.indexOf('missed') !== -1 || text.indexOf('no pickup') !== -1) return 'comms-bubble--call comms-bubble--call-missed';
+        if (text.indexOf('ended') !== -1) return 'comms-bubble--call comms-bubble--call-ended';
         if (text.indexOf('answered') !== -1) return 'comms-bubble--call comms-bubble--call-answered';
-        if (text.indexOf('started') !== -1 || text.indexOf('ringing') !== -1) return 'comms-bubble--call comms-bubble--call-started';
+        if (text.indexOf('ringing') !== -1) return 'comms-bubble--call comms-bubble--call-ringing';
+        if (text.indexOf('started') !== -1) return 'comms-bubble--call comms-bubble--call-started';
         return 'comms-bubble--call';
     }
 

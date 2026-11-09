@@ -261,6 +261,7 @@
                 memberCount: memberCount,
                 online: online
             });
+            closeModal();
         }
     });
 
