@@ -18,16 +18,12 @@ async function finishUnanswered(reason) {
     S.acceptingCallId = null;
     S.startingCall = false;
     S.decliningCall = false;
-    S.currentCall = null;
-    S.incomingCall = null;
-    S.incomingCallId = null;
     api.clearRingTimeout();
     api.stopRingtone();
     api.hideIncoming();
     if (typeof api.setIncomingActionState === 'function') api.setIncomingActionState('idle');
-    api.showCallEnded(status, peerName, callSnapshot.id, null, null);
 
-    api.signalPeer({
+    await api.withTimeout(api.signalPeer({
         type: 'call-end',
         reason: status,
         ended_by_role: S.role || (status === 'cancelled' ? 'caller' : 'callee'),
@@ -37,9 +33,13 @@ async function finishUnanswered(reason) {
         caller_type: callSnapshot.caller_type,
         receiver_id: callSnapshot.receiver_id,
         receiver_type: callSnapshot.receiver_type
-    }).catch(function () { /* local UI already closed */ });
+    }), 1500);
 
+    S.currentCall = null;
+    S.incomingCall = null;
+    S.incomingCallId = null;
     api.cleanupMediaOnly().catch(function () { /* ignore */ });
+    api.showCallEnded(status, peerName, callSnapshot.id, null, null);
     if (callSnapshot.id) {
         api.updateCallStatus(callSnapshot.id, status).catch(function () { /* ignore */ });
     }

@@ -35,6 +35,8 @@ async function cleanupMediaOnly() {
     S.peerAnsweredFor = null;
     S.remoteCameraEnabled = true;
     S.remoteMicEnabled = true;
+    S.remoteCameraSeq = 0;
+    S.cameraSeq = 0;
     S.videoSender = null;
     S.cameraPending = null;
     S.cameraBusy = false;
@@ -43,6 +45,8 @@ async function cleanupMediaOnly() {
     S.acceptingCallId = null;
     S.answerAppliedFor = null;
     S.decliningCall = false;
+    S.cameraChain = Promise.resolve();
+    S.negotiating = false;
     
     if (S.els.endBtn) api.setCtrlLabel(S.els.endBtn, 'End');
     if (S.els.muteBtn) {

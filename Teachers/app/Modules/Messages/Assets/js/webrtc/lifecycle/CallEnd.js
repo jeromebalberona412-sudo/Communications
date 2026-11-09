@@ -44,10 +44,9 @@ async function endCall() {
     api.stopCallTimer();
     api.hideIncoming();
     
-    // Send hangup first, fire-and-forget, while the channel is still alive.
     var endedByRole = S.role || 'caller';
     try {
-        api.signalPeer({
+        await api.withTimeout(api.signalPeer({
             type: 'call-end',
             reason: 'ended',
             ended_by_role: endedByRole,
@@ -57,12 +56,11 @@ async function endCall() {
             caller_type: callSnapshot.caller_type,
             receiver_id: callSnapshot.receiver_id,
             receiver_type: callSnapshot.receiver_type
-        });
+        }), 1500);
     } catch (err) {
         console.error('Failed to send hangup signal:', err);
     }
-    
-    // Clean up local state immediately
+
     S.currentCall = null;
     S.role = null;
     await api.cleanupMediaOnly();
@@ -75,7 +73,7 @@ async function endCall() {
         if (serverCall && serverCall.duration_seconds != null) {
             var endedEl = document.querySelector('[data-call-ended-id="' + callSnapshot.id + '"]');
             if (endedEl && serverCall.duration_seconds > 0) {
-                var durationText = formatCallDuration(serverCall.duration_seconds);
+                var durationText = api.formatDuration(serverCall.duration_seconds * 1000);
                 var durationDisplay = endedEl.querySelector('.call-duration');
                 if (durationDisplay) durationDisplay.textContent = durationText;
             }

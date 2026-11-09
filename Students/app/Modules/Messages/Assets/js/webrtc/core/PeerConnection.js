@@ -39,7 +39,7 @@ function hasLiveRemoteVideo() {
     var stream = (S.els.remoteVideo && S.els.remoteVideo.srcObject) || S.remoteStream;
     if (!stream || typeof stream.getVideoTracks !== 'function') return false;
     return stream.getVideoTracks().some(function (track) {
-        return !!(track && track.readyState === 'live' && track.enabled !== false);
+        return !!(track && track.readyState === 'live');
     });
 }
 
@@ -121,12 +121,15 @@ function mergeRemoteTrack(track, inboundStream) {
         api.dropRemoteTracksOfKind(track.kind, track.id);
         S.remoteStream.addTrack(track);
 
-        if (track.kind === 'video' && track.muted !== true && track.readyState === 'live') {
+        if (track.kind === 'video' && track.muted !== true && track.readyState === 'live'
+            && S.remoteCameraSeq === 0) {
             S.remoteCameraEnabled = true;
         }
 
         var unmuteHandler = function () {
-            if (track.kind === 'video') S.remoteCameraEnabled = true;
+            if (track.kind === 'video' && S.remoteCameraSeq === 0) {
+                S.remoteCameraEnabled = true;
+            }
             api.bindRemoteMedia(S.remoteStream);
             api.updateCameraUi();
         };
@@ -184,8 +187,9 @@ function bindRemoteMedia(stream) {
         S.els.remoteVideo.playsInline = true;
         S.els.remoteVideo.autoplay = true;
         S.els.remoteVideo.style.visibility = '';
-        S.els.remoteVideo.srcObject = null;
-        S.els.remoteVideo.srcObject = stream;
+        if (S.els.remoteVideo.srcObject !== stream) {
+            S.els.remoteVideo.srcObject = stream;
+        }
         try {
             var vp = S.els.remoteVideo.play();
             if (vp && typeof vp.catch === 'function') {

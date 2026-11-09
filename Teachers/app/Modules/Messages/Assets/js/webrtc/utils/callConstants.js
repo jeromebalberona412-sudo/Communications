@@ -2,7 +2,7 @@
  * Single source of truth for 1:1 + group call constants.
  * Event names must stay identical in Students and Teachers.
  */
-export const CALL_BUILD = '2026-11-09-c';
+export const CALL_BUILD = '2026-11-10-a';
 
 export const RING_TIMEOUT_MS = 30000;
 export const CALL_START_DELAY_MS = 400;

@@ -138,10 +138,18 @@ function signalPeer(payload) {
     payload.conversation_id = payload.conversation_id || conversationId;
     
     var targets = api.signalTargets();
+    var peerId = targets.peerId || payload.to_user_id || payload.peerId;
+    var peerType = targets.peerType || payload.to_user_type || payload.peerType;
+    if (!peerId && payload.caller_id != null && payload.receiver_id != null) {
+        var iAmCaller = Number(payload.caller_id) === me.id
+            && (!me.type || !payload.caller_type || api.portalTypesMatch(payload.caller_type, me.type));
+        peerId = iAmCaller ? payload.receiver_id : payload.caller_id;
+        peerType = iAmCaller ? payload.receiver_type : payload.caller_type;
+    }
     api.subscribeCallChannel(conversationId);
     return window.CommsRealtime.broadcastSignal(conversationId, payload, {
-        peerId: targets.peerId || payload.to_user_id || payload.peerId,
-        peerType: targets.peerType || payload.to_user_type || payload.peerType,
+        peerId: peerId,
+        peerType: peerType,
         peers: targets.peers
     });
 }

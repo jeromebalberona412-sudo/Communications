@@ -55,14 +55,17 @@ async function handleSignal(payload) {
         // while actively in that same call). Late offers after Decline used to re-open the modal.
         if (signalCallId && api.isCallAlreadyHandled(signalCallId)) {
             var sameActiveCall = S.currentCall && Number(S.currentCall.id) === signalCallId;
-            if (payload.type === 'offer' && payload.sdp && sameActiveCall && !S.decliningCall) {
+            var connectedOffer = payload.type === 'offer' && payload.sdp && sameActiveCall
+                && !S.decliningCall && S.callConnected && S.pc;
+            if (connectedOffer) {
+                // Fall through so camera/audio renegotiation can replace the old SDP.
+            } else if (payload.type === 'offer' && payload.sdp && sameActiveCall && !S.decliningCall) {
                 S.currentCall._remoteOffer = payload.sdp;
                 if (typeof api.tryCompleteCalleeAnswer === 'function') {
                     api.tryCompleteCalleeAnswer();
                 }
                 return;
-            }
-            if (!(payload.type === 'offer' && payload.sdp && api.isActivelyInCall(signalCallId) && S.callConnected)) {
+            } else if (!(payload.type === 'offer' && payload.sdp && api.isActivelyInCall(signalCallId) && S.callConnected)) {
                 return;
             }
         }
@@ -205,7 +208,7 @@ async function handleSignal(payload) {
                 // Update duration display if server has more accurate data
                 var endedEl = document.querySelector('[data-call-ended-id="' + hangupId + '"]');
                 if (endedEl && serverState.duration_seconds > 0) {
-                    var durationText = formatCallDuration(serverState.duration_seconds);
+                    var durationText = api.formatDuration(serverState.duration_seconds * 1000);
                     var durationDisplay = endedEl.querySelector('.call-duration');
                     if (durationDisplay) durationDisplay.textContent = durationText;
                 }
@@ -286,7 +289,8 @@ async function handleSignal(payload) {
 
     if ((payload.type === 'ice' || payload.type === 'ice-candidate') && payload.candidate) {
         if (!api.sameCall(payload)) return;
-        if (!S.pc || !S.pc.remoteDescription) {
+        var remoteReady = !!(S.pc && (S.pc.currentRemoteDescription || S.pc.remoteDescription));
+        if (!S.pc || !remoteReady) {
             S.iceQueue.push(payload.candidate);
         } else {
             try { await S.pc.addIceCandidate(payload.candidate); } catch (e) { /* ignore */ }

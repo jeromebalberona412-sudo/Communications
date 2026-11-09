@@ -97,12 +97,20 @@ export function conversationSignalChannel(conversationId) {
 export function ensureCallChannel(conversationId) {
     var sb = ensureClient();
     if (!sb || !conversationId) return Promise.resolve(null);
-    if (conversationSignalChannel(conversationId)) {
-        return Promise.resolve(conversationSignalChannel(conversationId));
+
+    if (state.callChannel && String(state.callChannelId) === String(conversationId)) {
+        return Promise.resolve(state.callChannel);
+    }
+    if (state.callChannel && String(state.callChannelId) !== String(conversationId)) {
+        teardownCallChannel();
     }
 
+    var already = !!conversationSignalChannel(conversationId);
     state.callChannelId = conversationId;
     state.callChannel = acquireTopicChannel('comms-signal-' + conversationId, conversationId);
+    if (already) {
+        return Promise.resolve(state.callChannel);
+    }
 
     return new Promise(function (resolve) {
         var settled = false;

@@ -1,6 +1,6 @@
 import { CALL_BUILD as BUILD } from './callConstants.js';
 
-export const CALL_BUILD = '2026-11-09-d';
+export const CALL_BUILD = '2026-11-10-a';
 export { RING_TIMEOUT_MS, CALL_START_DELAY_MS, CONNECTION_TIMEOUT_MS, ICE_FAIL_GRACE_MS, STATUS_POLL_MS, EVENTS, CHANNEL } from './callConstants.js';
 
 export function iceConfig() {

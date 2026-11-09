@@ -105,6 +105,7 @@ export const S = {
     acceptGeneration: 0,
     answerAppliedFor: null,
     decliningCall: false,
+    redialLock: false,
     dismissedRingIds: Object.create(null),
     answeredCallIds: Object.create(null),
     shownIncomingIds: Object.create(null),

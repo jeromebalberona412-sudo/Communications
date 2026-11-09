@@ -36,8 +36,12 @@ async function tryCompleteCalleeAnswer() {
     if (S.role === 'caller' || S.decliningCall) return false;
     if (!S.currentCall || !S.pc || !S.currentCall._remoteOffer) return false;
     var callId = Number(S.currentCall.id);
-    if (S.answerAppliedFor != null && Number(S.answerAppliedFor) === callId && S.pc.remoteDescription) {
-        return true;
+    if (S.answerAppliedFor != null && Number(S.answerAppliedFor) === callId && S.pc.currentRemoteDescription) {
+        var incomingSdp = S.currentCall._remoteOffer && S.currentCall._remoteOffer.sdp;
+        var currentSdp = S.pc.currentRemoteDescription.sdp;
+        if (!incomingSdp || incomingSdp === currentSdp) {
+            return true;
+        }
     }
     if (S.negotiating) return false;
     S.negotiating = true;

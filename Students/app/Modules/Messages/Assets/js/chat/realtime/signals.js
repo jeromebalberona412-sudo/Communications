@@ -35,6 +35,24 @@ function deliverSignal(payload) {
     });
 }
 
+function candidateFingerprint(candidate) {
+    if (!candidate) return '';
+    if (typeof candidate === 'string') return candidate.slice(0, 160);
+    return [
+        candidate.sdpMid || '',
+        candidate.sdpMLineIndex != null ? candidate.sdpMLineIndex : '',
+        String(candidate.candidate || '').slice(0, 160)
+    ].join(':');
+}
+
+function sdpFingerprint(sdp) {
+    if (!sdp) return '';
+    var type = typeof sdp === 'object' ? String(sdp.type || '') : '';
+    var body = typeof sdp === 'object' ? String(sdp.sdp || '') : String(sdp);
+    if (!body) return type;
+    return type + ':' + body.length + ':' + body.slice(0, 48) + ':' + body.slice(-48);
+}
+
 function signalSignature(payload) {
     if (!payload || typeof payload !== 'object') return '';
     return [
@@ -42,9 +60,10 @@ function signalSignature(payload) {
         payload.call_id != null ? payload.call_id : '',
         payload.conversation_id != null ? payload.conversation_id : '',
         payload.from_user_id != null ? payload.from_user_id : '',
-        payload.sdp ? 'sdp' : '',
-        payload.candidate ? 'ice' : '',
+        payload.sdp ? sdpFingerprint(payload.sdp) : '',
+        payload.candidate ? candidateFingerprint(payload.candidate) : '',
         payload.enabled != null ? String(payload.enabled) : '',
+        payload.seq != null ? String(payload.seq) : '',
         payload.reason || ''
     ].join('|');
 }

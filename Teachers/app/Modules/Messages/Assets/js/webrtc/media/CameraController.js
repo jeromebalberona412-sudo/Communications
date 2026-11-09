@@ -41,7 +41,7 @@ function updateCameraUi() {
     var isVideoCall = api.isVideoCallType();
     if (S.els.inCall) {
         S.els.inCall.classList.toggle('is-connected', !!S.callConnected);
-        S.els.inCall.classList.toggle('has-remote-video', remoteVideoLive);
+        S.els.inCall.classList.toggle('has-remote-video', remoteVideoLive && !!S.remoteCameraEnabled);
         S.els.inCall.classList.toggle('is-video-call', isVideoCall);
         S.els.inCall.classList.toggle('is-remote-camera-off', !S.remoteCameraEnabled);
         S.els.inCall.classList.toggle('is-remote-mic-off', !S.remoteMicEnabled);
@@ -136,33 +136,34 @@ async function applyCameraState(enabled) {
     }
 
     S.cameraBusy = true;
-    S.cameraEnabled = !!enabled;
-    api.syncCameraUi();
+    var wantsOn = !!enabled;
+    var needsRenegotiate = false;
 
     try {
-        var liveTrack = api.findLiveVideoTrack();
-        var needsRenegotiate = false;
-        var sender = api.findVideoSender();
-
-        if (!enabled) {
-            // FIX BUG #4: Stop tracks completely when turning camera OFF
-            // Don't just disable - this ensures clean restart when turning ON
+        if (!wantsOn) {
             S.localStream.getVideoTracks().forEach(function (track) {
-                try { track.stop(); } catch (eStop) {}
-                try { S.localStream.removeTrack(track); } catch (eRem) {}
+                try { track.enabled = false; } catch (eOff) { /* ignore */ }
             });
-            if (sender) {
-                try { sender.replaceTrack(null); } catch (eRep) {}
-                S.videoSender = sender;
-            }
             S.cameraEnabled = false;
             api.attachLocalVideo();
             api.syncCameraUi();
+            api.updateCameraUi();
             return;
         }
 
-        // FIX BUG #4: When turning ON, always get fresh stream since we stopped tracks
-        // Don't try to reuse stopped tracks
+        var liveTrack = api.findLiveVideoTrack();
+        if (liveTrack) {
+            liveTrack.enabled = true;
+            needsRenegotiate = await api.attachVideoTrackToSender(liveTrack);
+            S.cameraEnabled = true;
+            if (S.currentCall && String(S.currentCall.call_type) !== 'video') {
+                S.currentCall.call_type = 'video';
+            }
+            api.attachLocalVideo();
+            api.syncCameraUi();
+            api.updateCameraUi();
+        } else {
+
         var devices = api.assertMediaReady();
         var camStream;
         try {
@@ -187,11 +188,10 @@ async function applyCameraState(enabled) {
             throw new Error('No camera was found on this device.');
         }
 
-        // Clean up old tracks if any exist
         S.localStream.getVideoTracks().forEach(function (track) {
             if (track !== newTrack) {
-                try { S.localStream.removeTrack(track); } catch (e) {}
-                try { track.stop(); } catch (e2) {}
+                try { S.localStream.removeTrack(track); } catch (e) { /* ignore */ }
+                try { track.stop(); } catch (e2) { /* ignore */ }
             }
         });
         if (!S.localStream.getVideoTracks().some(function (t) { return t.id === newTrack.id; })) {
@@ -199,7 +199,7 @@ async function applyCameraState(enabled) {
         }
         camStream.getVideoTracks().forEach(function (track) {
             if (track !== newTrack) {
-                try { track.stop(); } catch (e3) {}
+                try { track.stop(); } catch (e3) { /* ignore */ }
             }
         });
 
@@ -212,6 +212,7 @@ async function applyCameraState(enabled) {
         api.attachLocalVideo();
         api.syncCameraUi();
         api.updateCameraUi();
+        }
     } finally {
         S.cameraBusy = false;
         api.syncCameraUi();
@@ -285,8 +286,7 @@ async function attachVideoTrackToSender(track) {
  */
 function attachLocalVideo() {
     if (!S.els.localVideo || !S.localStream) return;
-    if (S.els.localVideo.srcObject !== S.localStream || S.cameraEnabled) {
-        S.els.localVideo.srcObject = null;
+    if (S.els.localVideo.srcObject !== S.localStream) {
         S.els.localVideo.srcObject = S.localStream;
     }
     // FIX BUG #1: Ensure all required video attributes are set
@@ -336,16 +336,18 @@ function syncCameraUi() {
     var remoteLive = typeof api.hasLiveRemoteVideo === 'function' && api.hasLiveRemoteVideo();
     var videoCall = typeof api.isVideoCallType === 'function' && api.isVideoCallType();
     if (S.els.remoteVideoOff) {
-        var showRemotePlaceholder = !!videoCall && !remoteLive;
+        var cameraOff = !!videoCall && S.remoteCameraEnabled === false;
+        var connecting = !!videoCall && S.remoteCameraEnabled !== false && !remoteLive;
+        var showRemotePlaceholder = cameraOff || connecting;
         S.els.remoteVideoOff.hidden = !showRemotePlaceholder;
         S.els.remoteVideoOff.setAttribute('aria-hidden', showRemotePlaceholder ? 'false' : 'true');
         var remoteLabel = S.els.remoteVideoOff.querySelector('.comms-video-off-label');
         if (remoteLabel) {
-            remoteLabel.textContent = S.remoteCameraEnabled ? 'Connecting' : 'Camera Off';
+            remoteLabel.textContent = cameraOff ? 'Camera Off' : 'Connecting';
         }
     }
     if (S.els.inCall) {
-        S.els.inCall.classList.toggle('is-remote-camera-off', !S.remoteCameraEnabled && !remoteLive);
+        S.els.inCall.classList.toggle('is-remote-camera-off', S.remoteCameraEnabled === false);
         S.els.inCall.classList.toggle('is-local-camera-off', !on);
         S.els.inCall.classList.toggle('is-remote-mic-off', !S.remoteMicEnabled);
     }

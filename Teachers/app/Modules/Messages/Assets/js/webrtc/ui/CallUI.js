@@ -266,19 +266,36 @@ function showCallEnded(reason, peerName, callId, endedByRole, callPayload) {
 
 function redialLastCall() {
     if (!S.lastCallContext || !S.lastCallContext.conversationId) return;
-    if (S.startingCall || S.currentCall) return; // Prevent double-redial
-    
-    var ctx = S.lastCallContext;
-    
+    if (S.startingCall || S.currentCall || S.pendingStart || S.redialLock) return;
+
+    S.redialLock = true;
+    var ctx = {
+        conversationId: S.lastCallContext.conversationId,
+        callType: S.lastCallContext.callType || 'voice',
+        conversation: S.lastCallContext.conversation || null
+    };
+
     api.hideEnded();
-    
-    // Perform complete cleanup before starting new call
-    api.cleanupMediaOnly().then(function() {
-        // Start fresh call with completely clean state
-        api.startCall(ctx.conversationId, ctx.callType || 'voice', ctx.conversation || null);
-    }).catch(function(err) {
+    api.stopCallTimer();
+    S.lastEndedCallId = null;
+    S.answerAppliedFor = null;
+    S.acceptingCallId = null;
+    S.peerAnsweredFor = null;
+    S.iceQueue = [];
+    S.remoteCameraSeq = 0;
+    S.cameraSeq = 0;
+
+    Promise.resolve(api.cleanupMediaOnly()).then(function () {
+        S.startingCall = false;
+        S.currentCall = null;
+        try {
+            api.startCall(ctx.conversationId, ctx.callType, ctx.conversation);
+        } finally {
+            S.redialLock = false;
+        }
+    }).catch(function (err) {
         console.error('Cleanup failed before redial:', err);
-        // Reset state in catch block to prevent stuck state (REVIEW FIX #4)
+        S.redialLock = false;
         S.currentCall = null;
         S.startingCall = false;
         api.toast('Unable to redial. Please try again.', 'error');
@@ -358,6 +375,8 @@ function showInCall(call, statusText) {
         else S.els.timer.textContent = '00:00';
     }
     api.setMuteUi(false);
+    api.attachLocalVideo();
+    if (S.remoteStream) api.bindRemoteMedia(S.remoteStream);
     api.updateCameraUi();
     api.syncLocalPipLayout();
     api.unlockRemotePlayback();
