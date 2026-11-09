@@ -694,20 +694,28 @@
         container.className = 'floating-chat-container';
         document.body.appendChild(container);
 
-        // Restore state
-        var state = loadState();
-        if (state && state.windows) {
-            state.windows.forEach(function (w) {
-                openChatWindow(w.conversationId, {
-                    peerName: w.peerName,
-                    peerAvatar: w.peerAvatar,
-                    isGroup: w.isGroup,
-                    memberCount: w.memberCount
+        // Restore state - ONLY if NOT on Messages page
+        if (!isOnMessagesPage()) {
+            var state = loadState();
+            if (state && state.windows && Array.isArray(state.windows)) {
+                state.windows.forEach(function (w) {
+                    if (w && w.conversationId) {
+                        setTimeout(function () {
+                            openChatWindow(w.conversationId, {
+                                peerName: w.peerName,
+                                peerAvatar: w.peerAvatar,
+                                isGroup: w.isGroup,
+                                memberCount: w.memberCount
+                            });
+                            if (w.minimized) {
+                                setTimeout(function () {
+                                    minimizeWindow(w.conversationId);
+                                }, 100);
+                            }
+                        }, 50);
+                    }
                 });
-                if (w.minimized) {
-                    minimizeWindow(w.conversationId);
-                }
-            });
+            }
         }
 
         // Listen for window resize
