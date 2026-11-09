@@ -24,6 +24,8 @@ import {
     var meshRole = null;
     var meshConnected = false;
     var meshInvitees = [];
+    var meshCameraSeq = 0;  // Sequence number for camera state changes
+    var meshPeerCameraSeq = Object.create(null);  // Track latest seq per peer
     var RING_MS = 30000;
     var ringTimer = null;
 
@@ -697,7 +699,26 @@ import {
         // CRITICAL FIX: Handle camera state changes from remote participants
         if (payload.type === 'camera-state') {
             if (!meshCall || Number(payload.call_id) !== Number(meshCall.id)) return true;
+            
+            // CRITICAL FIX: Ignore self-echo from Supabase Realtime
+            var self = me();
+            if (Number(payload.from_user_id) === self.id && String(payload.from_user_type) === self.type) {
+                return true;  // Ignore own camera-state echoes
+            }
+            
             var key = peerKey(payload.from_user_id, payload.from_user_type);
+            
+            // CRITICAL FIX: Ignore stale state updates using sequence numbers
+            var incomingSeq = Number(payload.seq || 0);
+            var lastSeq = meshPeerCameraSeq[key] || 0;
+            if (incomingSeq > 0 && incomingSeq <= lastSeq) {
+                console.debug('[cam] Ignored stale camera-state from', key, 'seq', incomingSeq, '<=', lastSeq);
+                return true;  // Ignore stale updates
+            }
+            meshPeerCameraSeq[key] = incomingSeq;
+            
+            console.debug('[cam] Apply camera-state from', key, 'enabled:', payload.enabled, 'seq:', incomingSeq);
+            
             var tile = document.getElementById('commsRemoteGrid')?.querySelector('[data-peer-key="' + key.replace(/"/g, '') + '"]');
             if (tile) {
                 var video = tile.querySelector('video');
@@ -769,11 +790,14 @@ import {
     async function applyMeshCameraState(enabled) {
         if (!meshLocalStream) return;
         enabled = !!enabled;
+        
+        console.debug('[cam] Apply local camera state:', enabled ? 'ON' : 'OFF');
 
         var videoTracks = meshLocalStream.getVideoTracks();
         var live = videoTracks.filter(function (t) { return t.readyState === 'live'; });
 
         if (!enabled) {
+            console.debug('[cam] Disabling camera, setting tracks.enabled = false');
             videoTracks.forEach(function (t) {
                 try { t.enabled = false; } catch (eOff) {}
             });
@@ -789,7 +813,9 @@ import {
             meshCameraOn = false;
             syncMeshCameraUi();
             // CRITICAL FIX: Notify other participants about camera OFF
-            await signal({ type: 'camera-state', enabled: false });
+            meshCameraSeq += 1;
+            console.debug('[cam] Broadcasting camera OFF, seq:', meshCameraSeq);
+            await signal({ type: 'camera-state', enabled: false, seq: meshCameraSeq });
             return;
         }
 
@@ -847,7 +873,9 @@ import {
         meshCameraOn = true;
         syncMeshCameraUi();
         // CRITICAL FIX: Notify other participants about camera ON
-        await signal({ type: 'camera-state', enabled: true });
+        meshCameraSeq += 1;
+        console.debug('[cam] Broadcasting camera ON, seq:', meshCameraSeq);
+        await signal({ type: 'camera-state', enabled: true, seq: meshCameraSeq });
     }
 
     /**

@@ -1,13 +1,23 @@
 # Floating Chat Window Implementation Progress
 
-## Status: ✅ IMPLEMENTATION COMPLETE + BUG FIXED - BROWSER TESTING REQUIRED
+## Status: ✅ ALL FIXES COMPLETE - BROWSER TESTING REQUIRED
 
-## Latest Update: UNLIMITED LOADING BUG FIXED (see BUG_FIX_UNLIMITED_LOADING.md)
+## Latest Updates:
+1. **FLOATING CHAT BUG FIXED** (Unlimited loading loop) - see BUG_FIX_UNLIMITED_LOADING.md
+2. **CAMERA FLICKER BUG FIXED** (Group call camera ON/OFF) - see CAMERA_FLICKER_FINAL_SUMMARY.md
+
+### Floating Chat Fix Summary:
 - Fixed infinite loop in state restoration
 - Added Messages page check to prevent unwanted restoration
 - Added async delays (setTimeout) to break synchronous execution
 - Added validation for corrupted sessionStorage data
 - Fixed race condition in minimize restoration
+
+### Camera Flicker Fix Summary:
+- Added self-echo filtering (ignore own camera-state signals)
+- Added sequence number tracking to prevent stale state updates
+- Added debug logging for diagnosis
+- Fixed: Camera OFF no longer briefly shows ON before staying OFF
 
 ## Implementation Completed
 
