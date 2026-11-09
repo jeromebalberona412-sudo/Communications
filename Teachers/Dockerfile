@@ -8,17 +8,17 @@ WORKDIR /var/www/html
 RUN apk add --no-cache nodejs npm
 
 COPY composer.json composer.lock ./
-COPY packages ./packages
 COPY app ./app
 COPY bootstrap ./bootstrap
 COPY config ./config
 COPY conf ./conf
 COPY database ./database
 COPY public ./public
-COPY resources ./resources
+COPY shared ./shared
 COPY routes ./routes
 COPY scripts ./scripts
 COPY artisan ./
+COPY .env.example ./
 COPY package.json package-lock.json vite.config.js ./
 
 # Vite bakes VITE_* at build time. Pass these as Render env vars (also used at runtime via Blade).

@@ -3,6 +3,8 @@
  * Opens conversations as docked windows at bottom-right, like Facebook Messenger.
  * Works on ALL pages, persists across navigation within the same tab session.
  */
+import { loadWebrtc } from '../webrtc/load.js';
+
 (function () {
     'use strict';
 
@@ -715,13 +717,16 @@
 
     function startCall(conversationId, callType) {
         if (isCallActive()) return;
-        if (!window.CommsWebRTC || typeof window.CommsWebRTC.startCall !== 'function') return;
         var type = callType === 'audio' ? 'voice' : callType;
         var w = openWindows[String(conversationId)];
         var conversation = w && w.isGroup
             ? { id: Number(conversationId), conversation_type: 'group', is_default_group: true }
             : null;
-        window.CommsWebRTC.startCall(conversationId, type, conversation);
+        loadWebrtc().then(function (api) {
+            if (api && typeof api.startCall === 'function') {
+                api.startCall(conversationId, type, conversation);
+            }
+        });
     }
 
     // Initialize

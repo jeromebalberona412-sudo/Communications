@@ -9,7 +9,7 @@
       "runtime": "vercel-php@0.7.4",
       "memory": 1024,
       "maxDuration": 30,
-      "includeFiles": "{app,bootstrap,config,database,packages,public,resources,routes,storage,vendor}/**"
+      "includeFiles": "{app,bootstrap,config,database,public,shared,routes,storage,vendor}/**"
     }
   },
   "routes": [

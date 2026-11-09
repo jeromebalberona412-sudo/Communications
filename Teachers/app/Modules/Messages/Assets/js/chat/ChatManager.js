@@ -1,11 +1,19 @@
 /**
  * Messenger UI: conversation list, thread, send/read, user search.
  */
+import { loadWebrtc } from '../webrtc/load.js';
+
 (function () {
     'use strict';
 
     var root = document.getElementById('commsApp');
     if (!root || !window.Comms) return;
+
+    function withWebrtc(run) {
+        loadWebrtc().then(function (api) {
+            if (api) run(api);
+        });
+    }
 
     var routes = {};
     try { routes = JSON.parse(root.dataset.routes || '{}'); } catch (e) { routes = {}; }
@@ -351,13 +359,10 @@
 
     function beginGroupOrDirectCall(callType) {
         var conv = state.activeConversation;
-        if (!state.activeId || !window.CommsWebRTC) return;
-        if (!isGroupConversation(conv)) {
-            window.CommsWebRTC.startCall(state.activeId, callType, conv);
-            return;
-        }
-        // Default GCs: ring the whole group (mesh). Optional 1:1 still available from Members.
-        window.CommsWebRTC.startCall(state.activeId, callType, conv);
+        if (!state.activeId) return;
+        withWebrtc(function (api) {
+            api.startCall(state.activeId, callType, conv);
+        });
     }
 
     function setThreadOpen(open) {
@@ -1806,8 +1811,10 @@
         }).then(function (data) {
             var conversation = data.conversation;
             return openConversation(conversation.id).then(function () {
-                if (callType && window.CommsWebRTC) {
-                    window.CommsWebRTC.startCall(conversation.id, callType, conversation);
+                if (callType) {
+                    withWebrtc(function (api) {
+                        api.startCall(conversation.id, callType, conversation);
+                    });
                 }
             });
         }).catch(function (err) {
@@ -3031,12 +3038,14 @@
         els.groupModalBody.addEventListener('click', function (e) {
             // Handle call buttons (existing functionality)
             var btn = e.target.closest('.comms-group-call-btn');
-            if (btn && state.activeId && window.CommsWebRTC) {
+            if (btn && state.activeId) {
                 var uid = Number(btn.getAttribute('data-user-id') || 0);
                 var callType = btn.getAttribute('data-call-type') || 'voice';
                 if (uid) {
                     closeGroupModals();
-                    window.CommsWebRTC.startCall(state.activeId, callType, state.activeConversation, uid);
+                    withWebrtc(function (api) {
+                        api.startCall(state.activeId, callType, state.activeConversation, uid);
+                    });
                 }
                 return;
             }
@@ -3084,9 +3093,10 @@
                     dedupe: false
                 })
                 .then(function (data) {
-                    if (data && data.conversation && window.CommsWebRTC) {
-                        // Start video call
-                        window.CommsWebRTC.startCall(data.conversation.id, 'video', data.conversation);
+                    if (data && data.conversation) {
+                        withWebrtc(function (api) {
+                            api.startCall(data.conversation.id, 'video', data.conversation);
+                        });
                     }
                 })
                 .catch(function (err) {
@@ -3112,10 +3122,290 @@
     });
     document.addEventListener('click', function (e) {
         var joinBtn = e.target.closest('[data-join-group-call]');
-        if (!joinBtn || !window.CommsWebRTC || typeof window.CommsWebRTC.joinActiveGroupCall !== 'function') return;
+        if (!joinBtn) return;
         e.preventDefault();
-        window.CommsWebRTC.joinActiveGroupCall(joinBtn.getAttribute('data-join-group-call') || state.activeId);
+        var joinId = joinBtn.getAttribute('data-join-group-call') || state.activeId;
+        withWebrtc(function (api) {
+            if (typeof api.joinActiveGroupCall === 'function') {
+                api.joinActiveGroupCall(joinId);
+            }
+        });
     });
+
+    // =========================================================================
+    // TEACHERS LIST FEATURE
+    // =========================================================================
+    
+    var teachersState = {
+        teachers: [],
+        loading: false,
+        searchTimer: null
+    };
+
+    var teachersEls = {
+        conversationsTab: document.getElementById('commsConversationsTab'),
+        teachersTab: document.getElementById('commsTeachersTab'),
+        teachersList: document.getElementById('commsTeachersList'),
+        teachersSearch: document.getElementById('commsTeachersSearch'),
+        teachersSearchWrap: document.getElementById('commsTeachersSearchWrap'),
+        teachersEmpty: document.getElementById('commsTeachersEmpty')
+    };
+
+    function membersUiCacheKey(kind) {
+        return 'comms.ui.members.' + String(state.currentUserId || 0) + '.' + kind;
+    }
+
+    function readMembersUiCache(kind) {
+        try {
+            var parsed = JSON.parse(sessionStorage.getItem(membersUiCacheKey(kind)) || 'null');
+            if (parsed && Number(parsed.userId) === Number(state.currentUserId) && Array.isArray(parsed.items)) {
+                return parsed.items;
+            }
+        } catch (e) { /* ignore */ }
+        return null;
+    }
+
+    function writeMembersUiCache(kind, items) {
+        try {
+            sessionStorage.setItem(membersUiCacheKey(kind), JSON.stringify({
+                userId: Number(state.currentUserId || 0),
+                items: items,
+                ts: Date.now()
+            }));
+        } catch (e2) { /* ignore */ }
+    }
+
+    function isLivePresenceOnline(userId, portal) {
+        var map = window.__COMMS_PRESENCE_ONLINE_IDS__ || {};
+        var id = Number(userId || 0);
+        if (!id) return false;
+        var typed = String(portal || '').toLowerCase() + ':' + id;
+        if (typed && map[typed]) return true;
+        return false;
+    }
+
+    function memberActionButtonsHtml(userId) {
+        return '<div class="comms-member-actions">' +
+            '<button type="button" class="comms-member-action" data-member-act="message" data-user-id="' + Number(userId) + '">Message</button>' +
+            '<button type="button" class="comms-member-action" data-member-act="voice" data-user-id="' + Number(userId) + '">Voice Call</button>' +
+            '<button type="button" class="comms-member-action" data-member-act="video" data-user-id="' + Number(userId) + '">Video Call</button>' +
+            '</div>';
+    }
+
+    function handleMemberListAction(userId, act) {
+        if (act === 'voice' || act === 'video') {
+            return openOrCallUser(userId, act);
+        }
+        return openOrCallUser(userId, null);
+    }
+
+    function loadTeachersList(searchQuery) {
+        if (!searchQuery) {
+            var cached = readMembersUiCache('teachers');
+            if (cached && cached.length) {
+                teachersState.teachers = cached;
+                renderTeachersList();
+            }
+        }
+        if (teachersState.loading) return;
+        teachersState.loading = true;
+
+        var url = routes.teachersList || '/api/communications/users/teachers-list';
+        if (searchQuery) {
+            url += '?q=' + encodeURIComponent(searchQuery);
+        }
+
+        window.Comms.api(url, { method: 'GET', dedupe: true })
+            .then(function (data) {
+                teachersState.teachers = data.teachers || [];
+                if (!searchQuery) writeMembersUiCache('teachers', teachersState.teachers);
+                renderTeachersList();
+            })
+            .catch(function (err) {
+                console.error('Failed to load teachers:', err);
+                window.Comms.showToast('Failed to load teachers list.', 'error');
+            })
+            .finally(function () {
+                teachersState.loading = false;
+            });
+    }
+
+    function renderTeachersList() {
+        if (!teachersEls.teachersList) return;
+
+        teachersEls.teachersList.innerHTML = '';
+
+        if (teachersState.teachers.length === 0) {
+            if (teachersEls.teachersEmpty) {
+                teachersEls.teachersEmpty.hidden = false;
+            }
+            return;
+        }
+
+        if (teachersEls.teachersEmpty) {
+            teachersEls.teachersEmpty.hidden = true;
+        }
+
+        teachersState.teachers.forEach(function (teacher) {
+            var item = document.createElement('div');
+            item.className = 'comms-conv-item';
+            item.dataset.userId = teacher.id;
+            item.dataset.userType = 'teachers';
+
+            var avatarUrl = teacher.profile_image_url || '';
+            var initials = getInitialsForTeacher(teacher.name);
+            var online = isLivePresenceOnline(teacher.id, 'teachers');
+
+            var avatar = avatarUrl
+                ? '<img src="' + escapeHtmlForTeacher(avatarUrl) + '" alt="" class="comms-avatar" width="48" height="48">'
+                : '<div class="comms-avatar comms-avatar-initial" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:#0039A8;color:#fff;font-weight:700;font-size:18px;border-radius:50%;">' + escapeHtmlForTeacher(initials) + '</div>';
+
+            var position = teacher.sk_position || teacher.username || 'Teacher';
+            var barangay = teacher.barangay ? teacher.barangay.name : '';
+            var subtitle = position + (barangay ? ' • ' + barangay : '');
+
+            item.innerHTML =
+                '<div class="comms-conv-avatar-wrap">' + avatar +
+                (online ? '<span class="comms-online-dot" title="Online"></span>' : '') +
+                '</div>' +
+                '<div class="comms-conv-main">' +
+                '<div class="comms-conv-name">' + escapeHtmlForTeacher(teacher.name) + '</div>' +
+                '<div class="comms-conv-snippet" style="color:#586069;font-size:13px;">' +
+                escapeHtmlForTeacher(subtitle) +
+                '</div>' +
+                memberActionButtonsHtml(teacher.id) +
+                '</div>';
+
+            item.addEventListener('click', function (e) {
+                var actBtn = e.target.closest('[data-member-act]');
+                if (actBtn) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleMemberListAction(actBtn.getAttribute('data-user-id'), actBtn.getAttribute('data-member-act'));
+                    return;
+                }
+                openTeacherConversation(teacher);
+            });
+
+            teachersEls.teachersList.appendChild(item);
+        });
+    }
+
+    function openTeacherConversation(teacher) {
+        // Create or find private conversation with this teacher
+        var url = routes.storeConversation || '/api/communications/conversations';
+        
+        window.Comms.api(url, {
+            method: 'POST',
+            body: JSON.stringify({ user_id: teacher.id }),
+            dedupe: false
+        })
+        .then(function (data) {
+            if (data && data.conversation) {
+                // Switch to conversations tab
+                switchToConversationsTabFromTeachers();
+                // Load and display the conversation
+                loadConversation(data.conversation.id);
+            }
+        })
+        .catch(function (err) {
+            console.error('Failed to create conversation:', err);
+            window.Comms.showToast('Failed to start conversation with teacher.', 'error');
+        });
+    }
+
+    function getInitialsForTeacher(name) {
+        if (!name) return '?';
+        var parts = name.trim().split(/\s+/);
+        if (parts.length === 1) {
+            return parts[0].charAt(0).toUpperCase();
+        }
+        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+
+    function escapeHtmlForTeacher(str) {
+        if (!str) return '';
+        var div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+
+    function switchToConversationsTabFromTeachers() {
+        if (!teachersEls.conversationsTab || !teachersEls.teachersTab) return;
+
+        // Update tab styles
+        teachersEls.conversationsTab.classList.add('comms-tab-active');
+        teachersEls.conversationsTab.style.borderBottomColor = '#0039A8';
+        teachersEls.conversationsTab.style.color = '#0039A8';
+
+        teachersEls.teachersTab.classList.remove('comms-tab-active');
+        teachersEls.teachersTab.style.borderBottomColor = 'transparent';
+        teachersEls.teachersTab.style.color = '#586069';
+
+        // Show conversations list, hide teachers list
+        if (els.convList) els.convList.style.display = '';
+        if (teachersEls.teachersList) teachersEls.teachersList.style.display = 'none';
+        if (teachersEls.teachersSearchWrap) teachersEls.teachersSearchWrap.style.display = 'none';
+        if (els.userSearch && els.userSearch.parentElement) {
+            els.userSearch.parentElement.style.display = '';
+        }
+        if (teachersEls.teachersEmpty) teachersEls.teachersEmpty.hidden = true;
+
+        state.listMode = 'conversations';
+    }
+
+    function switchToTeachersTab() {
+        if (!teachersEls.conversationsTab || !teachersEls.teachersTab) return;
+
+        // Update tab styles
+        teachersEls.teachersTab.classList.add('comms-tab-active');
+        teachersEls.teachersTab.style.borderBottomColor = '#0039A8';
+        teachersEls.teachersTab.style.color = '#0039A8';
+
+        teachersEls.conversationsTab.classList.remove('comms-tab-active');
+        teachersEls.conversationsTab.style.borderBottomColor = 'transparent';
+        teachersEls.conversationsTab.style.color = '#586069';
+
+        // Hide conversations list, show teachers list
+        if (els.convList) els.convList.style.display = 'none';
+        if (teachersEls.teachersList) teachersEls.teachersList.style.display = '';
+        if (teachersEls.teachersSearchWrap) teachersEls.teachersSearchWrap.style.display = '';
+        if (els.userSearch && els.userSearch.parentElement) {
+            els.userSearch.parentElement.style.display = 'none';
+        }
+
+        state.listMode = 'teachers';
+
+        // Load teachers list if not already loaded
+        if (teachersState.teachers.length === 0) {
+            loadTeachersList();
+        }
+    }
+
+    // Event listeners for tabs
+    if (teachersEls.conversationsTab) {
+        teachersEls.conversationsTab.addEventListener('click', switchToConversationsTabFromTeachers);
+    }
+
+    if (teachersEls.teachersTab) {
+        teachersEls.teachersTab.addEventListener('click', switchToTeachersTab);
+    }
+
+    // Event listener for teachers search
+    if (teachersEls.teachersSearch) {
+        teachersEls.teachersSearch.addEventListener('input', function (e) {
+            var query = e.target.value.trim();
+            
+            clearTimeout(teachersState.searchTimer);
+            teachersState.searchTimer = setTimeout(function () {
+                loadTeachersList(query);
+            }, 300);
+        });
+    }
+
+    // =========================================================================
+    // END OF TEACHERS LIST FEATURE
+    // =========================================================================
 
     window.CommsChat = {
         appendMessage: appendMessage,
@@ -3196,276 +3486,4 @@
         if (initial) openConversation(initial);
     });
 })();
-
-
-    // =========================================================================
-    // STUDENTS LIST FEATURE (Teachers Portal)
-    // =========================================================================
-
-    var studentsState = {
-        students: [],
-        searchTimer: null,
-        loading: false
-    };
-
-    var studentsEls = {
-        conversationsTab: document.getElementById('commsConversationsTab'),
-        studentsTab: document.getElementById('commsStudentsTab'),
-        studentsList: document.getElementById('commsStudentsList'),
-        studentsSearch: document.getElementById('commsStudentsSearch'),
-        studentsSearchWrap: document.getElementById('commsStudentsSearchWrap'),
-        studentsEmpty: document.getElementById('commsStudentsEmpty')
-    };
-
-    function membersUiCacheKey(kind) {
-        return 'comms.ui.members.' + String(state.currentUserId || 0) + '.' + kind;
-    }
-
-    function readMembersUiCache(kind) {
-        try {
-            var parsed = JSON.parse(sessionStorage.getItem(membersUiCacheKey(kind)) || 'null');
-            if (parsed && Number(parsed.userId) === Number(state.currentUserId) && Array.isArray(parsed.items)) {
-                return parsed.items;
-            }
-        } catch (e) { /* ignore */ }
-        return null;
-    }
-
-    function writeMembersUiCache(kind, items) {
-        try {
-            sessionStorage.setItem(membersUiCacheKey(kind), JSON.stringify({
-                userId: Number(state.currentUserId || 0),
-                items: items,
-                ts: Date.now()
-            }));
-        } catch (e2) { /* ignore */ }
-    }
-
-    function isLivePresenceOnline(userId, portal) {
-        var map = window.__COMMS_PRESENCE_ONLINE_IDS__ || {};
-        var id = Number(userId || 0);
-        if (!id) return false;
-        var typed = String(portal || '').toLowerCase() + ':' + id;
-        if (typed && map[typed]) return true;
-        return false;
-    }
-
-    function memberActionButtonsHtml(userId) {
-        return '<div class="comms-member-actions">' +
-            '<button type="button" class="comms-member-action" data-member-act="message" data-user-id="' + Number(userId) + '">Message</button>' +
-            '<button type="button" class="comms-member-action" data-member-act="voice" data-user-id="' + Number(userId) + '">Voice Call</button>' +
-            '<button type="button" class="comms-member-action" data-member-act="video" data-user-id="' + Number(userId) + '">Video Call</button>' +
-            '</div>';
-    }
-
-    function handleMemberListAction(userId, act) {
-        if (act === 'voice' || act === 'video') {
-            return openOrCallUser(userId, act);
-        }
-        return openOrCallUser(userId, null);
-    }
-
-    function loadStudentsList(searchQuery) {
-        if (!searchQuery) {
-            var cached = readMembersUiCache('students');
-            if (cached && cached.length) {
-                studentsState.students = cached;
-                renderStudentsList();
-            }
-        }
-        if (studentsState.loading) return;
-        studentsState.loading = true;
-
-        var url = routes.studentsList || '/api/communications/users/students-list';
-        if (searchQuery) {
-            url += '?q=' + encodeURIComponent(searchQuery);
-        }
-
-        window.Comms.api(url, { method: 'GET', dedupe: true })
-            .then(function (data) {
-                studentsState.students = data.students || [];
-                if (!searchQuery) writeMembersUiCache('students', studentsState.students);
-                renderStudentsList();
-            })
-            .catch(function (err) {
-                console.error('Failed to load students:', err);
-                window.Comms.showToast('Failed to load students list.', 'error');
-            })
-            .finally(function () {
-                studentsState.loading = false;
-            });
-    }
-
-    function renderStudentsList() {
-        if (!studentsEls.studentsList) return;
-
-        studentsEls.studentsList.innerHTML = '';
-
-        if (studentsState.students.length === 0) {
-            if (studentsEls.studentsEmpty) {
-                studentsEls.studentsEmpty.hidden = false;
-            }
-            return;
-        }
-
-        if (studentsEls.studentsEmpty) {
-            studentsEls.studentsEmpty.hidden = true;
-        }
-
-        studentsState.students.forEach(function (student) {
-            var item = document.createElement('div');
-            item.className = 'comms-conv-item';
-            item.dataset.userId = student.id;
-            item.dataset.userType = 'students';
-
-            var avatarUrl = student.profile_image_url || '';
-            var initials = getInitials(student.name);
-            var online = isLivePresenceOnline(student.id, 'students');
-
-            var avatar = avatarUrl
-                ? '<img src="' + escapeHtml(avatarUrl) + '" alt="" class="comms-avatar" width="48" height="48">'
-                : '<div class="comms-avatar comms-avatar-initial" style="width:48px;height:48px;display:flex;align-items:center;justify-content:center;background:#0039A8;color:#fff;font-weight:700;font-size:18px;border-radius:50%;">' + escapeHtml(initials) + '</div>';
-
-            item.innerHTML =
-                '<div class="comms-conv-avatar-wrap">' + avatar +
-                (online ? '<span class="comms-online-dot" title="Online"></span>' : '') +
-                '</div>' +
-                '<div class="comms-conv-main">' +
-                '<div class="comms-conv-name">' + escapeHtml(student.name) + '</div>' +
-                '<div class="comms-conv-snippet" style="color:#586069;font-size:13px;">' +
-                escapeHtml(student.student_id || 'Student') +
-                '</div>' +
-                memberActionButtonsHtml(student.id) +
-                '</div>';
-
-            item.addEventListener('click', function (e) {
-                var actBtn = e.target.closest('[data-member-act]');
-                if (actBtn) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleMemberListAction(actBtn.getAttribute('data-user-id'), actBtn.getAttribute('data-member-act'));
-                    return;
-                }
-                openStudentConversation(student);
-            });
-
-            studentsEls.studentsList.appendChild(item);
-        });
-    }
-
-    function openStudentConversation(student) {
-        // Create or find private conversation with this student
-        var url = routes.storeConversation || '/api/communications/conversations';
-        
-        window.Comms.api(url, {
-            method: 'POST',
-            body: JSON.stringify({ user_id: student.id }),
-            dedupe: false
-        })
-        .then(function (data) {
-            if (data && data.conversation) {
-                // Switch to conversations tab
-                switchToConversationsTab();
-                // Load and display the conversation
-                loadConversation(data.conversation.id);
-            }
-        })
-        .catch(function (err) {
-            console.error('Failed to create conversation:', err);
-            window.Comms.showToast('Failed to start conversation with student.', 'error');
-        });
-    }
-
-    function getInitials(name) {
-        if (!name) return '?';
-        var parts = name.trim().split(/\s+/);
-        if (parts.length === 1) {
-            return parts[0].charAt(0).toUpperCase();
-        }
-        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-    }
-
-    function escapeHtml(str) {
-        if (!str) return '';
-        var div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
-    }
-
-    function switchToConversationsTab() {
-        if (!studentsEls.conversationsTab || !studentsEls.studentsTab) return;
-
-        // Update tab styles
-        studentsEls.conversationsTab.classList.add('comms-tab-active');
-        studentsEls.conversationsTab.style.borderBottomColor = '#0039A8';
-        studentsEls.conversationsTab.style.color = '#0039A8';
-
-        studentsEls.studentsTab.classList.remove('comms-tab-active');
-        studentsEls.studentsTab.style.borderBottomColor = 'transparent';
-        studentsEls.studentsTab.style.color = '#586069';
-
-        // Show conversations list, hide students list
-        if (els.convList) els.convList.style.display = '';
-        if (studentsEls.studentsList) studentsEls.studentsList.style.display = 'none';
-        if (studentsEls.studentsSearchWrap) studentsEls.studentsSearchWrap.style.display = 'none';
-        if (els.userSearch && els.userSearch.parentElement) {
-            els.userSearch.parentElement.style.display = '';
-        }
-        if (studentsEls.studentsEmpty) studentsEls.studentsEmpty.hidden = true;
-
-        state.listMode = 'conversations';
-    }
-
-    function switchToStudentsTab() {
-        if (!studentsEls.conversationsTab || !studentsEls.studentsTab) return;
-
-        // Update tab styles
-        studentsEls.studentsTab.classList.add('comms-tab-active');
-        studentsEls.studentsTab.style.borderBottomColor = '#0039A8';
-        studentsEls.studentsTab.style.color = '#0039A8';
-
-        studentsEls.conversationsTab.classList.remove('comms-tab-active');
-        studentsEls.conversationsTab.style.borderBottomColor = 'transparent';
-        studentsEls.conversationsTab.style.color = '#586069';
-
-        // Hide conversations list, show students list
-        if (els.convList) els.convList.style.display = 'none';
-        if (studentsEls.studentsList) studentsEls.studentsList.style.display = '';
-        if (studentsEls.studentsSearchWrap) studentsEls.studentsSearchWrap.style.display = '';
-        if (els.userSearch && els.userSearch.parentElement) {
-            els.userSearch.parentElement.style.display = 'none';
-        }
-
-        state.listMode = 'students';
-
-        // Load students list if not already loaded
-        if (studentsState.students.length === 0) {
-            loadStudentsList();
-        }
-    }
-
-    // Event listeners for tabs
-    if (studentsEls.conversationsTab) {
-        studentsEls.conversationsTab.addEventListener('click', switchToConversationsTab);
-    }
-
-    if (studentsEls.studentsTab) {
-        studentsEls.studentsTab.addEventListener('click', switchToStudentsTab);
-    }
-
-    // Event listener for students search
-    if (studentsEls.studentsSearch) {
-        studentsEls.studentsSearch.addEventListener('input', function (e) {
-            var query = e.target.value.trim();
-            
-            clearTimeout(studentsState.searchTimer);
-            studentsState.searchTimer = setTimeout(function () {
-                loadStudentsList(query);
-            }, 300);
-        });
-    }
-
-    // =========================================================================
-    // END OF STUDENTS LIST FEATURE
-    // =========================================================================
 

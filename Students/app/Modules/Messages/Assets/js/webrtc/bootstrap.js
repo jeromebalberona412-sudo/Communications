@@ -47,4 +47,3 @@ export function bootCommunicationsWebrtc() {
     return window.CommsWebRTC;
 }
 
-bootCommunicationsWebrtc();

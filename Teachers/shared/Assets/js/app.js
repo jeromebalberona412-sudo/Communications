@@ -1,5 +1,4 @@
 import './bootstrap';
-import '../../../app/Modules/Authentication/Assets/js/password-toggle.js';
 import './sidebar';
 import './forms';
 

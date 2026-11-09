@@ -1,11 +1,19 @@
 /**
  * Messenger UI: conversation list, thread, send/read, user search.
  */
+import { loadWebrtc } from '../webrtc/load.js';
+
 (function () {
     'use strict';
 
     var root = document.getElementById('commsApp');
     if (!root || !window.Comms) return;
+
+    function withWebrtc(run) {
+        loadWebrtc().then(function (api) {
+            if (api) run(api);
+        });
+    }
 
     var routes = {};
     try { routes = JSON.parse(root.dataset.routes || '{}'); } catch (e) { routes = {}; }
@@ -351,13 +359,10 @@
 
     function beginGroupOrDirectCall(callType) {
         var conv = state.activeConversation;
-        if (!state.activeId || !window.CommsWebRTC) return;
-        if (!isGroupConversation(conv)) {
-            window.CommsWebRTC.startCall(state.activeId, callType, conv);
-            return;
-        }
-        // Default GCs: ring the whole group (mesh). Optional 1:1 still available from Members.
-        window.CommsWebRTC.startCall(state.activeId, callType, conv);
+        if (!state.activeId) return;
+        withWebrtc(function (api) {
+            api.startCall(state.activeId, callType, conv);
+        });
     }
 
     function setThreadOpen(open) {
@@ -1806,8 +1811,10 @@
         }).then(function (data) {
             var conversation = data.conversation;
             return openConversation(conversation.id).then(function () {
-                if (callType && window.CommsWebRTC) {
-                    window.CommsWebRTC.startCall(conversation.id, callType, conversation);
+                if (callType) {
+                    withWebrtc(function (api) {
+                        api.startCall(conversation.id, callType, conversation);
+                    });
                 }
             });
         }).catch(function (err) {
@@ -3031,12 +3038,14 @@
         els.groupModalBody.addEventListener('click', function (e) {
             // Handle call buttons (existing functionality)
             var btn = e.target.closest('.comms-group-call-btn');
-            if (btn && state.activeId && window.CommsWebRTC) {
+            if (btn && state.activeId) {
                 var uid = Number(btn.getAttribute('data-user-id') || 0);
                 var callType = btn.getAttribute('data-call-type') || 'voice';
                 if (uid) {
                     closeGroupModals();
-                    window.CommsWebRTC.startCall(state.activeId, callType, state.activeConversation, uid);
+                    withWebrtc(function (api) {
+                        api.startCall(state.activeId, callType, state.activeConversation, uid);
+                    });
                 }
                 return;
             }
@@ -3084,9 +3093,10 @@
                     dedupe: false
                 })
                 .then(function (data) {
-                    if (data && data.conversation && window.CommsWebRTC) {
-                        // Start video call
-                        window.CommsWebRTC.startCall(data.conversation.id, 'video', data.conversation);
+                    if (data && data.conversation) {
+                        withWebrtc(function (api) {
+                            api.startCall(data.conversation.id, 'video', data.conversation);
+                        });
                     }
                 })
                 .catch(function (err) {
@@ -3112,9 +3122,14 @@
     });
     document.addEventListener('click', function (e) {
         var joinBtn = e.target.closest('[data-join-group-call]');
-        if (!joinBtn || !window.CommsWebRTC || typeof window.CommsWebRTC.joinActiveGroupCall !== 'function') return;
+        if (!joinBtn) return;
         e.preventDefault();
-        window.CommsWebRTC.joinActiveGroupCall(joinBtn.getAttribute('data-join-group-call') || state.activeId);
+        var joinId = joinBtn.getAttribute('data-join-group-call') || state.activeId;
+        withWebrtc(function (api) {
+            if (typeof api.joinActiveGroupCall === 'function') {
+                api.joinActiveGroupCall(joinId);
+            }
+        });
     });
 
     // =========================================================================

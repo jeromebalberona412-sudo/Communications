@@ -12,6 +12,7 @@
  * to protect data from unauthorized access.
  */
 import { createClient } from '@supabase/supabase-js';
+import { loadWebrtc } from '../webrtc/load.js';
 
 (function () {
     'use strict';
@@ -278,10 +279,12 @@ import { createClient } from '@supabase/supabase-js';
         if (String(row.message_type || '') === 'call'
             && !message.mine
             && /ringing|started|incoming/i.test(String(row.body || ''))
-            && !/ended|declined|missed|cancelled|canceled|answered/i.test(String(row.body || ''))
-            && window.CommsWebRTC
-            && typeof window.CommsWebRTC.syncIncomingFromServer === 'function') {
-            window.CommsWebRTC.syncIncomingFromServer(row.conversation_id);
+            && !/ended|declined|missed|cancelled|canceled|answered/i.test(String(row.body || ''))) {
+            loadWebrtc().then(function (api) {
+                if (api && typeof api.syncIncomingFromServer === 'function') {
+                    api.syncIncomingFromServer(row.conversation_id);
+                }
+            });
         }
         var conversationId = row.conversation_id || message.conversation_id;
         var viewing = isConversationOpen(conversationId) && document.visibilityState !== 'hidden';
@@ -494,6 +497,9 @@ import { createClient } from '@supabase/supabase-js';
         }
         pendingSignals.push(payload);
         if (pendingSignals.length > 40) pendingSignals = pendingSignals.slice(-40);
+        loadWebrtc().then(function () {
+            flushPendingSignals();
+        });
     }
 
     /**
@@ -1108,9 +1114,11 @@ import { createClient } from '@supabase/supabase-js';
                 schema: 'public',
                 table: 'calls'
             }, function (payload) {
-                if (window.CommsWebRTC && typeof window.CommsWebRTC.handleCallRow === 'function') {
-                    window.CommsWebRTC.handleCallRow(payload);
-                }
+                loadWebrtc().then(function (api) {
+                    if (api && typeof api.handleCallRow === 'function') {
+                        api.handleCallRow(payload);
+                    }
+                });
             })
             .subscribe();
     }
@@ -1164,9 +1172,11 @@ import { createClient } from '@supabase/supabase-js';
         if (window.CommsChat && typeof window.CommsChat.reloadActiveMessages === 'function') {
             window.CommsChat.reloadActiveMessages();
         }
-        if (window.CommsWebRTC && typeof window.CommsWebRTC.syncIncomingFromServer === 'function') {
-            window.CommsWebRTC.syncIncomingFromServer(null);
-        }
+        loadWebrtc().then(function (api) {
+            if (api && typeof api.syncIncomingFromServer === 'function') {
+                api.syncIncomingFromServer(null);
+            }
+        });
     });
 
     if (enabled) {
