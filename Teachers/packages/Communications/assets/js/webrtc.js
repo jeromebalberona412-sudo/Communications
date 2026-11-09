@@ -2913,13 +2913,14 @@ import {
         var callSnapshot = currentCall;
         if (callSnapshot.id != null) markCallTerminal(callSnapshot.id);
         rememberCallContext(callSnapshot);
+        
+        // CRITICAL FIX: Stop all media/UI immediately
         stopRingtone();
+        stopVibration();
+        stopCallTimer();
         hideIncoming();
         
-        // FIX BUG #1: Send hangup signal BEFORE nulling currentCall
-        // and WAIT for it to ensure the other participant receives it
-        // VERIFIED: hangup signal sent with await before nulling currentCall (line 2465).
-        // This ensures the other participant receives disconnect notification.
+        // Send hangup signal BEFORE nulling currentCall
         try {
             await signalPeer({
                 type: 'call-end',
@@ -2936,12 +2937,26 @@ import {
             console.error('Failed to send hangup signal:', err);
         }
         
-        // Now safe to clean up local state
+        // Clean up local state immediately
         currentCall = null;
+        role = null;
         await cleanupMediaOnly();
-        // The server owns the end timestamp and the duration.
-        var serverCall = await withTimeout(updateCallStatus(callSnapshot.id, 'ended'), 4000);
-        showCallEnded('ended', peerName, callSnapshot.id, role, serverCall);
+        
+        // CRITICAL FIX: Show "Call Ended" UI immediately, update server status in background
+        showCallEnded('ended', peerName, callSnapshot.id, role, null);
+        
+        // Update server status in background (don't block UI)
+        withTimeout(updateCallStatus(callSnapshot.id, 'ended'), 4000).then(function(serverCall) {
+            if (serverCall && serverCall.duration_seconds != null) {
+                var endedEl = document.querySelector('[data-call-ended-id="' + callSnapshot.id + '"]');
+                if (endedEl && serverCall.duration_seconds > 0) {
+                    var durationText = formatCallDuration(serverCall.duration_seconds);
+                    var durationDisplay = endedEl.querySelector('.call-duration');
+                    if (durationDisplay) durationDisplay.textContent = durationText;
+                }
+            }
+        }).catch(function() { /* ignore */ });
+        
         refreshCallChat(callSnapshot.conversation_id);
     }
 
@@ -3160,22 +3175,34 @@ import {
             var hangupId = (currentCall && currentCall.id) || payload.call_id;
             var hangupConv = (currentCall && currentCall.conversation_id) || payload.conversation_id;
             
-            // FIX BUG #1 & #3: Mark call as terminal and cleanup immediately
-            // VERIFIED: hangup handler marks terminal, stops timer, and cleans up 
-            // immediately upon receiving hangup signal (lines 2594-2602).
+            // CRITICAL FIX: Mark call as terminal and cleanup IMMEDIATELY
             if (hangupId != null) markCallTerminal(hangupId);
-            
-            // FIX BUG #2: Stop the timer immediately when call ends
             stopCallTimer();
+            stopRingtone();
+            stopVibration();
+            hideIncoming();
             
             currentCall = null;
             role = null;
             await cleanupMediaOnly();
             
-            // The peer already ended the call server-side: read the
-            // authoritative timestamps and duration from the server.
-            var serverState = await withTimeout(fetchCallState(hangupId), 4000);
-            showCallEnded(reason, peerName, hangupId, payload.ended_by_role, serverState);
+            // CRITICAL FIX: Show "Call Ended" UI IMMEDIATELY, fetch server state in background
+            // Don't await server fetch - it can take up to 4 seconds
+            showCallEnded(reason, peerName, hangupId, payload.ended_by_role, null);
+            
+            // Fetch authoritative timestamps in background and update UI if different
+            withTimeout(fetchCallState(hangupId), 4000).then(function(serverState) {
+                if (serverState && serverState.duration_seconds != null) {
+                    // Update duration display if server has more accurate data
+                    var endedEl = document.querySelector('[data-call-ended-id="' + hangupId + '"]');
+                    if (endedEl && serverState.duration_seconds > 0) {
+                        var durationText = formatCallDuration(serverState.duration_seconds);
+                        var durationDisplay = endedEl.querySelector('.call-duration');
+                        if (durationDisplay) durationDisplay.textContent = durationText;
+                    }
+                }
+            }).catch(function() { /* ignore server fetch errors */ });
+            
             refreshCallChat(hangupConv);
             return;
         }

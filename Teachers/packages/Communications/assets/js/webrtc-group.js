@@ -610,7 +610,18 @@ import {
         var callId = meshCall.id;
         var convId = meshCall.conversation_id;
         var isCaller = meshRole === 'caller';
-        await signal({ type: 'group-leave', reason: reason || 'ended' });
+        
+        // CRITICAL FIX: Differentiate between individual leave vs ending entire call
+        var isEndingEntireCall = isCaller && (reason === 'ended' || reason === 'cancelled' || reason === 'missed');
+        
+        if (isEndingEntireCall) {
+            // Host is ending the entire group call - notify everyone
+            await signal({ type: 'group-end', reason: reason || 'ended' });
+        } else {
+            // Individual participant leaving - others can continue
+            await signal({ type: 'group-leave', reason: reason || 'ended' });
+        }
+        
         if (isCaller) {
             var nextStatus = reason === 'cancelled' ? 'cancelled' : 'ended';
             if (reason === 'missed' && !meshConnected) nextStatus = 'missed';
@@ -703,16 +714,24 @@ import {
         if (payload.type === 'group-leave' || payload.type === 'hangup') {
             if (!meshCall || Number(payload.call_id) !== Number(meshCall.id)) return true;
             var key = peerKey(payload.from_user_id, payload.from_user_type);
+            
+            // CRITICAL FIX: Only remove that participant's connection
             if (meshPeers[key]) {
                 try { meshPeers[key].pc.close(); } catch (e) { /* ignore */ }
                 delete meshPeers[key];
                 removeTile(key);
             }
-            // If caller left, end room for everyone.
-            if (Number(payload.from_user_id) === Number(meshCall.caller_id)
-                && String(payload.from_user_type) === String(meshCall.caller_type)) {
-                await leaveGroupCall('ended');
-            }
+            
+            // Don't end the entire call just because one person left
+            // The call continues for remaining participants
+            return true;
+        }
+
+        // CRITICAL FIX: Handle group-end signal (host ending entire call)
+        if (payload.type === 'group-end') {
+            if (!meshCall || Number(payload.call_id) !== Number(meshCall.id)) return true;
+            // Host is ending the entire group call - everyone must disconnect
+            await leaveGroupCall('ended');
             return true;
         }
 
