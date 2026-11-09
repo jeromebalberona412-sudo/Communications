@@ -1,0 +1,578 @@
+﻿/* Message composer and send button */
+
+.comms-composer textarea {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    resize: none;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    border: 0;
+    border-radius: 22px;
+    padding: 0.55rem 1rem;
+    min-height: calc(1.45em * 1 + 1.1rem);
+    max-height: calc(1.45em * 4 + 1.1rem);
+    height: calc(1.45em * 1 + 1.1rem);
+    font: inherit;
+    font-size: 1rem;
+    line-height: 1.45;
+    background: #f0f2f5;
+    field-sizing: fixed;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    box-sizing: border-box;
+}
+
+.comms-composer textarea.is-line-limit {
+    border: 1px solid #f5c2c7;
+    background: #fff5f5;
+}
+
+.comms-composer textarea:focus {
+    outline: 2px solid rgba(44, 44, 62, 0.28);
+    outline-offset: 1px;
+    background: #fff;
+}
+
+.comms-composer textarea.is-line-limit:focus {
+    outline-color: rgba(180, 35, 24, 0.35);
+    background: #fff5f5;
+}
+
+.comms-bubble.has-attachment {
+    gap: 0.4rem;
+}
+
+.comms-bubble.has-attachment-only {
+    background: transparent !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.comms-bubble-cluster {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.comms-bubble-wrap.is-mine .comms-bubble-cluster {
+    align-items: flex-end;
+}
+
+.comms-bubble-wrap.is-theirs .comms-bubble-cluster {
+    align-items: flex-start;
+}
+
+.comms-edited {
+    display: inline;
+    margin-left: 0.35rem;
+    font-size: 0.68rem;
+    opacity: 0.72;
+    font-style: italic;
+    font-weight: 500;
+}
+
+.comms-edit-panel {
+    width: min(100%, 420px);
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    padding: 0.7rem 0.75rem;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.1);
+    color: #0f172a;
+}
+
+.comms-edit-input {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 72px;
+    max-height: 160px;
+    height: auto;
+    border: 1px solid #94a3b8;
+    border-radius: 8px;
+    padding: 0.55rem 0.65rem;
+    font: inherit;
+    line-height: 1.35;
+    resize: vertical;
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-sizing: border-box;
+    background: #ffffff !important;
+    color: #0f172a !important;
+    caret-color: #0f172a;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    field-sizing: fixed;
+}
+
+.comms-edit-input:focus {
+    outline: 2px solid rgba(44, 44, 62, 0.28);
+    outline-offset: 1px;
+    border-color: #0039A8;
+}
+
+.comms-edit-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.45rem;
+}
+
+.comms-edit-save,
+.comms-edit-cancel {
+    border: 0;
+    border-radius: 8px;
+    padding: 0.4rem 0.85rem;
+    font-size: 0.8rem;
+    font-weight: 650;
+    cursor: pointer;
+}
+
+.comms-edit-cancel {
+    background: #e2e8f0;
+    color: #334155;
+}
+
+.comms-edit-cancel:hover,
+.comms-edit-cancel:focus-visible {
+    background: #cbd5e1;
+    outline: none;
+}
+
+.comms-edit-save {
+    background: #0039A8;
+    color: #fff;
+}
+
+.comms-edit-save:hover,
+.comms-edit-save:focus-visible {
+    background: #002d85;
+    outline: none;
+}
+
+.comms-edit-save.is-loading {
+    opacity: 0.9;
+    pointer-events: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.comms-edit-panel.is-saving {
+    opacity: 0.92;
+}
+
+.comms-edit-save-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.35);
+    border-top-color: #fff;
+    border-radius: 50%;
+    display: inline-block;
+    animation: commsEditSpin 0.65s linear infinite;
+}
+
+@keyframes commsEditSpin {
+    to { transform: rotate(360deg); }
+}
+
+.comms-send-btn[hidden] {
+    display: none !important;
+}
+
+.comms-send-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.comms-send-btn.is-sending {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.comms-send-btn.is-ready:not(:disabled) {
+    background: var(--comms-accent);
+}
+
+button.comms-bubble-image {
+    display: block;
+    margin-bottom: 0.25rem;
+    border-radius: 10px;
+    overflow: hidden;
+    max-width: min(280px, 72vw);
+    padding: 0;
+    border: 1px solid #e5e7eb;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+    cursor: pointer;
+    position: relative;
+}
+
+.comms-bubble-image {
+    display: block;
+    margin-bottom: 0.25rem;
+    border-radius: 10px;
+    overflow: hidden;
+    max-width: min(280px, 72vw);
+}
+
+.comms-bubble-image:focus-visible {
+    outline: 2px solid #0039A8;
+    outline-offset: 2px;
+}
+
+.comms-bubble-image img {
+    display: block;
+    width: 100%;
+    max-height: 280px;
+    object-fit: cover;
+}
+
+.comms-bubble-file {
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    margin-bottom: 0.25rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: 12px;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    color: #111827;
+    text-decoration: none;
+    max-width: min(280px, 72vw);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.comms-bubble-file.is-pdf,
+.comms-bubble-file.is-word {
+    background: #ffffff;
+    color: #111827;
+}
+
+.comms-bubble--mine .comms-bubble-file,
+.comms-bubble--theirs .comms-bubble-file,
+.comms-bubble.has-attachment-only .comms-bubble-file {
+    background: #ffffff !important;
+    border: 1px solid #d1d5db !important;
+    color: #111827 !important;
+}
+
+.comms-bubble--mine .comms-bubble-file.is-pdf,
+.comms-bubble--mine .comms-bubble-file.is-word {
+    background: #ffffff !important;
+    color: #111827 !important;
+}
+
+.comms-bubble-file:hover,
+.comms-bubble-file:focus-visible {
+    outline: 2px solid rgba(44, 44, 62, 0.28);
+    outline-offset: 1px;
+    text-decoration: none;
+}
+
+.comms-bubble-file-ext {
+    flex: 0 0 auto;
+    min-width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background: #eef2ff;
+    color: #4338ca;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.65rem;
+    font-weight: 700;
+}
+
+.comms-bubble-file.is-pdf .comms-bubble-file-ext {
+    background: #fef2f2;
+    color: #b91c1c;
+}
+
+.comms-bubble-file.is-word .comms-bubble-file-ext {
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.comms-bubble-file-meta {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+}
+
+.comms-bubble-file-name {
+    font-size: 0.85rem;
+    font-weight: 650;
+    color: #111827;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.comms-bubble-file-size {
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: #4b5563;
+    opacity: 1;
+}
+
+.comms-bubble-file-action {
+    display: inline-block;
+    margin-top: 0.15rem;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #1d4ed8;
+    text-decoration: underline;
+}
+
+.comms-composer-end {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-end;
+    padding-bottom: 2px;
+}
+
+.comms-send-btn {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    padding: 0;
+    background: var(--comms-accent);
+    color: #fff;
+    border: 0;
+    border-radius: 999px;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.comms-send-btn[hidden] {
+    display: none !important;
+}
+
+.comms-send-btn:hover,
+.comms-send-btn:focus-visible {
+    background: #094a8a;
+    border: 0;
+    color: #fff;
+    outline: none;
+}
+
+.comms-send-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.comms-send-btn-icon {
+    display: block;
+}
+
+.comms-attach-preview-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: 120px;
+}
+
+.comms-attach-preview-item img {
+    width: 56px;
+    height: 56px;
+    object-fit: cover;
+    border-radius: 8px;
+    display: block;
+}
+
+.comms-bubble--call {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: nowrap;
+    gap: 6px;
+    align-self: center;
+    width: max-content;
+    max-width: 100%;
+    background: #e8eef5;
+    color: var(--comms-muted);
+    border: 1px solid var(--comms-border);
+    border-radius: 999px;
+    padding: 0.45rem 0.9rem;
+    font-size: 0.82rem;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.comms-call-icon {
+    flex-shrink: 0;
+}
+
+.comms-call-text {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.comms-bubble--call-ended,
+.comms-bubble--call-missed {
+    color: #b42318;
+    background: #fef3f2;
+    border-color: #fecdca;
+    font-weight: 600;
+}
+
+.comms-bubble--call-declined {
+    color: #912018;
+    background: #fee4e2;
+    border-color: #fda29b;
+    font-weight: 600;
+}
+
+.comms-bubble--call-cancelled {
+    color: #475467;
+    background: #f2f4f7;
+    border-color: #d0d5dd;
+    font-weight: 600;
+}
+
+.comms-bubble--call-ringing {
+    color: #b54708;
+    background: #fffaeb;
+    border-color: #fec84b;
+    font-weight: 600;
+}
+
+.comms-bubble--call-answered,
+.comms-bubble--call-started {
+    color: #067647;
+    background: #ecfdf3;
+    border-color: #abefc6;
+    font-weight: 600;
+}
+
+.comms-bubble-row--call {
+    justify-content: center;
+    width: 100%;
+}
+
+.comms-bubble-wrap.is-call {
+    align-self: center;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+}
+
+.comms-bubble--call .comms-bubble-time {
+    display: inline;
+    flex-shrink: 0;
+    margin-left: 0.45rem;
+    margin-top: 0;
+    opacity: 0.75;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.comms-modal[hidden],
+.comms-call-overlay[hidden] {
+    display: none !important;
+}
+
+.comms-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 10080;
+    background: rgba(18, 38, 58, 0.55);
+    display: grid;
+    place-items: center;
+    padding: max(1rem, env(safe-area-inset-top, 0px)) 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+}
+
+.comms-modal-card {
+    width: min(100%, 380px);
+    background: #fff;
+    border-radius: 12px;
+    padding: 1.25rem;
+    text-align: center;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+}
+
+.comms-modal-card--call {
+    position: relative;
+    overflow: hidden;
+    width: min(100%, 400px);
+}
+
+.comms-modal-card--call .comms-modal-actions {
+    display: flex;
+    justify-content: center;
+    align-items: stretch;
+    gap: 0.85rem;
+    width: 100%;
+    margin-top: 1.35rem;
+    flex-wrap: nowrap;
+}
+
+.comms-modal-card--call .comms-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 168px;
+    min-height: 48px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+.comms-ringtone-hint {
+    margin: 0.5rem 0 0;
+    font-size: 0.85rem;
+    color: #b45309;
+}
+.comms-tap-to-play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    z-index: 6;
+    transform: translate(-50%, -50%);
+    min-height: 48px;
+    padding: 0.65rem 1.1rem;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+.comms-modal-peer {
+    margin: 0.35rem 0 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--comms-text);
+    word-break: break-word;
+}
+
+.comms-modal-position,
+.comms-modal-barangay {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.75);
+    margin: 0.25rem 0 0;
+}
+
+.comms-modal-type,
+.comms-modal-hint {
+    margin: 0.25rem 0 0;
+    color: var(--comms-muted);
+}
+

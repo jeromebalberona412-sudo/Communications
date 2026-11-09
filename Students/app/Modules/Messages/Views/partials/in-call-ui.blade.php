@@ -1,17 +1,21 @@
 <div class="comms-call-overlay" id="commsInCall" hidden>
     <div class="comms-call-stage">
         <div class="comms-remote-grid" id="commsRemoteGrid" hidden></div>
-        <video id="commsRemoteVideo" class="comms-remote-video" autoplay playsinline></video>
-        <div class="comms-video-off comms-video-off--remote" id="commsRemoteVideoOff" hidden aria-hidden="true">
-            <span class="comms-video-off-avatar" id="commsRemoteVideoOffAvatar">U</span>
-            <span class="comms-video-off-name" id="commsRemoteVideoOffName"></span>
-            <span class="comms-video-off-label">Camera Off</span>
+        <div class="comms-remote-stage">
+            <video id="commsRemoteVideo" class="comms-remote-video" autoplay playsinline></video>
+            <div class="comms-video-off comms-video-off--remote" id="commsRemoteVideoOff" hidden aria-hidden="true">
+                <span class="comms-video-off-avatar" id="commsRemoteVideoOffAvatar">U</span>
+                <span class="comms-video-off-name" id="commsRemoteVideoOffName"></span>
+                <span class="comms-video-off-label">Camera Off</span>
+            </div>
         </div>
-        <video id="commsLocalVideo" class="comms-local-video" autoplay playsinline muted></video>
-        <div class="comms-video-off comms-video-off--local" id="commsLocalVideoOff" hidden aria-hidden="true">
-            <span class="comms-video-off-avatar" id="commsLocalVideoOffAvatar">U</span>
-            <span class="comms-video-off-name" id="commsLocalVideoOffName">You</span>
-            <span class="comms-video-off-label">Camera Off</span>
+        <div class="comms-local-pip">
+            <video id="commsLocalVideo" class="comms-local-video" autoplay playsinline muted></video>
+            <div class="comms-video-off comms-video-off--local" id="commsLocalVideoOff" hidden aria-hidden="true">
+                <span class="comms-video-off-avatar" id="commsLocalVideoOffAvatar">U</span>
+                <span class="comms-video-off-name" id="commsLocalVideoOffName">You</span>
+                <span class="comms-video-off-label">Camera Off</span>
+            </div>
         </div>
         <div class="comms-remote-mic-off" id="commsRemoteMicOff" hidden>Muted</div>
         <button type="button" class="comms-tap-to-play" id="commsTapToPlay" hidden>Tap to play video</button>

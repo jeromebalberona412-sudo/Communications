@@ -1,0 +1,177 @@
+﻿/* Messages page layout and breakpoints */
+
+/* Page layout, modals, directory, responsive */
+/* Extracted from communication.css (lines 2908-3871) */
+
+/* Full-height messenger shell (messages page only) */
+html:has(body.comms-messages-layout),
+body.comms-messages-layout {
+    height: 100%;
+    overflow: hidden;
+}
+
+body.comms-messages-layout .main-content {
+    margin-top: var(--sk-header-height, 70px);
+    height: calc(100dvh - var(--sk-header-height, 70px));
+    max-height: calc(100dvh - var(--sk-header-height, 70px));
+    min-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding: 0 !important;
+    margin-left: var(--sk-sidebar-width, 260px);
+    width: calc(100% - var(--sk-sidebar-width, 260px));
+    max-width: calc(100% - var(--sk-sidebar-width, 260px));
+    box-sizing: border-box;
+}
+
+body.comms-messages-layout .main-content.sidebar-collapsed,
+body.comms-messages-layout .main-content.sidebar-collapsed-content {
+    margin-left: var(--sk-sidebar-collapsed-width, 80px);
+    width: calc(100% - var(--sk-sidebar-collapsed-width, 80px));
+    max-width: calc(100% - var(--sk-sidebar-collapsed-width, 80px));
+}
+
+.comms-app .visually-hidden,
+#commsPhotoInput,
+#commsFileInput,
+#commsGroupAvatarInput {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+body.comms-messages-layout .comms-officials-wrap {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 8px 12px 8px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+body.comms-messages-layout .comms-app {
+    --comms-shell-h: 100%;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: 100%;
+    overflow: hidden;
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+}
+
+body.comms-messages-layout .comms-secure-banner {
+    flex: 0 0 auto;
+    margin: 0 0 0.5rem;
+}
+
+body.comms-messages-layout .comms-shell {
+    width: 100%;
+    max-width: 100%;
+    border-radius: 10px;
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+    height: auto;
+}
+
+body.comms-messages-layout .comms-composer {
+    flex-shrink: 0;
+    position: relative;
+    z-index: 2;
+    background: #fff;
+}
+
+@media (max-width: 1024px) {
+    body.comms-officials-page .comms-officials-wrap {
+        padding: 10px;
+    }
+
+    body.comms-officials-page .comms-shell {
+        grid-template-columns: minmax(220px, 300px) 1fr;
+    }
+}
+
+@media (max-width: 900px) {
+    body.comms-officials-page .comms-shell {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    body.comms-messages-layout {
+        overflow: auto;
+    }
+
+    body.comms-officials-page .main-content,
+    body.comms-officials-page .main-content.sidebar-expanded-content,
+    body.comms-officials-page .main-content.sidebar-collapsed-content {
+        margin-left: 0 !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        padding-left: 0 !important;
+        padding-right: 0 !important;
+    }
+
+    body.comms-messages-layout .main-content,
+    body.comms-messages-layout .main-content.sidebar-expanded-content,
+    body.comms-messages-layout .main-content.sidebar-collapsed,
+    body.comms-messages-layout .main-content.sidebar-collapsed-content {
+        height: calc(100dvh - var(--sk-header-height, 70px));
+        max-height: calc(100dvh - var(--sk-header-height, 70px));
+    }
+
+    body.comms-officials-page .comms-officials-wrap {
+        padding: 0;
+    }
+
+    body.comms-officials-page .comms-shell {
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+    }
+}
+
+/* Small laptop screens */
+@media (max-height: 700px) and (min-width: 769px) {
+    .comms-call-center {
+        top: max(0.4rem, env(safe-area-inset-top, 0px));
+    }
+    .comms-call-controls {
+        bottom: max(1.5rem, calc(env(safe-area-inset-bottom, 0px) + 1rem));
+    }
+}
+
+@media (max-width: 375px) {
+    body.comms-officials-page .comms-thread-actions .comms-icon-btn {
+        padding: 0.35rem;
+        min-width: 36px;
+    }
+
+    body.comms-officials-page .comms-peer-meta {
+        max-width: 46vw;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .comms-bubble,
+    .comms-bubble-wrap {
+        max-width: min(82%, 240px);
+    }
+}
+

@@ -1,0 +1,19 @@
+﻿/* Messages page frame beside navigation */
+
+/* Officials portal: keep nav sidebar visible; stretch main area beside it */
+body.comms-officials-page {
+    overflow-x: hidden;
+}
+
+body.comms-officials-page .comms-officials-wrap {
+    padding: 12px 14px 16px;
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+}
+
+body.comms-officials-page .main-content {
+    min-width: 0;
+    box-sizing: border-box;
+}
+

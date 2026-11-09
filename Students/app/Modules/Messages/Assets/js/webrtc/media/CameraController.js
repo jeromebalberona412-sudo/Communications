@@ -37,7 +37,7 @@ function updateCameraUi() {
     // The self-view element is never hidden: the camera-off placeholder is
     // layered on top of it so the video element and its stream stay intact.
     api.syncCameraUi();
-    var remoteVideoLive = S.remoteCameraEnabled && api.hasLiveRemoteVideo();
+    var remoteVideoLive = api.hasLiveRemoteVideo();
     var isVideoCall = api.isVideoCallType();
     if (S.els.inCall) {
         S.els.inCall.classList.toggle('is-connected', !!S.callConnected);
@@ -60,6 +60,8 @@ function updateCameraUi() {
  * camera off must not collapse the remote video layout.
  */
 function isVideoCallType() {
+    if (S.cameraEnabled) return true;
+    if (api.hasLiveRemoteVideo && api.hasLiveRemoteVideo()) return true;
     if (S.currentCall && S.currentCall.call_type) {
         return String(S.currentCall.call_type) === 'video';
     }
@@ -91,6 +93,11 @@ function syncLocalPipLayout() {
     } catch (e2) { /* ignore */ }
     S.els.localVideo.classList.toggle('is-cam-landscape', camLandscape);
     S.els.localVideo.classList.toggle('is-cam-portrait', !camLandscape);
+    var pip = S.els.localVideo.closest('.comms-local-pip');
+    if (pip) {
+        pip.classList.toggle('is-cam-landscape', camLandscape);
+        pip.classList.toggle('is-cam-portrait', !camLandscape);
+    }
 }
 
 function setCameraEnabled(enabled) {
@@ -198,9 +205,13 @@ async function applyCameraState(enabled) {
 
         newTrack.enabled = true;
         needsRenegotiate = await api.attachVideoTrackToSender(newTrack);
+        if (S.currentCall && String(S.currentCall.call_type) !== 'video') {
+            S.currentCall.call_type = 'video';
+        }
         S.cameraEnabled = true;
         api.attachLocalVideo();
         api.syncCameraUi();
+        api.updateCameraUi();
     } finally {
         S.cameraBusy = false;
         api.syncCameraUi();
@@ -233,11 +244,20 @@ async function attachVideoTrackToSender(track) {
     var sender = api.findVideoSender();
 
     if (sender) {
+        var hadTrack = !!(sender.track);
         if (sender.track !== track) {
             await sender.replaceTrack(track);
         }
         S.videoSender = sender;
-        return false;
+        var txs = S.pc.getTransceivers();
+        for (var i = 0; i < txs.length; i += 1) {
+            if (txs[i] && txs[i].sender === sender) {
+                try { txs[i].direction = 'sendrecv'; } catch (eDir) { /* ignore */ }
+                var dir = txs[i].currentDirection;
+                if (dir === 'inactive' || dir === 'recvonly' || !hadTrack) return true;
+            }
+        }
+        return !hadTrack;
     }
 
     var videoTx = S.pc.getTransceivers().find(function (t) {

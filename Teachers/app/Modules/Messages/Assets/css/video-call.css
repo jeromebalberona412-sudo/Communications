@@ -1,0 +1,480 @@
+﻿/* Video and audio call stage */
+
+/* Audio/video call overlay and controls */
+/* Extracted from communication.css (lines 2002-2907) */
+
+.comms-call-pulse {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 0.75rem;
+    border-radius: 50%;
+    background: var(--comms-accent);
+    box-shadow: 0 0 0 0 rgba(44, 44, 62, 0.55);
+    animation: comms-call-pulse 1.6s ease-out infinite;
+}
+
+@keyframes comms-call-pulse {
+    0% { box-shadow: 0 0 0 0 rgba(44, 44, 62, 0.55); }
+    70% { box-shadow: 0 0 0 18px rgba(44, 44, 62, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(44, 44, 62, 0); }
+}
+
+.comms-modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+}
+
+.comms-call-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10070;
+    width: 100%;
+    max-width: 100vw;
+    height: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
+    background: #0b0b0b;
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: stretch;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+}
+
+.comms-call-stage {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: #0b0b0b;
+}
+
+.comms-remote-stage {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    overflow: hidden;
+    background: #111;
+}
+
+.comms-call-overlay:not(.is-group-call) .comms-remote-video,
+.comms-remote-stage .comms-remote-video,
+.comms-remote-video {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: cover;
+    object-position: center center;
+    background: #0b0b0b;
+    display: block;
+    visibility: visible;
+    opacity: 1;
+    transform: none;
+}
+
+/* Fill the stage when live video is present so faces read clearly. */
+.comms-call-overlay.has-remote-video:not(.is-group-call) .comms-remote-video,
+.comms-call-overlay.is-video-call.has-remote-video:not(.is-group-call) .comms-remote-video {
+    object-fit: cover;
+}
+.comms-remote-audio {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.comms-remote-grid {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: grid;
+    gap: 0.5rem;
+    padding: 0.75rem;
+    padding-bottom: max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.5rem));
+    align-content: center;
+    justify-content: center;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    max-width: 100%;
+    max-height: 100%;
+    overflow: auto;
+    background: #0b0b0b;
+}
+
+.comms-remote-grid[data-count="1"] {
+    grid-template-columns: 1fr;
+}
+.comms-remote-grid[data-count="2"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.comms-remote-grid[data-count="3"],
+.comms-remote-grid[data-count="4"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.comms-remote-grid[data-count="5"],
+.comms-remote-grid[data-count="6"],
+.comms-remote-grid[data-count="7"],
+.comms-remote-grid[data-count="8"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.comms-remote-tile {
+    position: relative;
+    min-height: 140px;
+    max-height: min(48vh, 380px);
+    border-radius: 14px;
+    overflow: hidden;
+    background: #1e293b;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    aspect-ratio: 4 / 3;
+}
+
+.comms-remote-tile video {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center;
+    background: #0f172a;
+    transform: none;
+}
+
+.comms-remote-grid[data-count="1"] .comms-remote-tile {
+    max-height: min(72vh, 560px);
+    aspect-ratio: 16 / 10;
+    width: min(100%, 920px);
+    justify-self: center;
+}
+
+.comms-remote-tile-label {
+    position: absolute;
+    left: 0.5rem;
+    bottom: 0.45rem;
+    z-index: 2;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    font-size: 0.75rem;
+    font-weight: 600;
+    max-width: calc(100% - 1rem);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.comms-call-overlay.is-group-call .comms-remote-video,
+.comms-call-overlay.is-group-call .comms-remote-stage {
+    display: none;
+}
+.comms-call-overlay.is-group-call .comms-remote-grid {
+    display: grid;
+}
+.comms-call-overlay.is-group-call .comms-local-video {
+    z-index: 4;
+    object-fit: cover;
+}
+.comms-call-overlay.is-group-call.has-remote-video .comms-call-center {
+    top: max(0.55rem, env(safe-area-inset-top, 0px));
+    left: max(0.65rem, env(safe-area-inset-left, 0px));
+    transform: none;
+}
+.comms-call-overlay.has-remote-video .comms-call-center.is-compact .comms-call-avatar {
+    display: grid;
+}
+.comms-call-overlay.has-remote-video:not(.is-group-call) .comms-local-video {
+    object-fit: cover;
+}
+
+.comms-local-pip {
+    position: absolute;
+    right: max(0.75rem, env(safe-area-inset-right, 0px));
+    bottom: max(6.75rem, calc(env(safe-area-inset-bottom, 0px) + 5.75rem));
+    top: auto;
+    width: min(32vw, 140px);
+    max-width: min(42vw, 220px);
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+    border-radius: 14px;
+    border: 2px solid rgba(255, 255, 255, 0.4);
+    background: #111827;
+    z-index: 3;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.comms-local-pip .comms-local-video,
+.comms-local-video {
+    position: absolute;
+    inset: 0;
+    right: auto;
+    bottom: auto;
+    top: auto;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: auto;
+    object-fit: cover;
+    object-position: center center;
+    border-radius: 0;
+    border: 0;
+    background: #111827;
+    z-index: 1;
+    transform: scaleX(-1);
+    box-shadow: none;
+    display: block;
+    visibility: visible;
+}
+.comms-local-video[hidden] {
+    display: none !important;
+}
+/* Camera-off placeholder: the video element and its stream stay mounted, the
+   placeholder is layered on top so nothing has to be re-acquired. */
+.comms-video-off {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    background: #111827;
+    color: #e5e7eb;
+    text-align: center;
+}
+.comms-video-off[hidden] {
+    display: none !important;
+}
+.comms-video-off--remote {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    background: radial-gradient(circle at 50% 38%, #1f2937 0%, #0b0b0b 68%);
+}
+.comms-local-pip .comms-video-off--local,
+.comms-video-off--local {
+    position: absolute;
+    inset: 0;
+    right: auto;
+    bottom: auto;
+    top: auto;
+    z-index: 4;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    aspect-ratio: auto;
+    border-radius: 0;
+    border: 0;
+    box-shadow: none;
+    transform: none;
+}
+.comms-call-overlay.is-desktop-call .comms-local-pip {
+    width: min(22vw, 240px);
+    bottom: max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.5rem));
+}
+.comms-video-off-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    background: #374151;
+    color: #f9fafb;
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+.comms-video-off-name {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #f9fafb;
+    max-width: 80%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.comms-video-off-label {
+    font-size: 0.72rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #9ca3af;
+}
+.comms-call-overlay.is-remote-camera-off:not(.is-group-call) .comms-remote-video {
+    visibility: hidden;
+}
+.comms-remote-mic-off {
+    position: absolute;
+    left: 0.75rem;
+    top: 0.75rem;
+    z-index: 5;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #f9fafb;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.comms-member-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+}
+.comms-member-action {
+    border: 0;
+    border-radius: 999px;
+    background: #e8eef9;
+    color: #0039A8;
+    font-size: 0.72rem;
+    font-weight: 700;
+    padding: 0.2rem 0.55rem;
+    cursor: pointer;
+}
+.comms-call-ctrl.is-busy {
+    opacity: 0.65;
+    cursor: progress;
+}
+/* The camera track is genuinely disabled in JS (track.enabled = false) and the
+   element keeps its MediaStream; this only avoids painting the frozen last
+   frame behind the camera-off placeholder. */
+.comms-local-video.is-camera-off {
+    visibility: hidden;
+}
+.comms-local-pip .comms-local-video.is-cam-landscape,
+.comms-local-video.is-cam-landscape {
+    aspect-ratio: auto;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: center center;
+}
+.comms-call-overlay.is-desktop-call .comms-local-pip .comms-local-video,
+.comms-call-overlay.is-desktop-call .comms-local-video {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    object-fit: cover;
+}
+.comms-call-overlay.is-desktop-call .comms-local-video.is-cam-landscape {
+    aspect-ratio: auto;
+    width: 100%;
+}
+@media (max-width: 414px) {
+    .comms-local-pip {
+        width: min(38vw, 132px);
+        bottom: max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.5rem));
+    }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+    .comms-local-pip {
+        right: max(0.75rem, env(safe-area-inset-right, 0px));
+        bottom: max(5rem, calc(env(safe-area-inset-bottom, 0px) + 4.25rem));
+        width: min(22vw, 160px);
+    }
+}
+
+html.comms-in-call,
+body.comms-in-call {
+    overflow: hidden !important;
+    overscroll-behavior: none;
+    touch-action: none;
+    height: 100%;
+    height: 100dvh;
+}
+
+.comms-call-center {
+    position: absolute;
+    top: max(0.55rem, env(safe-area-inset-top, 0px));
+    left: max(0.65rem, env(safe-area-inset-left, 0px));
+    right: auto;
+    transform: none;
+    z-index: 5;
+    width: auto;
+    max-width: min(78vw, 340px);
+    pointer-events: none;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 0.55rem;
+    text-align: left;
+    padding: 0.4rem 0.75rem 0.4rem 0.4rem;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.58);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
+}
+
+.comms-call-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.05rem;
+    min-width: 0;
+}
+
+.comms-call-avatar {
+    width: 36px;
+    height: 36px;
+    margin: 0;
+    border-radius: 50%;
+    background: #fff;
+    color: #0f172a;
+    font-size: 0.85rem;
+    font-weight: 800;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    box-shadow: none;
+    flex: 0 0 auto;
+}
+
+.comms-call-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.comms-call-peer-name {
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+    margin: 0;
+    line-height: 1.2;
+    max-width: 14rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.comms-call-peer-position,
+.comms-call-peer-barangay {
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.75);
+    margin: 0.15rem 0 0;
+}
+
+.comms-call-center .comms-call-peer-position,
+.comms-call-center .comms-call-peer-barangay {
+    font-size: 0.9rem;
+}
+
+.comms-call-status,
+.comms-call-timer {
+    margin: 0;
+    font-size: 0.72rem;
+    color: rgba(255, 255, 255, 0.82);
+    font-variant-numeric: tabular-nums;
+}
+

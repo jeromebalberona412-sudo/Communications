@@ -36,7 +36,6 @@ function findVideoSender() {
 }
 
 function hasLiveRemoteVideo() {
-    if (!S.remoteCameraEnabled) return false;
     var stream = (S.els.remoteVideo && S.els.remoteVideo.srcObject) || S.remoteStream;
     if (!stream || typeof stream.getVideoTracks !== 'function') return false;
     return stream.getVideoTracks().some(function (track) {
@@ -122,9 +121,14 @@ function mergeRemoteTrack(track, inboundStream) {
         api.dropRemoteTracksOfKind(track.kind, track.id);
         S.remoteStream.addTrack(track);
 
+        if (track.kind === 'video' && track.muted !== true && track.readyState === 'live') {
+            S.remoteCameraEnabled = true;
+        }
+
         var unmuteHandler = function () {
             if (track.kind === 'video') S.remoteCameraEnabled = true;
             api.bindRemoteMedia(S.remoteStream);
+            api.updateCameraUi();
         };
         var endedHandler = function () {
             try { S.remoteStream.removeTrack(track); } catch (err) { /* ignore */ }
@@ -326,9 +330,11 @@ async function ensurePeerConnection(videoEnabled) {
         var sender = S.pc.addTrack(track, S.localStream);
         if (track.kind === 'video') S.videoSender = sender;
     });
-    if (videoEnabled && !S.videoSender) {
+    if (!S.videoSender) {
         try {
-            var videoTx = S.pc.addTransceiver('video', { direction: 'sendrecv' });
+            var videoTx = S.pc.addTransceiver('video', {
+                direction: videoEnabled ? 'sendrecv' : 'recvonly'
+            });
             S.videoSender = videoTx.sender;
         } catch (eVid) { /* ignore */ }
     }

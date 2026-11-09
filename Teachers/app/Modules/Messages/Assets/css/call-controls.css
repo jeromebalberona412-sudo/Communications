@@ -1,0 +1,416 @@
+﻿/* In-call controls and status */
+
+.comms-call-controls {
+    position: absolute;
+    left: 50%;
+    bottom: max(1.5rem, env(safe-area-inset-bottom, 0px));
+    transform: translateX(-50%);
+    display: flex;
+    gap: 0.85rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+    justify-content: center;
+    z-index: 4;
+    max-width: calc(100vw - 1.5rem);
+}
+
+.comms-call-ctrl {
+    position: relative;
+    width: 56px;
+    height: 56px;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+
+.comms-call-ctrl:hover,
+.comms-call-ctrl:focus-visible {
+    background: rgba(255, 255, 255, 0.26);
+    outline: none;
+}
+
+.comms-call-ctrl.is-off {
+    background: rgba(255, 255, 255, 0.92);
+    color: #0f172a;
+}
+
+.comms-call-ctrl--end {
+    background: #ef4444;
+}
+
+.comms-call-ctrl--end:hover,
+.comms-call-ctrl--end:focus-visible {
+    background: #dc2626;
+}
+
+.comms-end-phone-icon {
+    transform: rotate(135deg);
+}
+
+.comms-call-ctrl-label {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 10px);
+    transform: translateX(-50%);
+    white-space: nowrap;
+    font-size: 0.72rem;
+    font-weight: 650;
+    padding: 0.28rem 0.55rem;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.92);
+    color: #fff;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+}
+
+.comms-call-ctrl:hover .comms-call-ctrl-label,
+.comms-call-ctrl:focus-visible .comms-call-ctrl-label {
+    opacity: 1;
+}
+
+.comms-history-page {
+    max-width: 880px;
+    width: 100%;
+    margin: 0 auto;
+    max-height: calc(100vh - 100px);
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.comms-history-header-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    flex-shrink: 0;
+}
+
+.comms-history-title-block {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.85rem;
+    min-width: 0;
+}
+
+.comms-history-title-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 14px;
+    background: #e8f1fb;
+    color: var(--comms-accent);
+    display: grid;
+    place-items: center;
+    flex-shrink: 0;
+}
+
+.comms-history-title-block h1 {
+    margin: 0 0 0.2rem;
+    font-size: 1.55rem;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+}
+
+.comms-history-title-block p {
+    margin: 0;
+    color: var(--comms-muted);
+    font-size: 0.92rem;
+}
+
+.comms-history-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    padding-right: 0.25rem;
+}
+
+.comms-history-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.95rem 1rem;
+    border: 1px solid var(--comms-border);
+    border-radius: 14px;
+    background: #fff;
+    margin-bottom: 0.7rem;
+    align-items: center;
+}
+
+.comms-history-item.is-missed {
+    border-color: #fecaca;
+    background: #fff7f7;
+}
+
+.comms-history-item.is-cancelled {
+    border-color: #e2e8f0;
+    background: #f8fafc;
+}
+
+.comms-history-item-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    min-width: 0;
+    flex: 1;
+}
+
+.comms-history-avatar {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: #d7e3f4;
+    flex-shrink: 0;
+}
+
+.comms-history-main {
+    display: grid;
+    gap: 0.2rem;
+    min-width: 0;
+}
+
+.comms-history-main strong {
+    font-size: 0.98rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.comms-history-sub {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    color: var(--comms-muted);
+    font-size: 0.82rem;
+}
+
+.comms-history-type {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    text-transform: capitalize;
+}
+
+.comms-history-status {
+    text-transform: capitalize;
+    font-weight: 650;
+}
+
+.comms-history-item.is-missed .comms-history-status {
+    color: #b42318;
+}
+
+.comms-history-item.is-ok .comms-history-status {
+    color: #067647;
+}
+
+.comms-history-meta {
+    display: grid;
+    justify-items: end;
+    gap: 0.25rem;
+    color: var(--comms-muted);
+    font-size: 0.82rem;
+    flex-shrink: 0;
+}
+
+.comms-history-duration {
+    font-variant-numeric: tabular-nums;
+    font-weight: 650;
+    color: var(--comms-text);
+}
+
+.comms-history-open {
+    color: var(--comms-accent);
+    text-decoration: none;
+    font-weight: 650;
+    font-size: 0.8rem;
+}
+
+.comms-history-open:hover,
+.comms-history-open:focus-visible {
+    text-decoration: underline;
+}
+
+.comms-history-empty {
+    text-align: center;
+    padding: 2rem 1rem;
+}
+
+.comms-history-empty-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 0.75rem;
+    border-radius: 16px;
+    background: #eef2f7;
+    color: #64748b;
+    display: grid;
+    place-items: center;
+}
+
+.comms-header-msg {
+    position: relative;
+    margin-right: 0.35rem;
+}
+
+.comms-header-msg-btn {
+    border: 0;
+    background: transparent;
+    color: inherit;
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+
+.comms-header-msg-btn:hover,
+.comms-header-msg-btn:focus-visible {
+    background: rgba(255, 255, 255, 0.14);
+    color: inherit;
+    outline: none;
+}
+
+.comms-header-msg-badge {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    min-width: 1.1rem;
+    height: 1.1rem;
+    padding: 0 0.28rem;
+    border-radius: 999px;
+    background: #d92d20;
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+@media (max-width: 900px) {
+    .comms-shell {
+        grid-template-columns: 1fr;
+        min-height: var(--comms-shell-h);
+        height: var(--comms-shell-h);
+    }
+
+    .comms-app.is-thread-open .comms-sidebar {
+        display: none;
+    }
+
+    .comms-app:not(.is-thread-open) .comms-thread {
+        display: none;
+    }
+
+    .comms-back-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .comms-app {
+        --comms-shell-h: calc(100dvh - 72px);
+        margin: 0;
+    }
+
+    .comms-shell {
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+    }
+
+    .comms-thread-header {
+        gap: 0.5rem;
+        padding: 0.65rem 0.75rem;
+    }
+
+    .comms-messages {
+        padding: 0.75rem;
+    }
+
+    .comms-bubble {
+        max-width: min(78%, 280px);
+    }
+
+    .comms-bubble-wrap {
+        max-width: min(78%, 280px);
+    }
+}
+
+@media (max-width: 768px) {
+    .comms-sidebar-header {
+        padding: 0;
+    }
+
+    .comms-search-input {
+        font-size: 0.9rem;
+    }
+
+    .comms-peer-name {
+        font-size: 0.95rem;
+    }
+
+    .comms-peer-meta {
+        font-size: 0.75rem;
+    }
+
+    .comms-bubble,
+    .comms-bubble-wrap {
+        max-width: min(78%, 260px);
+    }
+}
+
+@media (max-width: 414px) {
+    .comms-composer {
+        gap: 0.5rem;
+        padding: 0.7rem 0.75rem;
+    }
+
+    .comms-composer textarea {
+        min-height: calc(1.45em * 1 + 1.1rem);
+        max-height: calc(1.45em * 4 + 1.1rem);
+        padding: 0.5rem 0.75rem;
+    }
+
+    .comms-send-btn {
+        width: 42px;
+        min-width: 42px;
+        height: 42px;
+        padding: 0;
+        border-radius: 50%;
+    }
+
+    .comms-send-btn-icon {
+        display: block;
+    }
+
+    .comms-history-item {
+        flex-direction: column;
+    }
+
+    .comms-history-meta {
+        justify-items: start;
+    }
+
+    .comms-local-video {
+        width: min(36vw, 120px);
+        right: 0.65rem;
+        bottom: max(7rem, calc(env(safe-area-inset-bottom, 0px) + 6rem));
+        top: auto;
+    }
+}
+

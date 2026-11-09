@@ -247,6 +247,12 @@ function showCallEnded(reason, peerName, callId, endedByRole, callPayload) {
     S.answeredCall = null;
 
     if (S.els.ended) S.els.ended.hidden = false;
+    if (S.els.endedRedial) {
+        S.els.endedRedial.hidden = false;
+        S.els.endedRedial.removeAttribute('hidden');
+        S.els.endedRedial.removeAttribute('aria-hidden');
+        S.els.endedRedial.removeAttribute('tabindex');
+    }
     if (S.els.endedClose) {
         try { S.els.endedClose.focus({ preventScroll: true }); } catch (e) { /* ignore */ }
     }
@@ -281,8 +287,9 @@ function redialLastCall() {
 function setCallStatus(text) {
     if (S.els.callStatus) S.els.callStatus.textContent = text || '';
     if (S.els.timer) {
-        S.els.timer.hidden = false;
-        if (!S.callStartedAt) S.els.timer.textContent = '00:00';
+        S.els.timer.hidden = !S.callStartedAt;
+        if (S.callStartedAt) api.renderTimer();
+        else S.els.timer.textContent = '00:00';
     }
 }
 
@@ -313,9 +320,9 @@ function keepActiveCallVisible(statusText) {
     document.body.classList.add('comms-in-call');
     if (statusText) api.setCallStatus(statusText);
     if (S.els.timer) {
-        S.els.timer.hidden = false;
-        if (!S.callStartedAt) S.els.timer.textContent = '00:00';
-        else api.renderTimer();
+        S.els.timer.hidden = !S.callStartedAt;
+        if (S.callStartedAt) api.renderTimer();
+        else S.els.timer.textContent = '00:00';
     }
     api.attachLocalVideo();
     if (S.remoteStream) api.bindRemoteMedia(S.remoteStream);
@@ -345,11 +352,9 @@ function showInCall(call, statusText) {
     // The timer is never reset by a UI update: it is only initialised when
     // the call actually connects.
     if (S.els.timer) {
-        if (S.callStartedAt) {
-            api.renderTimer();
-        } else {
-            S.els.timer.textContent = '00:00';
-        }
+        S.els.timer.hidden = !S.callStartedAt;
+        if (S.callStartedAt) api.renderTimer();
+        else S.els.timer.textContent = '00:00';
     }
     api.setMuteUi(false);
     api.updateCameraUi();
