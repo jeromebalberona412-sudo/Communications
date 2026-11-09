@@ -2305,13 +2305,15 @@ button.comms-bubble-image {
     object-position: center center;
 }
 .comms-call-overlay.is-desktop-call .comms-local-video {
-    width: min(18vw, 220px);
+    /* FIX BUG #2: Increase desktop local video size from min(18vw, 220px) to min(24vw, 240px) */
+    width: min(24vw, 240px);
     max-height: 34vh;
     bottom: max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.5rem));
     object-fit: contain;
     object-position: center center;
 }
 .comms-call-overlay.is-desktop-call .comms-local-video.is-cam-landscape {
+    /* FIX BUG #2: Keep landscape size at 280px for better visibility */
     aspect-ratio: 16 / 9;
     width: min(22vw, 280px);
 }

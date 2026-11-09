@@ -1704,7 +1704,11 @@ import {
     function maybeStartConnectedTimer() {
         if (!callConnected) return;
         var ts = currentCall && (currentCall.started_at || currentCall.answered_at);
-        startTimer(ts || null, currentCall && currentCall.server_time);
+        // FIX: If server didn't provide timestamp, use current time to start timer
+        if (!ts) {
+            ts = new Date().toISOString();
+        }
+        startTimer(ts, currentCall && currentCall.server_time);
         if (els.timer) els.timer.hidden = false;
         startCallHeartbeat();
     }
@@ -1934,34 +1938,24 @@ import {
             var sender = findVideoSender();
 
             if (!enabled) {
+                // FIX BUG #4: Stop tracks completely when turning camera OFF
+                // Don't just disable - this ensures clean restart when turning ON
                 localStream.getVideoTracks().forEach(function (track) {
-                    try { track.enabled = false; } catch (eOff) {}
+                    try { track.stop(); } catch (eStop) {}
+                    try { localStream.removeTrack(track); } catch (eRem) {}
                 });
                 if (sender && sender.track) {
-                    try { sender.track.enabled = false; } catch (eRep) {}
-                    videoSender = sender;
+                    try { sender.replaceTrack(null); } catch (eRep) {}
                 }
+                videoSender = null;
                 cameraEnabled = false;
                 attachLocalVideo();
                 syncCameraUi();
                 return;
             }
 
-            if (liveTrack) {
-                liveTrack.enabled = true;
-                await attachVideoTrackToSender(liveTrack);
-                cameraEnabled = true;
-                attachLocalVideo();
-                syncCameraUi();
-                try {
-                    if (els.localVideo) {
-                        var lp = els.localVideo.play();
-                        if (lp && typeof lp.catch === 'function') lp.catch(function () {});
-                    }
-                } catch (ePlay) { /* ignore */ }
-                return;
-            }
-
+            // FIX BUG #4: When turning ON, always get fresh stream since we stopped tracks
+            // Don't try to reuse stopped tracks
             var devices = assertMediaReady();
             var camStream;
             try {
@@ -1986,6 +1980,7 @@ import {
                 throw new Error('No camera was found on this device.');
             }
 
+            // Clean up old tracks if any exist
             localStream.getVideoTracks().forEach(function (track) {
                 if (track !== newTrack) {
                     try { localStream.removeTrack(track); } catch (e) {}
@@ -3157,7 +3152,8 @@ import {
             return;
         }
 
-        if (payload.type === 'hangup') {
+        if (payload.type === 'hangup' || payload.type === 'call-end') {
+            // FIX BUG #3: Handle both 'hangup' (old) and 'call-end' (new) signal types
             var hangupMatchesIncoming = incomingCallId != null
                 && payload.call_id != null
                 && Number(incomingCallId) === Number(payload.call_id);
