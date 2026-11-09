@@ -3180,7 +3180,7 @@ import {
             return;
         }
 
-        if (payload.type === 'camera') {
+        if (payload.type === 'camera-state' || payload.type === 'camera') {
             if (currentCall && payload.call_id != null && Number(currentCall.id) !== Number(payload.call_id)) {
                 return;
             }
@@ -3191,7 +3191,7 @@ import {
             return;
         }
 
-        if (payload.type === 'mic') {
+        if (payload.type === 'mic-state' || payload.type === 'mic') {
             if (currentCall && payload.call_id != null && Number(currentCall.id) !== Number(payload.call_id)) {
                 return;
             }
