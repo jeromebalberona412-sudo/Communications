@@ -1168,8 +1168,8 @@ import {
         ensureRemoteAudioPlaying();
         if (els.remoteVideo) {
             try {
-                els.remoteVideo.muted = true;
-                els.remoteVideo.setAttribute('muted', '');
+                els.remoteVideo.muted = false;
+                els.remoteVideo.removeAttribute('muted');
                 els.remoteVideo.playsInline = true;
                 var vp = els.remoteVideo.play();
                 if (vp && typeof vp.then === 'function') {
@@ -1271,8 +1271,8 @@ import {
     function bindRemoteMedia(stream) {
         if (!stream) return;
         if (els.remoteVideo) {
-            els.remoteVideo.muted = true;
-            els.remoteVideo.setAttribute('muted', '');
+            els.remoteVideo.muted = false;
+            els.remoteVideo.removeAttribute('muted');
             els.remoteVideo.playsInline = true;
             els.remoteVideo.autoplay = true;
             els.remoteVideo.style.visibility = '';
