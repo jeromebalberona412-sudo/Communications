@@ -49,7 +49,7 @@ if (markAllBtn) {
     });
 }
 
-els.convList.addEventListener('click', function (e) {
+if (els.convList) els.convList.addEventListener('click', function (e) {
     var btn = e.target.closest('.comms-conv-item');
     if (!btn) return;
     // Instant header paint from list row while API loads.
@@ -132,7 +132,7 @@ if (els.messages) {
             if (editor && !editor.dataset.limitWired) {
                 editor.removeAttribute('maxlength');
                 editor.addEventListener('keydown', function (ev) {
-                    var current = normalizeMessageBody(editor.value || '');
+                    var current = api.normalizeMessageBody(editor.value || '');
                     if (ev.key === 'Enter' && !(ev.ctrlKey || ev.metaKey)) {
                         if (api.messageCharCount(current + '\n') > state.messageMaxLength) {
                             ev.preventDefault();
@@ -159,14 +159,14 @@ if (els.messages) {
                     var raw = value.slice(0, start) + incoming + value.slice(end);
                     var next = api.clampMessageToMaxChars(raw);
                     editor.value = next;
-                    if (next !== normalizeMessageBody(raw)) api.toastMessageCharLimit();
+                    if (next !== api.normalizeMessageBody(raw)) api.toastMessageCharLimit();
                     if (Comms.resizeGrowTextarea) {
                         Comms.resizeGrowTextarea(editor, 6, 2);
                     }
                 });
                 editor.addEventListener('input', function () {
                     var next = api.clampMessageToMaxChars(editor.value || '');
-                    if (next !== normalizeMessageBody(editor.value || '')) {
+                    if (next !== api.normalizeMessageBody(editor.value || '')) {
                         editor.value = next;
                         api.toastMessageCharLimit();
                     }
@@ -435,7 +435,7 @@ if (els.attachClear) {
 
 els.input.addEventListener('input', function () {
     var next = api.clampMessageToMaxChars(els.input.value || '');
-    if (next !== normalizeMessageBody(els.input.value || '')) {
+    if (next !== api.normalizeMessageBody(els.input.value || '')) {
         els.input.value = next;
         api.toastMessageCharLimit();
     }
@@ -461,7 +461,7 @@ els.input.addEventListener('paste', function (e) {
     var raw = value.slice(0, start) + incoming + value.slice(end);
     var next = api.clampMessageToMaxChars(api.clampMessageToMaxLines(raw));
     els.input.value = next;
-    if (next !== normalizeMessageBody(raw)) {
+    if (next !== api.normalizeMessageBody(raw)) {
         api.toastMessageCharLimit();
     }
     els.input.classList.toggle('is-line-limit', api.countMessageLines(els.input.value) >= api.messageMaxLines());
@@ -477,7 +477,7 @@ els.input.addEventListener('keydown', function (e) {
         api.sendMessage(els.input.value);
         return;
     }
-    var current = normalizeMessageBody(els.input.value || '');
+    var current = api.normalizeMessageBody(els.input.value || '');
     if (e.key === 'Enter' && !(e.ctrlKey || e.metaKey)) {
         if (api.messageCharCount(current + '\n') > state.messageMaxLength) {
             e.preventDefault();
@@ -657,10 +657,10 @@ if (els.renameForm) {
     });
 }
 document.querySelectorAll('[data-comms-group-close]').forEach(function (el) {
-    el.addEventListener('click', closeGroupModals);
+    el.addEventListener('click', function () { api.closeGroupModals(); });
 });
 document.querySelectorAll('[data-comms-rename-close]').forEach(function (el) {
-    el.addEventListener('click', closeGroupModals);
+    el.addEventListener('click', function () { api.closeGroupModals(); });
 });
 if (els.groupModalBody) {
     els.groupModalBody.addEventListener('click', function (e) {

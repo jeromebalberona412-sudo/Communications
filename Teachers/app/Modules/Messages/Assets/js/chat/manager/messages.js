@@ -10,6 +10,7 @@ export function register(ctx) {
     var withWebrtc = ctx.withWebrtc;
     var Comms = window.Comms;
     if (ctx.reactBtnIcon !== undefined) var reactBtnIcon = ctx.reactBtnIcon;
+    var msgMoreIcon = ctx.msgMoreIcon || '';
 
 function renderMessageActions(m, deleted) {
     var items = '';

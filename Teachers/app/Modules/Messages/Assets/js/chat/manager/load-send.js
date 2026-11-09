@@ -278,7 +278,7 @@ function publishSentMessage(sent, extraPeers) {
 function sendMessage(body) {
     if (!state.activeId) return;
     var files = (state.pendingAttachments || []).slice();
-    var text = normalizeMessageBody(body);
+    var text = api.normalizeMessageBody(body);
     text = api.clampMessageToMaxLines(text);
     if (text.trim() === '' && !files.length) {
         if (String(body || '').length > 0) {

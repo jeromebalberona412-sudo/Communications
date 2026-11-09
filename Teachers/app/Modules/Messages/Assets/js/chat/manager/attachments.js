@@ -295,6 +295,7 @@ function jumpToLatestMessages() {
 }
 
 var msgMoreIcon = '<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="1.85"/><circle cx="12" cy="12" r="1.85"/><circle cx="12" cy="19" r="1.85"/></svg>';
+    ctx.msgMoreIcon = msgMoreIcon;
 
 
     Object.assign(api, {
