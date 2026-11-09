@@ -2,7 +2,7 @@
     <div class="comms-call-stage">
         <div class="comms-remote-grid" id="commsRemoteGrid" hidden></div>
         <div class="comms-remote-stage">
-            <video id="commsRemoteVideo" class="comms-remote-video" autoplay playsinline></video>
+            <video id="commsRemoteVideo" class="comms-remote-video" autoplay muted playsinline></video>
             <div class="comms-video-off comms-video-off--remote" id="commsRemoteVideoOff" hidden aria-hidden="true">
                 <span class="comms-video-off-avatar" id="commsRemoteVideoOffAvatar">U</span>
                 <span class="comms-video-off-name" id="commsRemoteVideoOffName"></span>

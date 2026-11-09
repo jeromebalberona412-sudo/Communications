@@ -18,14 +18,14 @@ function applyPeerAnswered() {
     var cid = S.currentCall && S.currentCall.id != null ? Number(S.currentCall.id) : null;
     if (cid != null) api.rememberCallId(S.answeredCallIds, cid);
     if (S.peerAnsweredFor != null && cid != null && S.peerAnsweredFor === cid) {
-        api.keepActiveCallVisible(S.callConnected ? 'Connected' : 'Connecting...');
+        api.keepActiveCallVisible(S.callConnected ? 'Connected' : '');
         api.attachLocalVideo();
         return;
     }
     S.peerAnsweredFor = cid;
     S.startingCall = true;
     S.role = 'caller';
-    api.keepActiveCallVisible('Connecting...');
+    api.keepActiveCallVisible('');
     api.armConnectionTimeout();
     api.attachLocalVideo();
     api.updateCameraUi();
@@ -88,7 +88,13 @@ async function handleSignal(payload) {
                     try { await S.pc.setLocalDescription({ type: 'rollback' }); } catch (rbErr) { /* ignore */ }
                 }
                 if (S.pc.signalingState === 'stable') {
-                    await S.pc.setRemoteDescription(payload.sdp);
+                    var renegoOffer = api.plainDescription
+                        ? api.plainDescription(payload.sdp, 'offer')
+                        : payload.sdp;
+                    await S.pc.setRemoteDescription(new RTCSessionDescription(renegoOffer));
+                    if (typeof api.installLocalSenders === 'function') {
+                        await api.installLocalSenders(!!S.cameraEnabled || !!S.wantsVideo);
+                    }
                     var renegoAnswer = await S.pc.createAnswer();
                     await S.pc.setLocalDescription(renegoAnswer);
                     await api.signalPeer({
@@ -260,11 +266,15 @@ async function handleSignal(payload) {
         if (S.pc && payload.sdp && (S.pc.signalingState === 'have-local-offer' || S.pc.signalingState === 'stable')) {
             try {
                 if (S.pc.signalingState === 'have-local-offer') {
-                    await S.pc.setRemoteDescription(payload.sdp);
+                    var remoteAnswer = api.plainDescription
+                        ? api.plainDescription(payload.sdp, 'answer')
+                        : payload.sdp;
+                    await S.pc.setRemoteDescription(new RTCSessionDescription(remoteAnswer));
                 }
                 while (S.iceQueue.length) {
-                    await S.pc.addIceCandidate(S.iceQueue.shift());
+                    try { await S.pc.addIceCandidate(S.iceQueue.shift()); } catch (iceErr) { /* stale */ }
                 }
+                api.refreshRemoteFromReceivers();
             } catch (e) { /* ignore duplicate/stale SDP */ }
         }
 
@@ -371,7 +381,7 @@ function handleCallRow(payload) {
             }
             api.applyPeerAnswered();
         } else if (S.currentCall && Number(S.currentCall.id) === Number(row.id)) {
-            api.keepActiveCallVisible(S.callConnected ? 'Connected' : 'Connecting...');
+            api.keepActiveCallVisible(S.callConnected ? 'Connected' : '');
         }
         return;
     }

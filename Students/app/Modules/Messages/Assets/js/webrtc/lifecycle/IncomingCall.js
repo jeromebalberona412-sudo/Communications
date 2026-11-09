@@ -558,7 +558,7 @@ function setIncomingActionState(mode) {
     if (mode === 'answering') {
         accept.disabled = true;
         reject.disabled = true;
-        accept.textContent = 'Connecting...';
+        accept.textContent = 'Answer';
         accept.setAttribute('aria-busy', 'true');
         return;
     }

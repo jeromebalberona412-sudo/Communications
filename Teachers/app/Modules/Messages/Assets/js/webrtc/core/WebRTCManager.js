@@ -10,7 +10,7 @@ function reconcileWithServerState(data) {
 
     if (!activeId) {
         if (api.isLiveAcceptedCall()) {
-            api.keepActiveCallVisible(S.callConnected ? 'Connected' : 'Connecting...');
+            api.keepActiveCallVisible(S.callConnected ? 'Connected' : '');
             return;
         }
         if (S.currentCall && S.currentCall.id) {

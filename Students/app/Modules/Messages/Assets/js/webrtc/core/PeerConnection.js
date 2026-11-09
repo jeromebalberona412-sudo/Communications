@@ -36,11 +36,116 @@ function findVideoSender() {
 }
 
 function hasLiveRemoteVideo() {
-    var stream = (S.els.remoteVideo && S.els.remoteVideo.srcObject) || S.remoteStream;
+    if (S.els.remoteVideo && Number(S.els.remoteVideo.videoWidth || 0) > 0) return true;
+    var stream = S.remoteStream || (S.els.remoteVideo && S.els.remoteVideo.srcObject);
     if (!stream || typeof stream.getVideoTracks !== 'function') return false;
     return stream.getVideoTracks().some(function (track) {
-        return !!(track && track.readyState === 'live');
+        return !!(track && track.readyState === 'live' && track.muted !== true);
     });
+}
+
+function transceiverKind(transceiver) {
+    if (!transceiver) return '';
+    var receiverKind = transceiver.receiver && transceiver.receiver.track && transceiver.receiver.track.kind;
+    if (receiverKind) return receiverKind;
+    var senderKind = transceiver.sender && transceiver.sender.track && transceiver.sender.track.kind;
+    return senderKind || '';
+}
+
+function findKindTransceiver(kind) {
+    if (!S.pc) return null;
+    var txs = S.pc.getTransceivers();
+    var i;
+    for (i = 0; i < txs.length; i += 1) {
+        if (transceiverKind(txs[i]) === kind) return txs[i];
+    }
+    return null;
+}
+
+function plainDescription(desc, fallbackType) {
+    if (!desc) return null;
+    if (typeof desc === 'string') return { type: fallbackType || 'offer', sdp: desc };
+    return {
+        type: desc.type || fallbackType || 'offer',
+        sdp: desc.sdp || ''
+    };
+}
+
+/**
+ * Put local tracks on transceivers that match the negotiated m-lines.
+ * Audio is installed before video so both sides share the same order.
+ * When the remote offer is already applied, replaceTrack is used so the
+ * answer sends video instead of leaving the m-line recvonly.
+ */
+async function installLocalSenders(videoEnabled) {
+    if (!S.pc || !S.localStream) return;
+    var audioTracks = S.localStream.getAudioTracks();
+    var videoTracks = S.localStream.getVideoTracks().filter(function (track) {
+        return track && track.readyState === 'live';
+    });
+    var wantVideo = !!videoEnabled && videoTracks.length > 0;
+
+    async function place(track) {
+        if (!track) return;
+        var tx = findKindTransceiver(track.kind);
+        if (tx && tx.sender) {
+            if (tx.sender.track !== track) {
+                try { await tx.sender.replaceTrack(track); } catch (eRep) { /* ignore */ }
+            }
+            try { tx.direction = 'sendrecv'; } catch (eDir) { /* ignore */ }
+            if (track.kind === 'video') S.videoSender = tx.sender;
+            return;
+        }
+        try {
+            var sender = S.pc.addTrack(track, S.localStream);
+            if (track.kind === 'video') S.videoSender = sender;
+        } catch (eAdd) { /* sender already exists */ }
+    }
+
+    var a;
+    for (a = 0; a < audioTracks.length; a += 1) {
+        await place(audioTracks[a]);
+    }
+    if (wantVideo) {
+        await place(videoTracks[0]);
+        videoTracks.slice(1).forEach(function (extra) {
+            try { extra.enabled = false; } catch (eExtra) { /* ignore */ }
+        });
+    }
+
+    if (!findKindTransceiver('audio')) {
+        try { S.pc.addTransceiver('audio', { direction: 'recvonly' }); } catch (eAudio) { /* ignore */ }
+    }
+    if (!findKindTransceiver('video')) {
+        try {
+            var videoTx = wantVideo
+                ? S.pc.addTransceiver(videoTracks[0], { direction: 'sendrecv', streams: [S.localStream] })
+                : S.pc.addTransceiver('video', { direction: videoEnabled ? 'sendrecv' : 'recvonly' });
+            if (videoTx && videoTx.sender) S.videoSender = videoTx.sender;
+        } catch (eVideo) { /* ignore */ }
+    }
+
+    S.pc.getTransceivers().forEach(function (tx) {
+        var kind = transceiverKind(tx);
+        if (kind === 'audio') {
+            try { tx.direction = audioTracks.length ? 'sendrecv' : 'recvonly'; } catch (eA) { /* ignore */ }
+        }
+        if (kind === 'video') {
+            try { tx.direction = wantVideo ? 'sendrecv' : 'recvonly'; } catch (eV) { /* ignore */ }
+            if (wantVideo && tx.sender) S.videoSender = tx.sender;
+        }
+    });
+}
+
+async function applyRemoteOfferIfReady() {
+    if (!S.pc || S.role === 'caller') return false;
+    if (!S.currentCall || !S.currentCall._remoteOffer) return false;
+    if (S.pc.currentRemoteDescription) return true;
+    if (S.pc.signalingState !== 'stable') return false;
+    var offer = plainDescription(S.currentCall._remoteOffer, 'offer');
+    if (!offer || !offer.sdp) return false;
+    await S.pc.setRemoteDescription(new RTCSessionDescription(offer));
+    return true;
 }
 
 function scheduleRemoteVideoUiRefresh() {
@@ -71,9 +176,12 @@ function unlockRemotePlayback() {
     api.ensureRemoteAudioPlaying();
     if (S.els.remoteVideo) {
         try {
-            S.els.remoteVideo.muted = false;
-            S.els.remoteVideo.removeAttribute('muted');
+            // Remote audio plays on the audio element. The video element stays
+            // muted so autoplay can paint the other participant's camera.
+            S.els.remoteVideo.muted = true;
+            S.els.remoteVideo.setAttribute('muted', '');
             S.els.remoteVideo.playsInline = true;
+            S.els.remoteVideo.setAttribute('playsinline', '');
             var vp = S.els.remoteVideo.play();
             if (vp && typeof vp.then === 'function') {
                 vp.then(function () { api.showTapToPlay(false); }).catch(function () { api.showTapToPlay(true); });
@@ -164,6 +272,7 @@ function applyRemoteVideoMetrics() {
     S.els.remoteVideo.classList.toggle('is-remote-landscape', !portrait);
     S.els.inCall.classList.toggle('is-remote-portrait', portrait);
     S.els.inCall.classList.toggle('is-remote-landscape', !portrait);
+    api.updateCameraUi();
 }
 
 function refreshRemoteFromReceivers() {
@@ -179,21 +288,37 @@ function refreshRemoteFromReceivers() {
     if (S.remoteStream) api.bindRemoteMedia(S.remoteStream);
 }
 
+function remoteVideoSignature(stream) {
+    if (!stream || typeof stream.getVideoTracks !== 'function') return '';
+    return stream.getVideoTracks().map(function (track) {
+        if (!track || track.readyState === 'ended') return '';
+        return track.id + ':' + track.readyState;
+    }).filter(Boolean).join('|');
+}
+
 function bindRemoteMedia(stream) {
     if (!stream) return;
     if (S.els.remoteVideo) {
-        S.els.remoteVideo.muted = false;
-        S.els.remoteVideo.removeAttribute('muted');
+        var videoTracks = typeof stream.getVideoTracks === 'function'
+            ? stream.getVideoTracks().filter(function (track) {
+                return track && track.readyState !== 'ended';
+            })
+            : [];
+        var sig = remoteVideoSignature(stream);
+        S.els.remoteVideo.muted = true;
+        S.els.remoteVideo.setAttribute('muted', '');
         S.els.remoteVideo.playsInline = true;
+        S.els.remoteVideo.setAttribute('playsinline', '');
         S.els.remoteVideo.autoplay = true;
         S.els.remoteVideo.style.visibility = '';
-        if (S.els.remoteVideo.srcObject !== stream) {
-            S.els.remoteVideo.srcObject = stream;
+        if (videoTracks.length && S._remoteVideoSig !== sig) {
+            S._remoteVideoSig = sig;
+            S.els.remoteVideo.srcObject = new MediaStream(videoTracks);
         }
         try {
             var vp = S.els.remoteVideo.play();
-            if (vp && typeof vp.catch === 'function') {
-                vp.catch(function () { api.showTapToPlay(true); });
+            if (vp && typeof vp.then === 'function') {
+                vp.then(function () { api.showTapToPlay(false); }).catch(function () { api.showTapToPlay(true); });
             }
         } catch (e) {
             api.showTapToPlay(true);
@@ -230,6 +355,8 @@ function bindRemoteMedia(stream) {
 async function ensurePeerConnection(videoEnabled) {
     if (S.pc) {
         api.attachLocalVideo();
+        try { await api.applyRemoteOfferIfReady(); } catch (eOffer) { /* answer path retries */ }
+        await api.installLocalSenders(!!videoEnabled);
         if (videoEnabled && S.localStream && !api.findLiveVideoTrack()) {
             try { await api.applyCameraState(true); } catch (eCam) { /* keep audio call */ }
         }
@@ -332,27 +459,8 @@ async function ensurePeerConnection(videoEnabled) {
     };
 
     S.videoSender = null;
-    S.localStream.getTracks().forEach(function (track) {
-        var sender = S.pc.addTrack(track, S.localStream);
-        if (track.kind === 'video') S.videoSender = sender;
-    });
-    if (!S.videoSender) {
-        try {
-            var videoTx = S.pc.addTransceiver('video', {
-                direction: videoEnabled ? 'sendrecv' : 'recvonly'
-            });
-            S.videoSender = videoTx.sender;
-        } catch (eVid) { /* ignore */ }
-    }
-    var kinds = {};
-    S.pc.getTransceivers().forEach(function (t) {
-        var kind = (t.receiver && t.receiver.track && t.receiver.track.kind)
-            || (t.sender && t.sender.track && t.sender.track.kind);
-        if (kind) kinds[kind] = true;
-    });
-    if (!kinds.audio) {
-        try { S.pc.addTransceiver('audio', { direction: 'recvonly' }); } catch (e2) { /* ignore */ }
-    }
+    try { await api.applyRemoteOfferIfReady(); } catch (eOffer) { /* answer path retries */ }
+    await api.installLocalSenders(!!videoEnabled);
     // FIX BUG #1: Attach local video with all required attributes for immediate preview
     if (S.els.localVideo) {
         S.els.localVideo.srcObject = S.localStream;
@@ -390,6 +498,9 @@ async function ensurePeerConnection(videoEnabled) {
 
 api.findVideoSender = findVideoSender;
 api.hasLiveRemoteVideo = hasLiveRemoteVideo;
+api.installLocalSenders = installLocalSenders;
+api.applyRemoteOfferIfReady = applyRemoteOfferIfReady;
+api.plainDescription = plainDescription;
 api.scheduleRemoteVideoUiRefresh = scheduleRemoteVideoUiRefresh;
 api.showTapToPlay = showTapToPlay;
 api.unlockRemotePlayback = unlockRemotePlayback;

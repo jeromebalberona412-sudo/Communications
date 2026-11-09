@@ -336,7 +336,7 @@ function keepActiveCallVisible(statusText) {
     S.els.inCall.removeAttribute('hidden');
     document.documentElement.classList.add('comms-in-call');
     document.body.classList.add('comms-in-call');
-    if (statusText) api.setCallStatus(statusText);
+    if (statusText != null) api.setCallStatus(statusText);
     if (S.els.timer) {
         S.els.timer.hidden = !S.callStartedAt;
         if (S.callStartedAt) api.renderTimer();
@@ -366,7 +366,7 @@ function showInCall(call, statusText) {
         S.els.peerName.textContent = (call.peer && call.peer.name) || 'Call';
     }
     api.setCallPeerAvatar(call);
-    api.setCallStatus(statusText || (S.callConnected ? 'Connected' : 'Calling...'));
+    api.setCallStatus(statusText != null ? statusText : (S.callConnected ? 'Connected' : 'Calling...'));
     // The timer is never reset by a UI update: it is only initialised when
     // the call actually connects.
     if (S.els.timer) {

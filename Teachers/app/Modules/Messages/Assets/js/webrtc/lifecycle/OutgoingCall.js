@@ -237,10 +237,7 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
             api.attachLocalVideo();
             api.syncCameraUi();
         }
-        var offer = await S.pc.createOffer({
-            offerToReceiveAudio: true,
-            offerToReceiveVideo: !!S.wantsVideo
-        });
+        var offer = await S.pc.createOffer();
         await S.pc.setLocalDescription(offer);
         await api.signalPeer({
             type: 'offer',

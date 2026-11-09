@@ -200,16 +200,22 @@
         if (loading) return;
         var routes = bootRoutes();
         if (!routes.conversations) return;
-        loading = true;
-        if (listEl && !allItems.length) {
-            listEl.innerHTML = '<p class="comms-chat-fs-loading">Loading chats…</p>';
+        if (!allItems.length && window.Comms && typeof window.Comms.readInboxCache === 'function') {
+            var cachedInbox = window.Comms.readInboxCache();
+            if (Array.isArray(cachedInbox) && cachedInbox.length) {
+                allItems = cachedInbox;
+                renderList();
+            }
         }
+        loading = true;
         window.Comms.api(routes.conversations, { dedupe: true }).then(function (data) {
             allItems = (data && data.conversations) || [];
             applyUnreadFromList(allItems);
             renderList();
         }).catch(function () {
-            if (listEl) listEl.innerHTML = '<p class="comms-chat-fs-loading">Unable to load chats.</p>';
+            if (listEl && !allItems.length) {
+                listEl.innerHTML = '<p class="comms-chat-fs-loading">Unable to load chats.</p>';
+            }
         }).finally(function () {
             loading = false;
         });

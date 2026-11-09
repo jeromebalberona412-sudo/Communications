@@ -149,15 +149,18 @@ function openConversation(id, opts) {
         api.updatePeerHeader(state.activeConversation);
     }
 
-    // Show cached messages immediately so the thread appears instantly
+    // Show cached messages immediately. With no cache, clear the previous
+    // thread so this conversation is not hidden behind another chat or a loader.
     var cached = loadMsgCache(id);
-    if (cached && Array.isArray(cached.messages) && cached.messages.length) {
+    if (cached && Array.isArray(cached.messages)) {
         state.messages = cached.messages;
         if (Array.isArray(cached.reactionEmojis) && cached.reactionEmojis.length) {
             state.reactionEmojis = cached.reactionEmojis;
         }
-        api.renderMessages({ stickBottom: true });
+    } else {
+        state.messages = [];
     }
+    api.renderMessages({ stickBottom: true });
 
     // Load conversation header and fresh messages in parallel
     var convPromise = Comms.api(Comms.route(routes.showConversation, id));

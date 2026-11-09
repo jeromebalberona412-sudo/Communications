@@ -130,6 +130,21 @@ function signalPeer(payload) {
         return Promise.resolve();
     }
     
+    if (payload.sdp && typeof payload.sdp === 'object') {
+        payload.sdp = {
+            type: payload.sdp.type || '',
+            sdp: payload.sdp.sdp || ''
+        };
+    }
+    if (payload.candidate && typeof payload.candidate === 'object') {
+        var ice = payload.candidate;
+        payload.candidate = {
+            candidate: ice.candidate || '',
+            sdpMid: ice.sdpMid == null ? null : ice.sdpMid,
+            sdpMLineIndex: ice.sdpMLineIndex == null ? null : ice.sdpMLineIndex,
+            usernameFragment: ice.usernameFragment || null
+        };
+    }
     var me = api.myIdentity();
     payload.from_user_id = me.id;
     payload.from_user_type = me.type;

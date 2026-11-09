@@ -43,7 +43,7 @@ function updateCameraUi() {
         S.els.inCall.classList.toggle('is-connected', !!S.callConnected);
         S.els.inCall.classList.toggle('has-remote-video', remoteVideoLive && !!S.remoteCameraEnabled);
         S.els.inCall.classList.toggle('is-video-call', isVideoCall);
-        S.els.inCall.classList.toggle('is-remote-camera-off', !S.remoteCameraEnabled);
+        S.els.inCall.classList.toggle('is-remote-camera-off', S.remoteCameraEnabled === false);
         S.els.inCall.classList.toggle('is-remote-mic-off', !S.remoteMicEnabled);
     }
     if (S.els.callCenter) {
@@ -343,7 +343,7 @@ function syncCameraUi() {
         S.els.remoteVideoOff.setAttribute('aria-hidden', showRemotePlaceholder ? 'false' : 'true');
         var remoteLabel = S.els.remoteVideoOff.querySelector('.comms-video-off-label');
         if (remoteLabel) {
-            remoteLabel.textContent = cameraOff ? 'Camera Off' : 'Connecting';
+            remoteLabel.textContent = cameraOff ? 'Camera Off' : '';
         }
     }
     if (S.els.inCall) {
@@ -362,10 +362,7 @@ async function renegotiateForCamera() {
     if (S.pc.signalingState !== 'stable') return;
     S.negotiating = true;
     try {
-        var offer = await S.pc.createOffer({
-            offerToReceiveAudio: true,
-            offerToReceiveVideo: true
-        });
+        var offer = await S.pc.createOffer();
         await S.pc.setLocalDescription(offer);
         await api.signalPeer({
             type: 'offer',

@@ -49,10 +49,16 @@ async function tryCompleteCalleeAnswer() {
         if (S.pc.signalingState === 'have-local-offer') {
             try { await S.pc.setLocalDescription({ type: 'rollback' }); } catch (rbErr) { /* ignore */ }
         }
-        if (S.pc.signalingState === 'stable' && !S.pc.currentRemoteDescription) {
-            await S.pc.setRemoteDescription(S.currentCall._remoteOffer);
-        }
         var call = S.currentCall;
+        if (S.pc.signalingState === 'stable' && !S.pc.currentRemoteDescription) {
+            var remoteOffer = api.plainDescription
+                ? api.plainDescription(S.currentCall._remoteOffer, 'offer')
+                : S.currentCall._remoteOffer;
+            await S.pc.setRemoteDescription(new RTCSessionDescription(remoteOffer));
+        }
+        if (typeof api.installLocalSenders === 'function') {
+            await api.installLocalSenders(!!S.wantsVideo || (call && call.call_type === 'video'));
+        }
         var answerSdp = S.pc.localDescription;
         if (S.pc.signalingState === 'have-remote-offer') {
             answerSdp = await S.pc.createAnswer();
@@ -76,11 +82,17 @@ async function tryCompleteCalleeAnswer() {
             try { await S.pc.addIceCandidate(S.iceQueue.shift()); } catch (iceErr) { /* stale candidate */ }
         }
         api.attachLocalVideo();
+        api.refreshRemoteFromReceivers();
         api.signalMediaState();
-        api.setCallStatus(S.callConnected ? 'Connected' : 'Connecting...');
-        api.keepActiveCallVisible(S.callConnected ? 'Connected' : 'Connecting...');
+        if (S.callConnected) {
+            api.setCallStatus('Connected');
+            api.keepActiveCallVisible('Connected');
+        } else {
+            api.keepActiveCallVisible('');
+        }
         return true;
     } catch (err) {
+        console.warn('Callee answer failed', err);
         return false;
     } finally {
         S.negotiating = false;
@@ -140,10 +152,10 @@ async function acceptIncoming() {
     api.stopCallTimer();
     api.clearRingTimeout();
     api.stopRingtone();
-    api.setIncomingActionState('answering');
     api.hideIncoming();
     S.wantsVideo = call.call_type === 'video';
-    api.showInCall(call, 'Connecting...');
+    S.lifecycle = 'accepted';
+    api.showInCall(call, '');
     api.updateCameraUi();
     api.unlockRemotePlayback();
 
@@ -184,17 +196,22 @@ async function acceptIncoming() {
         if (S.currentCall && S.currentCall._remoteOffer) {
             call._remoteOffer = S.currentCall._remoteOffer;
         }
-        api.keepActiveCallVisible('Connecting...');
+        api.keepActiveCallVisible('');
         api.startCallHeartbeat();
-        if (!S.currentCall._remoteOffer) {
-            await api.waitForRemoteOffer(12000);
+        var applied = false;
+        var attempt;
+        for (attempt = 0; attempt < 6 && alive(); attempt += 1) {
+            if (!S.currentCall || !S.currentCall._remoteOffer) {
+                await api.waitForRemoteOffer(attempt === 0 ? 8000 : 1500);
+            }
+            if (!alive()) return;
+            applied = await api.tryCompleteCalleeAnswer();
+            if (applied) break;
+            await new Promise(function (resolve) { setTimeout(resolve, 250); });
         }
         if (!alive()) return;
-        var applied = await api.tryCompleteCalleeAnswer();
-        if (!alive()) return;
         if (!applied) {
-            api.setCallStatus('Waiting for the other person...');
-            api.keepActiveCallVisible('Waiting for the other person...');
+            api.keepActiveCallVisible('');
         }
     } catch (err) {
         if (!alive()) return;
