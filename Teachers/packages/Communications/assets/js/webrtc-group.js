@@ -536,6 +536,8 @@ import {
                 return;
             }
             meshInvitees = Array.isArray(meshCall.invitees) ? meshCall.invitees.slice() : [];
+            // CRITICAL FIX: Get local media BEFORE showing UI so meshCameraOn is set correctly
+            await ensureLocalMedia();
             showGroupUi(meshCall, 'Ringing group…');
             await signal({
                 type: 'group-invite',
@@ -545,7 +547,6 @@ import {
                 caller_type: meshCall.caller_type,
                 invitees: meshInvitees
             });
-            await ensureLocalMedia();
             ringTimer = setTimeout(function () {
                 if (!meshConnected && meshRole === 'caller') {
                     leaveGroupCall('missed');
@@ -584,8 +585,9 @@ import {
             invitees: payload.invitees || []
         };
         meshInvitees = Array.isArray(meshCall.invitees) ? meshCall.invitees.slice() : [];
-        showGroupUi(meshCall, 'Connecting…');
+        // CRITICAL FIX: Get local media BEFORE showing UI so meshCameraOn is set correctly
         await ensureLocalMedia();
+        showGroupUi(meshCall, 'Connecting…');
         await updateStatus('accepted');
         await signal({
             type: 'group-join',
@@ -681,6 +683,23 @@ import {
             return true;
         }
 
+        // CRITICAL FIX: Handle camera state changes from remote participants
+        if (payload.type === 'camera-state') {
+            if (!meshCall || Number(payload.call_id) !== Number(meshCall.id)) return true;
+            var key = peerKey(payload.from_user_id, payload.from_user_type);
+            var tile = document.getElementById('commsRemoteGrid')?.querySelector('[data-peer-key="' + key.replace(/"/g, '') + '"]');
+            if (tile) {
+                var video = tile.querySelector('video');
+                if (video) {
+                    // Show/hide video based on camera state
+                    video.style.display = payload.enabled ? '' : 'none';
+                }
+                // Optionally show camera off indicator
+                tile.classList.toggle('camera-off', !payload.enabled);
+            }
+            return true;
+        }
+
         if (payload.type === 'group-leave' || payload.type === 'hangup') {
             if (!meshCall || Number(payload.call_id) !== Number(meshCall.id)) return true;
             var key = peerKey(payload.from_user_id, payload.from_user_type);
@@ -750,6 +769,8 @@ import {
             });
             meshCameraOn = false;
             syncMeshCameraUi();
+            // CRITICAL FIX: Notify other participants about camera OFF
+            await signal({ type: 'camera-state', enabled: false });
             return;
         }
 
@@ -806,6 +827,8 @@ import {
 
         meshCameraOn = true;
         syncMeshCameraUi();
+        // CRITICAL FIX: Notify other participants about camera ON
+        await signal({ type: 'camera-state', enabled: true });
     }
 
     /**
