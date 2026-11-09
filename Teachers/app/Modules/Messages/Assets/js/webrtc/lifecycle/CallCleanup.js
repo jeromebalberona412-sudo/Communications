@@ -28,6 +28,11 @@ async function cleanupMediaOnly() {
     S.callTimer = null;
     S.lastCallDurationMs = api.callElapsedMs();
     S.callStartedAt = null;
+    if (S.els.timer) {
+        S.els.timer.textContent = '00:00';
+        S.els.timer.hidden = true;
+        S.els.timer.setAttribute('hidden', '');
+    }
     
     S.cameraEnabled = false;
     S.wantsVideo = false;
@@ -98,6 +103,8 @@ async function cleanupMediaOnly() {
     S.iceQueue = [];
     
     S.remoteStream = null;
+    S.remoteDisplayStream = null;
+    S._remoteVideoSig = '';
     S.negotiating = false;
     if (S.els.remoteVideo) {
         S.els.remoteVideo.srcObject = null;

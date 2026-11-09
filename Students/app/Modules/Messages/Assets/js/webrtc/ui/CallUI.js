@@ -304,11 +304,7 @@ function redialLastCall() {
 
 function setCallStatus(text) {
     if (S.els.callStatus) S.els.callStatus.textContent = text || '';
-    if (S.els.timer) {
-        S.els.timer.hidden = !S.callStartedAt;
-        if (S.callStartedAt) api.renderTimer();
-        else S.els.timer.textContent = '00:00';
-    }
+    if (typeof api.syncCallTimerVisibility === 'function') api.syncCallTimerVisibility();
 }
 
 function remountCallEls() {
@@ -337,11 +333,7 @@ function keepActiveCallVisible(statusText) {
     document.documentElement.classList.add('comms-in-call');
     document.body.classList.add('comms-in-call');
     if (statusText != null) api.setCallStatus(statusText);
-    if (S.els.timer) {
-        S.els.timer.hidden = !S.callStartedAt;
-        if (S.callStartedAt) api.renderTimer();
-        else S.els.timer.textContent = '00:00';
-    }
+    if (typeof api.syncCallTimerVisibility === 'function') api.syncCallTimerVisibility();
     api.attachLocalVideo();
     if (S.remoteStream) api.bindRemoteMedia(S.remoteStream);
 }
@@ -367,13 +359,7 @@ function showInCall(call, statusText) {
     }
     api.setCallPeerAvatar(call);
     api.setCallStatus(statusText != null ? statusText : (S.callConnected ? 'Connected' : 'Calling...'));
-    // The timer is never reset by a UI update: it is only initialised when
-    // the call actually connects.
-    if (S.els.timer) {
-        S.els.timer.hidden = !S.callStartedAt;
-        if (S.callStartedAt) api.renderTimer();
-        else S.els.timer.textContent = '00:00';
-    }
+    if (typeof api.syncCallTimerVisibility === 'function') api.syncCallTimerVisibility();
     api.setMuteUi(false);
     api.attachLocalVideo();
     if (S.remoteStream) api.bindRemoteMedia(S.remoteStream);

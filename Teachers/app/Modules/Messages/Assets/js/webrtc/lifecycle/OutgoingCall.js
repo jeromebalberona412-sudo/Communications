@@ -166,6 +166,7 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
     api.showInCall({ peer: earlyPeer, call_type: callType }, 'Calling...');
     
     var r = api.routes();
+    api.startRingtone('outgoing');
     try {
         api.assertMediaReady();
         if (!window.CommsRealtime || !window.CommsRealtime.enabled) {

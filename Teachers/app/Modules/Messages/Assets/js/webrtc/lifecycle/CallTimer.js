@@ -49,7 +49,29 @@ function stopCallTimer() {
     S.timerCallId = null;
     S.callStartedAt = null;
     S.lastCallDurationMs = 0;
-    if (S.els.timer) S.els.timer.textContent = '00:00';
+    if (S.els.timer) {
+        S.els.timer.textContent = '00:00';
+        if (!S.callConnected) {
+            S.els.timer.hidden = true;
+            S.els.timer.setAttribute('hidden', '');
+        }
+    }
+}
+
+function syncCallTimerVisibility() {
+    if (!S.els.timer) S.els.timer = document.getElementById('commsCallTimer');
+    if (!S.els.timer) return;
+    if (S.callConnected && S.callStartedAt) {
+        S.els.timer.hidden = false;
+        S.els.timer.removeAttribute('hidden');
+        if (S.els.inCall) S.els.inCall.classList.add('is-connected');
+        api.renderTimer();
+        return;
+    }
+    if (!S.callConnected) {
+        S.els.timer.hidden = true;
+        S.els.timer.setAttribute('hidden', '');
+    }
 }
 
 function formatClockTime(iso) {
@@ -166,7 +188,7 @@ function maybeStartConnectedTimer() {
         ts = new Date().toISOString();
     }
     api.startTimer(ts, S.currentCall && S.currentCall.server_time);
-    if (S.els.timer) S.els.timer.hidden = false;
+    api.syncCallTimerVisibility();
     api.startCallHeartbeat();
 }
 
@@ -205,6 +227,7 @@ api.authoritativeDurationMs = authoritativeDurationMs;
 api.formatTimer = formatTimer;
 api.formatDuration = formatDuration;
 api.startTimer = startTimer;
+api.syncCallTimerVisibility = syncCallTimerVisibility;
 api.maybeStartConnectedTimer = maybeStartConnectedTimer;
 api.applyServerClock = applyServerClock;
 api.callElapsedMs = callElapsedMs;

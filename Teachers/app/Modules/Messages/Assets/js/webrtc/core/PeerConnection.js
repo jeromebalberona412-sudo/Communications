@@ -37,11 +37,16 @@ function findVideoSender() {
 
 function hasLiveRemoteVideo() {
     if (S.els.remoteVideo && Number(S.els.remoteVideo.videoWidth || 0) > 0) return true;
-    var stream = S.remoteStream || (S.els.remoteVideo && S.els.remoteVideo.srcObject);
-    if (!stream || typeof stream.getVideoTracks !== 'function') return false;
-    return stream.getVideoTracks().some(function (track) {
-        return !!(track && track.readyState === 'live' && track.muted !== true);
-    });
+    var streams = [S.remoteDisplayStream, S.remoteStream, S.els.remoteVideo && S.els.remoteVideo.srcObject];
+    var i;
+    for (i = 0; i < streams.length; i += 1) {
+        var stream = streams[i];
+        if (!stream || typeof stream.getVideoTracks !== 'function') continue;
+        if (stream.getVideoTracks().some(function (track) {
+            return !!(track && track.readyState === 'live');
+        })) return true;
+    }
+    return false;
 }
 
 function transceiverKind(transceiver) {
@@ -127,12 +132,12 @@ async function installLocalSenders(videoEnabled) {
 
     S.pc.getTransceivers().forEach(function (tx) {
         var kind = transceiverKind(tx);
-        if (kind === 'audio') {
-            try { tx.direction = audioTracks.length ? 'sendrecv' : 'recvonly'; } catch (eA) { /* ignore */ }
+        if (kind === 'audio' && audioTracks.length) {
+            try { tx.direction = 'sendrecv'; } catch (eA) { /* ignore */ }
         }
-        if (kind === 'video') {
-            try { tx.direction = wantVideo ? 'sendrecv' : 'recvonly'; } catch (eV) { /* ignore */ }
-            if (wantVideo && tx.sender) S.videoSender = tx.sender;
+        if (kind === 'video' && wantVideo) {
+            try { tx.direction = 'sendrecv'; } catch (eV) { /* ignore */ }
+            if (tx.sender) S.videoSender = tx.sender;
         }
     });
 }
@@ -298,14 +303,21 @@ function remoteVideoSignature(stream) {
 
 function bindRemoteMedia(stream) {
     if (!stream) return;
+    var display = S.remoteDisplayStream || stream;
     if (S.els.remoteVideo) {
-        var videoTracks = typeof stream.getVideoTracks === 'function'
-            ? stream.getVideoTracks().filter(function (track) {
+        var videoSource = (display && typeof display.getVideoTracks === 'function' && display.getVideoTracks().some(function (track) {
+            return track && track.readyState !== 'ended';
+        })) ? display : stream;
+        var videoTracks = typeof videoSource.getVideoTracks === 'function'
+            ? videoSource.getVideoTracks().filter(function (track) {
                 return track && track.readyState !== 'ended';
             })
             : [];
-        var sig = remoteVideoSignature(stream);
+        var sig = remoteVideoSignature(videoSource);
+        // Mute only this element so autoplay can paint the picture.
+        // Remote speech stays on the separate audio element.
         S.els.remoteVideo.muted = true;
+        S.els.remoteVideo.defaultMuted = true;
         S.els.remoteVideo.setAttribute('muted', '');
         S.els.remoteVideo.playsInline = true;
         S.els.remoteVideo.setAttribute('playsinline', '');
@@ -313,7 +325,10 @@ function bindRemoteMedia(stream) {
         S.els.remoteVideo.style.visibility = '';
         if (videoTracks.length && S._remoteVideoSig !== sig) {
             S._remoteVideoSig = sig;
-            S.els.remoteVideo.srcObject = new MediaStream(videoTracks);
+            var sameIds = videoSource.getVideoTracks().every(function (track) {
+                return videoTracks.some(function (kept) { return kept.id === track.id; });
+            });
+            S.els.remoteVideo.srcObject = sameIds ? videoSource : new MediaStream(videoTracks);
         }
         try {
             var vp = S.els.remoteVideo.play();
@@ -330,8 +345,11 @@ function bindRemoteMedia(stream) {
         }
         api.applyRemoteVideoMetrics();
     }
-    if (S.els.remoteAudio) {
-        var audioTracks = typeof stream.getAudioTracks === 'function' ? stream.getAudioTracks() : [];
+    var audioSource = (stream && typeof stream.getAudioTracks === 'function' && stream.getAudioTracks().length)
+        ? stream
+        : S.remoteStream;
+    if (S.els.remoteAudio && audioSource && typeof audioSource.getAudioTracks === 'function' && audioSource.getAudioTracks().length) {
+        var audioTracks = audioSource.getAudioTracks();
         audioTracks.forEach(function (t) {
             try { t.enabled = true; } catch (err) { /* ignore */ }
         });
@@ -341,8 +359,8 @@ function bindRemoteMedia(stream) {
         S.els.remoteAudio.autoplay = true;
         S.els.remoteAudio.setAttribute('playsinline', '');
         // Reuse the inbound stream when possible so track timing stays natural.
-        var nextAudio = audioTracks.length === (stream.getTracks ? stream.getTracks().length : -1)
-            ? stream
+        var nextAudio = audioTracks.length === (audioSource.getTracks ? audioSource.getTracks().length : -1)
+            ? audioSource
             : new MediaStream(audioTracks);
         if (S.els.remoteAudio.srcObject !== nextAudio) {
             S.els.remoteAudio.srcObject = nextAudio;
@@ -385,12 +403,17 @@ async function ensurePeerConnection(videoEnabled) {
         });
     };
     S.pc.ontrack = function (ev) {
-        var merged = api.mergeRemoteTrack(
-            ev.track,
-            ev.streams && ev.streams[0] ? ev.streams[0] : null
-        );
-        // Immediately bind remote media to display video on first frame arrival (REVIEW FIX #1)
-        api.bindRemoteMedia(merged);
+        var track = ev.track;
+        if (!track) return;
+        if (S.localStream && S.localStream.getTracks().some(function (local) {
+            return local && local.id === track.id;
+        })) return;
+        var inbound = ev.streams && ev.streams[0] ? ev.streams[0] : null;
+        if (track.kind === 'video' && inbound && typeof inbound.getVideoTracks === 'function' && inbound.getVideoTracks().length) {
+            S.remoteDisplayStream = inbound;
+        }
+        var merged = api.mergeRemoteTrack(track, inbound);
+        api.bindRemoteMedia(S.remoteDisplayStream || merged);
         api.unlockRemotePlayback();
         api.ensureRemoteAudioPlaying();
         if (ev.track && ev.track.kind === 'video') {

@@ -73,6 +73,7 @@ export function exposePublicApi() {
         __showEnded: function () { return api.showCallEnded.apply(null, arguments); },
         __startTimer: function () { return api.startTimer.apply(null, arguments); },
         __stopCallTimer: function () { return api.stopCallTimer.apply(null, arguments); },
+        primeOutgoingRingtone: function () { return api.primeOutgoingRingtone(); },
         __startRingtone: function () { return api.startRingtone.apply(null, arguments); },
         __stopRingtone: function () { return api.stopRingtone.apply(null, arguments); }
     };

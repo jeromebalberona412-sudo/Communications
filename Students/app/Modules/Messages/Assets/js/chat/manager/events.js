@@ -507,11 +507,31 @@ els.backBtn.addEventListener('click', function () {
     api.renderConversations(els.convFilter.value);
 });
 
+function unlockOutgoingRingGesture() {
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return;
+    try {
+        if (!window.__commsRingCtx) window.__commsRingCtx = new AC();
+        var ctx = window.__commsRingCtx;
+        if (ctx.state === 'suspended') ctx.resume();
+        if (!ctx._commsUnlocked) {
+            var buffer = ctx.createBuffer(1, 1, 22050);
+            var src = ctx.createBufferSource();
+            src.buffer = buffer;
+            src.connect(ctx.destination);
+            src.start(0);
+            ctx._commsUnlocked = true;
+        }
+    } catch (err) { /* autoplay unlock is best-effort */ }
+}
+
 els.voiceBtn.addEventListener('click', function () {
+    unlockOutgoingRingGesture();
     api.beginGroupOrDirectCall('voice');
 });
 
 els.videoBtn.addEventListener('click', function () {
+    unlockOutgoingRingGesture();
     api.beginGroupOrDirectCall('video');
 });
 

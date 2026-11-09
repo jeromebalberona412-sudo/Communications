@@ -40,11 +40,25 @@ function bindRingtoneUnlock() {
 
 function unlockCallAudio() {
     var AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!S.ringCtx && window.__commsRingCtx) S.ringCtx = window.__commsRingCtx;
     if (AudioCtx && !S.ringCtx) {
         try { S.ringCtx = new AudioCtx(); } catch (e1) { /* ignore */ }
     }
+    if (S.ringCtx) window.__commsRingCtx = S.ringCtx;
     if (S.ringCtx && S.ringCtx.state === 'suspended') {
         S.ringCtx.resume().catch(function () { /* ignore */ });
+    }
+    // A one-sample buffer started from the call-button gesture unlocks later
+    // ringback on mobile browsers that ignore a bare resume().
+    if (S.ringCtx && !S.ringCtx._commsUnlocked) {
+        try {
+            var buffer = S.ringCtx.createBuffer(1, 1, 22050);
+            var src = S.ringCtx.createBufferSource();
+            src.buffer = buffer;
+            src.connect(S.ringCtx.destination);
+            src.start(0);
+            S.ringCtx._commsUnlocked = true;
+        } catch (eBuf) { /* ignore */ }
     }
     if (S.ringtonePlaying && S.ringAudio) {
         try {
@@ -197,13 +211,23 @@ function playToneBurst(ctx, freqs, when, duration, volume) {
 
 function startOscillatorRing(incoming) {
     var AudioCtx = window.AudioContext || window.webkitAudioContext;
-    if (!AudioCtx) return;
+    if (!S.ringCtx && window.__commsRingCtx) S.ringCtx = window.__commsRingCtx;
     if (!S.ringCtx) {
+        if (!AudioCtx) return;
         try { S.ringCtx = new AudioCtx(); } catch (e) { return; }
     }
+    window.__commsRingCtx = S.ringCtx;
     if (S.ringCtx.state === 'suspended') {
         S.ringCtx.resume().catch(function () { /* ignore */ });
     }
+    if (S.ringTimer) {
+        clearInterval(S.ringTimer);
+        S.ringTimer = null;
+    }
+    S.ringOscillators.forEach(function (osc) {
+        try { osc.stop(); } catch (eStop) { /* ignore */ }
+    });
+    S.ringOscillators = [];
     function scheduleCycle() {
         if (!S.ringtonePlaying || !S.ringCtx) return;
         var now = S.ringCtx.currentTime;
@@ -211,15 +235,16 @@ function startOscillatorRing(incoming) {
             api.playToneBurst(S.ringCtx, [440, 480], now, 0.42, 0.24);
             api.playToneBurst(S.ringCtx, [440, 480], now + 0.52, 0.42, 0.24);
         } else {
-            api.playToneBurst(S.ringCtx, [440, 480], now, 1.15, 0.18);
+            api.playToneBurst(S.ringCtx, [440], now, 1.05, 0.2);
+            api.playToneBurst(S.ringCtx, [480], now + 1.05, 1.05, 0.2);
         }
     }
-    if (S.ringTimer) {
-        clearInterval(S.ringTimer);
-        S.ringTimer = null;
-    }
     scheduleCycle();
-    S.ringTimer = setInterval(scheduleCycle, incoming ? 2800 : 3600);
+    S.ringTimer = setInterval(scheduleCycle, incoming ? 2800 : 4000);
+}
+
+function outgoingRingAudible() {
+    return !!(S.ringtonePlaying && S.ringMode === 'outgoing' && S.ringTimer && S.ringOscillators.length);
 }
 
 function startRingtone(mode, callId) {
@@ -232,12 +257,13 @@ function startRingtone(mode, callId) {
     if (incoming && (S.startingCall || S.callConnected) && S.currentCall && Number(S.currentCall.id) === id) {
         return;
     }
-    if (S.ringtonePlaying && S.ringingCallId != null && id && Number(S.ringingCallId) === id) {
-        return;
-    }
-    if (S.ringtonePlaying && S.ringMode === mode) {
+    if (!incoming && outgoingRingAudible() && (!id || !S.ringingCallId || Number(S.ringingCallId) === Number(id))) {
         if (id) S.ringingCallId = id;
         return;
+    }
+    if (S.ringtonePlaying && S.ringingCallId != null && id && Number(S.ringingCallId) === id && S.ringMode === mode) {
+        if (incoming && S.ringAudio && !S.ringAudio.paused) return;
+        if (!incoming && outgoingRingAudible()) return;
     }
     if (S.ringtonePlaying) {
         api.stopRingtone();
@@ -245,6 +271,16 @@ function startRingtone(mode, callId) {
     S.ringtonePlaying = true;
     S.ringMode = mode;
     S.ringingCallId = id || null;
+    if (!incoming) {
+        // Ringback is a long two-tone, not the recipient's double-burst.
+        if (S.ringAudio) {
+            try { S.ringAudio.pause(); } catch (ePause) { /* ignore */ }
+        }
+        api.unlockCallAudio();
+        api.startOscillatorRing(false);
+        api.stopVibration();
+        return;
+    }
     api.ensureRingAudio();
 
     if (S.ringAudio) {
@@ -589,7 +625,15 @@ api.bindRingtoneUnlock = bindRingtoneUnlock;
 api.unlockCallAudio = unlockCallAudio;
 api.ensureRingAudio = ensureRingAudio;
 api.makeRingtoneDataUri = makeRingtoneDataUri;
+function primeOutgoingRingtone() {
+    if (S.callConnected) return;
+    api.bindRingtoneUnlock();
+    api.unlockCallAudio();
+    api.startRingtone('outgoing');
+}
+
 api.stopRingtone = stopRingtone;
+api.primeOutgoingRingtone = primeOutgoingRingtone;
 api.stopVibration = stopVibration;
 api.startIncomingVibration = startIncomingVibration;
 api.playToneBurst = playToneBurst;

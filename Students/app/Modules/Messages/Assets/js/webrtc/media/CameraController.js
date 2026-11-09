@@ -52,6 +52,7 @@ function updateCameraUi() {
         S.els.callCenter.classList.toggle('is-compact', !!S.callConnected && remoteVideoLive);
     }
     api.syncLocalPipLayout();
+    if (typeof api.syncCallTimerVisibility === 'function') api.syncCallTimerVisibility();
 }
 
 /**

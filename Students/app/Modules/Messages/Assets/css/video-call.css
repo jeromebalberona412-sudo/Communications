@@ -209,9 +209,9 @@
     right: max(0.75rem, env(safe-area-inset-right, 0px));
     bottom: max(6.75rem, calc(env(safe-area-inset-bottom, 0px) + 5.75rem));
     top: auto;
-    width: min(32vw, 140px);
-    max-width: min(42vw, 220px);
-    aspect-ratio: 16 / 9;
+    width: min(34vw, 168px);
+    max-width: min(42vw, 240px);
+    aspect-ratio: 3 / 4;
     overflow: hidden;
     border-radius: 14px;
     border: 2px solid rgba(255, 255, 255, 0.4);
@@ -285,8 +285,17 @@
     box-shadow: none;
     transform: none;
 }
+@media (max-width: 900px) {
+    .comms-local-pip {
+        width: min(46vw, 210px);
+        max-width: min(52vw, 220px);
+        aspect-ratio: 3 / 4;
+        bottom: max(7.25rem, calc(env(safe-area-inset-bottom, 0px) + 6.25rem));
+    }
+}
 .comms-call-overlay.is-desktop-call .comms-local-pip {
     width: min(22vw, 240px);
+    aspect-ratio: 16 / 9;
     bottom: max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.5rem));
 }
 .comms-video-off-avatar {
@@ -378,15 +387,20 @@
 }
 @media (max-width: 414px) {
     .comms-local-pip {
-        width: min(38vw, 132px);
-        bottom: max(6.5rem, calc(env(safe-area-inset-bottom, 0px) + 5.5rem));
+        width: min(48vw, 200px);
+        max-width: 52vw;
+        aspect-ratio: 3 / 4;
+        bottom: max(7.5rem, calc(env(safe-area-inset-bottom, 0px) + 6.5rem));
     }
 }
 @media (orientation: landscape) and (max-height: 520px) {
     .comms-local-pip {
+        top: max(0.65rem, env(safe-area-inset-top, 0px));
         right: max(0.75rem, env(safe-area-inset-right, 0px));
-        bottom: max(5rem, calc(env(safe-area-inset-bottom, 0px) + 4.25rem));
-        width: min(22vw, 160px);
+        bottom: auto;
+        width: min(28vw, 180px);
+        max-width: 34vw;
+        aspect-ratio: 16 / 9;
     }
 }
 
@@ -479,8 +493,13 @@ body.comms-in-call {
 .comms-call-status,
 .comms-call-timer {
     margin: 0;
-    font-size: 0.72rem;
-    color: rgba(255, 255, 255, 0.82);
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #fff;
     font-variant-numeric: tabular-nums;
+}
+.comms-call-overlay.is-connected .comms-call-timer {
+    display: block !important;
+    visibility: visible !important;
 }
 

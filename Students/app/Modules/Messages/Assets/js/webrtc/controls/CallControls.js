@@ -57,6 +57,7 @@ export function bindCallControls() {
         }
         if (e.target && e.target.closest('#commsCallEndedRedial')) {
             e.preventDefault();
+            api.unlockCallAudio();
             api.redialLastCall();
             return;
         }
