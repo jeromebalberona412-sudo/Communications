@@ -449,6 +449,10 @@ import {
         if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
             window.CommsWebRTC.__stopCallTimer();
         }
+        // CRITICAL FIX: Stop ringtone on cleanup
+        if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
+            window.CommsWebRTC.__stopRingtone();
+        }
         if (ringTimer) {
             clearTimeout(ringTimer);
             ringTimer = null;
@@ -506,6 +510,10 @@ import {
             if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
                 window.CommsWebRTC.__stopCallTimer();
             }
+            // CRITICAL FIX: Start outgoing ringtone
+            if (window.CommsWebRTC && typeof window.CommsWebRTC.__startRingtone === 'function') {
+                window.CommsWebRTC.__startRingtone('outgoing');
+            }
             meshWantsVideo = callType === 'video';
             meshRole = 'caller';
             var r = routes();
@@ -557,6 +565,10 @@ import {
         // Stop any existing timer from previous calls (CRITICAL FIX #2)
         if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
             window.CommsWebRTC.__stopCallTimer();
+        }
+        // CRITICAL FIX: Stop incoming ringtone when accepting
+        if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
+            window.CommsWebRTC.__stopRingtone();
         }
         meshWantsVideo = (payload.call_type || 'voice') === 'video';
         meshRole = 'callee';
@@ -637,9 +649,14 @@ import {
         if (payload.type === 'group-join') {
             if (!meshCall || Number(payload.call_id) !== Number(meshCall.id)) return true;
             meshConnected = true;
+            // CRITICAL FIX: Stop ringtone when someone joins
             if (ringTimer) {
                 clearTimeout(ringTimer);
                 ringTimer = null;
+            }
+            // Stop outgoing ringtone for caller when someone joins
+            if (meshRole === 'caller' && window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
+                window.CommsWebRTC.__stopRingtone();
             }
             await connectToPeer(payload.from_user_id, payload.from_user_type, payload.from_name || payload.peer_name || 'Participant');
             return true;
