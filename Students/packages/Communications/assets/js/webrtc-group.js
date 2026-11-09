@@ -149,7 +149,7 @@ import {
         tile = document.createElement('div');
         tile.className = 'comms-remote-tile';
         tile.dataset.peerKey = key;
-        tile.innerHTML = '<video autoplay playsinline muted></video><audio autoplay playsinline></audio><div class="comms-remote-tile-label"></div>';
+        tile.innerHTML = '<video autoplay playsinline></video><audio autoplay playsinline></audio><div class="comms-remote-tile-label"></div>';
         var label = tile.querySelector('.comms-remote-tile-label');
         if (label) label.textContent = name || 'Participant';
         e.remoteGrid.appendChild(tile);
@@ -170,8 +170,8 @@ import {
         if (!tile) return;
         var video = tile.querySelector('video');
         if (video) {
-            video.muted = true;
-            video.setAttribute('muted', '');
+            video.muted = false;
+            video.removeAttribute('muted');
             video.playsInline = true;
             video.srcObject = stream;
             var play = video.play();
