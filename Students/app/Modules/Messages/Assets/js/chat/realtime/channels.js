@@ -56,6 +56,18 @@ export function acquireTopicChannel(topic, conversationId) {
                 deliverRealtimeInsert(msg);
             }
         })
+        .on('broadcast', { event: 'message-read' }, function (raw) {
+            var data = unwrapBroadcast(raw) || {};
+            if (window.CommsChat && typeof window.CommsChat.applyReadReceipt === 'function') {
+                window.CommsChat.applyReadReceipt(data);
+            }
+        })
+        .on('broadcast', { event: 'message-delivered' }, function (raw) {
+            var data = unwrapBroadcast(raw) || {};
+            if (window.CommsChat && typeof window.CommsChat.applyDelivered === 'function') {
+                window.CommsChat.applyDelivered(data);
+            }
+        })
         .subscribe();
 
     state.topicChannels[topic] = { channel: channel, refs: 1 };

@@ -210,6 +210,7 @@
         loading = true;
         window.Comms.api(routes.conversations, { dedupe: true }).then(function (data) {
             allItems = (data && data.conversations) || [];
+            if (window.Comms.writeInboxCache) window.Comms.writeInboxCache(allItems);
             applyUnreadFromList(allItems);
             renderList();
         }).catch(function () {
@@ -295,13 +296,23 @@
         reload: loadInbox
     };
 
+    function paintCachedInbox() {
+        if (!window.Comms || typeof window.Comms.readInboxCache !== 'function') return;
+        var cachedInbox = window.Comms.readInboxCache();
+        if (!Array.isArray(cachedInbox) || !cachedInbox.length) return;
+        allItems = cachedInbox;
+        applyUnreadFromList(allItems);
+        renderList();
+    }
+
     window.onCommsHeaderMessageInsert = function () {
+        paintCachedInbox();
         loadInbox();
     };
     window.onCommsHeaderPresence = function () {
         if (isOpen()) renderList();
     };
 
-    // Initial badge hydrate without waiting for a full page composer query.
+    paintCachedInbox();
     loadInbox();
 })();

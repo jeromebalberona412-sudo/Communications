@@ -69,6 +69,124 @@ class ConversationRealtimeNotifier
     }
 
     /**
+     * Fan a stored message out after the database commit.
+     * The sender is skipped; their own screen already has the saved row.
+     *
+     * @param  array<string, mixed>  $message
+     */
+    public function notifyMessage(Conversation $conversation, array $message, int $senderId, string $senderType): void
+    {
+        $this->publish($conversation, 'message', ['message' => $message], $senderId, $senderType);
+    }
+
+    public function notifyRead(Conversation $conversation, int $readerId, string $readerType, int $lastReadMessageId): void
+    {
+        if ($lastReadMessageId <= 0) {
+            return;
+        }
+
+        $this->publish($conversation, 'message-read', [
+            'type' => 'read',
+            'conversation_id' => (int) $conversation->id,
+            'reader_id' => $readerId,
+            'reader_type' => $readerType,
+            'last_read_message_id' => $lastReadMessageId,
+        ], $readerId, $readerType);
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function publish(Conversation $conversation, string $event, array $payload, int $exceptUserId, string $exceptUserType): void
+    {
+        $url = rtrim((string) (env('SUPABASE_URL') ?: env('VITE_SUPABASE_URL') ?: ''), '/');
+        $key = (string) (env('SUPABASE_SECRET_KEY')
+            ?: env('SUPABASE_SERVICE_ROLE_KEY')
+            ?: env('SUPABASE_PUBLISHABLE_KEY')
+            ?: env('VITE_SUPABASE_PUBLISHABLE_KEY')
+            ?: '');
+
+        if ($url === '' || $key === '') {
+            return;
+        }
+
+        $except = $this->identityKeys($exceptUserId, $exceptUserType);
+        $topics = [];
+        foreach ($this->participantTopics($conversation) as $topic) {
+            $identity = $this->topicIdentity($topic);
+            if ($identity !== '' && isset($except[$identity])) {
+                continue;
+            }
+            $topics[] = $topic;
+        }
+        $topics[] = 'comms-signal-'.(int) $conversation->id;
+        $topics = array_values(array_unique(array_filter($topics)));
+        if ($topics === []) {
+            return;
+        }
+
+        $messages = [];
+        foreach ($topics as $topic) {
+            $messages[] = [
+                'topic' => $topic,
+                'event' => $event,
+                'payload' => $payload,
+            ];
+        }
+
+        try {
+            Http::timeout(2)
+                ->withHeaders([
+                    'apikey' => $key,
+                    'Authorization' => 'Bearer '.$key,
+                    'Content-Type' => 'application/json',
+                ])
+                ->post($url.'/realtime/v1/api/broadcast', ['messages' => $messages]);
+        } catch (\Throwable $e) {
+            Log::warning('comms.message_realtime_notify_failed', [
+                'conversation_id' => $conversation->id,
+                'event' => $event,
+                'message' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    protected function identityKeys(int $userId, string $userType): array
+    {
+        if ($userId <= 0) {
+            return [];
+        }
+        $resolver = app(ParticipantTypeResolver::class);
+        $aliases = $resolver->equivalentTypes($userType);
+        if ($aliases === []) {
+            $aliases = [$userType];
+        }
+        $keys = [];
+        foreach ($aliases as $alias) {
+            $alias = strtolower(trim((string) $alias));
+            if ($alias === '') {
+                continue;
+            }
+            $keys[$alias.'-'.$userId] = true;
+        }
+
+        return $keys;
+    }
+
+    protected function topicIdentity(string $topic): string
+    {
+        $prefix = 'comms-inbox-';
+        if (! str_starts_with($topic, $prefix)) {
+            return '';
+        }
+
+        return substr($topic, strlen($prefix));
+    }
+
+    /**
      * @return list<string>
      */
     protected function participantTopics(Conversation $conversation): array

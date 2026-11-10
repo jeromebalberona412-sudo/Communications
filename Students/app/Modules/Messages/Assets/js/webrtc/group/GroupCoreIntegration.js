@@ -118,6 +118,12 @@ export function installGroupCoreHooks(ctx, mesh) {
         return true;
     };
 
+    core.__prepareGroupRingPreview = function () {
+        if (typeof mesh.prepareRingPreview === 'function') return mesh.prepareRingPreview();
+    };
+    core.__releaseGroupRingPreview = function () {
+        if (typeof mesh.releaseRingPreview === 'function') mesh.releaseRingPreview();
+    };
     core.__meshSetCamera = mesh.setCameraEnabled;
     core.__meshSetMuted = mesh.setMuted;
     core.__meshActive = mesh.isActive;

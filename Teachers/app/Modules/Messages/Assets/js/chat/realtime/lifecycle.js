@@ -4,7 +4,26 @@ import { ensureClient } from './client.js';
 import { refreshUnread, updateHeaderBadge, markOpenConversationRead } from './unread.js';
 import { stopTyping } from './typing.js';
 
+function catchUpAfterReconnect() {
+    var activeId = window.CommsChat && typeof window.CommsChat.getActiveId === 'function'
+        ? window.CommsChat.getActiveId()
+        : null;
+    if (activeId) markOpenConversationRead(activeId);
+    refreshUnread();
+    if (activeId && window.CommsChat && typeof window.CommsChat.reloadActiveMessages === 'function') {
+        window.CommsChat.reloadActiveMessages();
+        return;
+    }
+    if (window.CommsChat && typeof window.CommsChat.reloadConversations === 'function') {
+        window.CommsChat.reloadConversations();
+    }
+}
+
 export function attachLifecycleListeners() {
+    window.addEventListener('online', function () {
+        catchUpAfterReconnect();
+    });
+
     window.addEventListener('pageshow', function (event) {
         if (event.persisted) {
             try {
@@ -32,14 +51,7 @@ export function attachLifecycleListeners() {
             return;
         }
         if (document.visibilityState !== 'visible') return;
-        var activeId = window.CommsChat && typeof window.CommsChat.getActiveId === 'function'
-            ? window.CommsChat.getActiveId()
-            : null;
-        if (activeId) markOpenConversationRead(activeId);
-        refreshUnread();
-        if (window.CommsChat && typeof window.CommsChat.reloadActiveMessages === 'function') {
-            window.CommsChat.reloadActiveMessages();
-        }
+        catchUpAfterReconnect();
         loadWebrtc().then(function (api) {
             if (api && typeof api.syncIncomingFromServer === 'function') {
                 api.syncIncomingFromServer(null);

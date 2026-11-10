@@ -135,12 +135,9 @@ function renderSendStatus(msg, isLatestMine) {
             Comms.escapeHtml(String(msg.id || '')) + '">Retry</button></div>';
     }
     if (!isLatestMine) return '';
-    if (status === 'sent' && String(msg.id || '').indexOf('local-') !== 0) {
-        var age = msg._sentAt ? (Date.now() - Number(msg._sentAt)) : 99999;
-        if (age > 2500) return '';
-    }
-    if (status !== 'sending' && status !== 'sent') return '';
-    var label = status === 'sending' ? 'Sending...' : 'Sent';
+    if (status !== 'sending' && status !== 'sent' && status !== 'delivered' && status !== 'read') return '';
+    var label = status === 'sending' ? 'Sending...'
+        : (status === 'delivered' ? 'Delivered' : (status === 'read' ? 'Read' : 'Sent'));
     return '<div class="comms-send-status is-' + status + '" role="status">' + label + '</div>';
 }
 

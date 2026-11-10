@@ -39,12 +39,15 @@ function updateCameraUi() {
     api.syncCameraUi();
     var remoteVideoLive = api.hasLiveRemoteVideo();
     var isVideoCall = api.isVideoCallType();
-    if (S.els.inCall) {
-        S.els.inCall.classList.toggle('is-connected', !!S.callConnected);
-        S.els.inCall.classList.toggle('has-remote-video', remoteVideoLive && !!S.remoteCameraEnabled);
+    if (S.els.inCall && !S.els.inCall.classList.contains('is-group-call')) {
+        var connected = !!S.callConnected;
+        S.els.inCall.classList.toggle('is-connected', connected);
+        S.els.inCall.classList.toggle('has-remote-video', remoteVideoLive && S.remoteCameraEnabled !== false);
         S.els.inCall.classList.toggle('is-video-call', isVideoCall);
+        S.els.inCall.classList.toggle('is-audio-call', !isVideoCall);
         S.els.inCall.classList.toggle('is-remote-camera-off', S.remoteCameraEnabled === false);
         S.els.inCall.classList.toggle('is-remote-mic-off', !S.remoteMicEnabled);
+        S.els.inCall.classList.toggle('is-ringing-preview', isVideoCall && !connected && !S.callAnswered);
     }
     if (S.els.callCenter) {
         S.els.callCenter.hidden = false;
@@ -298,7 +301,10 @@ function attachLocalVideo() {
     S.els.localVideo.playsInline = true;
     S.els.localVideo.autoplay = true;
     S.els.localVideo.hidden = false;
-    S.els.localVideo.classList.toggle('is-camera-off', !S.cameraEnabled);
+    var liveLocal = typeof api.findLiveVideoTrack === 'function' && api.findLiveVideoTrack();
+    var showing = !!(liveLocal && liveLocal.enabled !== false);
+    if (showing) S.cameraEnabled = true;
+    S.els.localVideo.classList.toggle('is-camera-off', !!S.localStream && !showing);
     try {
         var lp = S.els.localVideo.play();
         if (lp && typeof lp.catch === 'function') {
@@ -313,19 +319,22 @@ function attachLocalVideo() {
  * the real media state.
  */
 function syncCameraUi() {
-    var on = !!S.cameraEnabled;
+    var liveLocal = typeof api.findLiveVideoTrack === 'function' && api.findLiveVideoTrack();
+    var showing = !!(liveLocal && liveLocal.enabled !== false);
+    if (showing) S.cameraEnabled = true;
+    var on = showing || (!S.localStream && !!S.cameraEnabled);
     api.setCameraUi(on);
     if (S.els.cameraBtn) {
         S.els.cameraBtn.classList.remove('is-busy');
         S.els.cameraBtn.removeAttribute('aria-busy');
     }
     if (S.els.localVideo) {
-        // The self-view stays mounted; only its state class changes.
-        S.els.localVideo.classList.toggle('is-camera-off', !on);
-        S.els.localVideo.classList.toggle('is-camera-on', on);
+        // Hide the picture only after a stream exists and its video track is off.
+        S.els.localVideo.classList.toggle('is-camera-off', !!S.localStream && !showing);
+        S.els.localVideo.classList.toggle('is-camera-on', showing);
     }
     if (S.els.localVideoOff) {
-        S.els.localVideoOff.hidden = on;
+        S.els.localVideoOff.hidden = !S.localStream || showing;
         var localOffAvatar = document.getElementById('commsLocalVideoOffAvatar');
         if (localOffAvatar) {
             var me = api.myIdentity();
@@ -352,10 +361,12 @@ function syncCameraUi() {
             remoteLabel.textContent = cameraOff ? 'Camera Off' : '';
         }
     }
-    if (S.els.inCall) {
+    if (S.els.inCall && !S.els.inCall.classList.contains('is-group-call')) {
         S.els.inCall.classList.toggle('is-remote-camera-off', S.remoteCameraEnabled === false);
         S.els.inCall.classList.toggle('is-local-camera-off', !on);
         S.els.inCall.classList.toggle('is-remote-mic-off', !S.remoteMicEnabled);
+        S.els.inCall.classList.toggle('is-ringing-preview', !!videoCall && !S.callConnected && !S.callAnswered);
+        S.els.inCall.classList.toggle('is-audio-call', !videoCall);
     }
     var remoteMicOff = document.getElementById('commsRemoteMicOff');
     if (remoteMicOff) {

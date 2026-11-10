@@ -170,8 +170,11 @@ export function attachThread(ctx) {
 
         var cacheKey = ctx.messageCacheKey(conversationId);
         var cached = ctx.readMessageCache(cacheKey);
-        if (cached && cached.length) {
-            ctx.renderMessages(bodyEl, cached);
+        var shared = window.Comms.readThreadCache ? window.Comms.readThreadCache(conversationId) : null;
+        var sharedMessages = shared && Array.isArray(shared.messages) ? shared.messages : null;
+        var instant = (cached && cached.length) ? cached : sharedMessages;
+        if (instant && instant.length) {
+            ctx.renderMessages(bodyEl, instant);
         } else if (!bodyEl.childNodes.length) {
             bodyEl.innerHTML = '';
         }
@@ -179,14 +182,25 @@ export function attachThread(ctx) {
         window.Comms.api(url + '?per_page=20', { dedupe: true }).then(function (data) {
             var messages = (data && data.messages) || [];
             if (!messages.length) {
-                bodyEl.innerHTML = '<div class="floating-chat-empty">No messages yet</div>';
+                if (!instant || !instant.length) {
+                    bodyEl.innerHTML = '<div class="floating-chat-empty">No messages yet</div>';
+                }
                 return;
             }
 
             ctx.writeMessageCache(cacheKey, messages);
+            if (window.Comms.writeThreadCache) {
+                window.Comms.writeThreadCache(conversationId, {
+                    messages: messages,
+                    reactionEmojis: (data && data.reaction_emojis) || [],
+                    ts: Date.now()
+                });
+            }
             ctx.renderMessages(bodyEl, messages);
-        }).catch(function (err) {
-            bodyEl.innerHTML = '<div class="floating-chat-empty">Unable to load messages</div>';
+        }).catch(function () {
+            if (!instant || !instant.length) {
+                bodyEl.innerHTML = '<div class="floating-chat-empty">Unable to load messages</div>';
+            }
         });
     };
 

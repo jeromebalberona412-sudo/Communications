@@ -1,5 +1,5 @@
 import { participantKey } from './ParticipantManager.js';
-import { me } from './GroupCallUtils.js';
+import { me, samePortalType } from './GroupCallUtils.js';
 
 export function createGroupSignalRouter(ctx, deps) {
     var ui = deps.ui;
@@ -14,7 +14,7 @@ export function createGroupSignalRouter(ctx, deps) {
 
         if (payload.type === 'group-invite') {
             var self = me();
-            if (Number(payload.from_user_id) === self.id && String(payload.from_user_type) === self.type) {
+            if (Number(payload.from_user_id) === self.id && samePortalType(payload.from_user_type, self.type)) {
                 return true;
             }
             window.__commsPendingGroupInvite = payload;
@@ -34,25 +34,22 @@ export function createGroupSignalRouter(ctx, deps) {
             if (ctx.meshRole === 'caller' && window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
                 window.CommsWebRTC.__stopRingtone();
             }
+            if (payload.started_at && window.CommsWebRTC && typeof window.CommsWebRTC.__syncTimer === 'function') {
+                window.CommsWebRTC.__syncTimer(payload.started_at, payload.server_time || null);
+            }
             await peers.connectToPeer(payload.from_user_id, payload.from_user_type, payload.from_name || payload.peer_name || 'Participant');
             return true;
         }
 
-        if (payload.type === 'group-offer') {
+        if (payload.type === 'group-offer' || payload.type === 'group-answer' || payload.type === 'group-ice') {
             if (!ctx.meshCall) {
+                if (!ctx.pendingSignals) ctx.pendingSignals = [];
+                ctx.pendingSignals.push(payload);
                 return true;
             }
-            await peers.handleGroupOffer(payload);
-            return true;
-        }
-
-        if (payload.type === 'group-answer') {
-            await peers.handleGroupAnswer(payload);
-            return true;
-        }
-
-        if (payload.type === 'group-ice') {
-            await peers.handleGroupIce(payload);
+            if (payload.type === 'group-offer') await peers.handleGroupOffer(payload);
+            else if (payload.type === 'group-answer') await peers.handleGroupAnswer(payload);
+            else await peers.handleGroupIce(payload);
             return true;
         }
 
@@ -60,7 +57,7 @@ export function createGroupSignalRouter(ctx, deps) {
             if (!ctx.meshCall || Number(payload.call_id) !== Number(ctx.meshCall.id)) return true;
 
             var selfCam = me();
-            if (Number(payload.from_user_id) === selfCam.id && String(payload.from_user_type) === selfCam.type) {
+            if (Number(payload.from_user_id) === selfCam.id && samePortalType(payload.from_user_type, selfCam.type)) {
                 return true;
             }
 

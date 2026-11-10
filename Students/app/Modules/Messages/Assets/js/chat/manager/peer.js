@@ -155,15 +155,22 @@ function peerProfileCacheKey(conversationId) {
 }
 
 function loadPeerProfileCache(conversationId) {
+    var key = peerProfileCacheKey(conversationId);
+    if (Comms.readCacheEntry) {
+        var cached = Comms.readCacheEntry(key);
+        if (cached && (cached.name || cached.profile_image_url || cached.id)) return cached;
+    }
     if (!window.SkLocalCache || typeof window.SkLocalCache.get !== 'function') return null;
-    var entry = window.SkLocalCache.get(peerProfileCacheKey(conversationId));
-    if (!entry || !entry.payload) return null;
-    return entry.payload;
+    var entry = window.SkLocalCache.get(key);
+    if (!entry) return null;
+    if (entry.payload && (entry.payload.name || entry.payload.id)) return entry.payload;
+    if (entry.name || entry.id) return entry;
+    return null;
 }
 
 function savePeerProfileCache(conversationId, peer) {
-    if (!conversationId || !peer || !window.SkLocalCache || typeof window.SkLocalCache.set !== 'function') return;
-    window.SkLocalCache.set(peerProfileCacheKey(conversationId), {
+    if (!conversationId || !peer) return;
+    var payload = {
         id: peer.id || null,
         name: peer.name || '',
         user_type_label: peer.user_type_label || '',
@@ -173,7 +180,14 @@ function savePeerProfileCache(conversationId, peer) {
         online_status: peer.online_status || '',
         last_seen: peer.last_seen || null,
         user_type: peer.user_type || ''
-    });
+    };
+    if (Comms.writeCacheEntry) {
+        Comms.writeCacheEntry(peerProfileCacheKey(conversationId), payload);
+        return;
+    }
+    if (window.SkLocalCache && typeof window.SkLocalCache.set === 'function') {
+        window.SkLocalCache.set(peerProfileCacheKey(conversationId), payload);
+    }
 }
 
 function applyCachedPeerHeader(conversationId) {

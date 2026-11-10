@@ -2,6 +2,16 @@ export function rootEl() {
     return document.getElementById('commsApp') || document.getElementById('commsRealtimeBoot');
 }
 
+export function samePortalType(a, b) {
+    a = String(a || '').toLowerCase().trim();
+    b = String(b || '').toLowerCase().trim();
+    if (!a || !b) return true;
+    if (a === b) return true;
+    var students = { students: 1, student: 1, kabataan: 1, user: 1 };
+    var teachers = { teachers: 1, teacher: 1, sk_official: 1, official: 1 };
+    return !!((students[a] && students[b]) || (teachers[a] && teachers[b]));
+}
+
 export function me() {
     var root = rootEl();
     return {

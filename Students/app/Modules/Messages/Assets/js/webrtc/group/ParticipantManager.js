@@ -1,5 +1,13 @@
+function canonicalType(type) {
+    var t = String(type || '').toLowerCase().trim();
+    if (t === 'students' || t === 'student' || t === 'kabataan' || t === 'user') return 'students';
+    if (t === 'teachers' || t === 'teacher' || t === 'sk_official' || t === 'official') return 'teachers';
+    if (t === 'sk_fed' || t === 'admin') return 'sk_fed';
+    return t;
+}
+
 export function participantKey(id, type) {
-    return String(id) + ':' + String(type || '');
+    return String(id) + ':' + canonicalType(type);
 }
 
 export function upsertParticipant(map, participant) {

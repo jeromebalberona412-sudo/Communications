@@ -175,7 +175,10 @@ class MessageService
         $this->conversations->markRead($conversation, $user);
         $this->conversations->forgetInboxCacheForConversation($conversation);
 
-        return $message->load(['sender', 'reactions.user', 'attachments']);
+        $message->load(['sender', 'reactions.user', 'attachments']);
+        $this->broadcastStoredMessage($conversation, $message);
+
+        return $message;
     }
 
     /**
@@ -444,6 +447,37 @@ class MessageService
     /**
      * Keep group chat sender labels short on desktop and mobile.
      */
+    protected function broadcastStoredMessage(Conversation $conversation, Message $message): void
+    {
+        try {
+            app(ConversationRealtimeNotifier::class)->notifyMessage(
+                $conversation,
+                [
+                    'id' => (int) $message->id,
+                    'conversation_id' => (int) $message->conversation_id,
+                    'sender_id' => (int) $message->sender_id,
+                    'sender_type' => (string) $message->sender_type,
+                    'sender_name' => $this->displaySenderName($message->sender?->name),
+                    'sender_avatar_url' => $this->senderAvatarUrl($message),
+                    'body' => $message->body,
+                    'message_type' => (string) $message->message_type,
+                    'created_at' => optional($message->created_at)?->toIso8601String(),
+                    'edited' => $message->edited_at !== null,
+                    'deleted_for_all' => false,
+                    'reactions' => [],
+                    'attachments' => $message->attachments
+                        ->map(fn (MessageAttachment $attachment) => $this->serializeAttachment($attachment))
+                        ->values()
+                        ->all(),
+                ],
+                (int) $message->sender_id,
+                (string) $message->sender_type
+            );
+        } catch (\Throwable $e) {
+            // The row is already stored. A missed broadcast is recovered on the next sync.
+        }
+    }
+
     protected function displaySenderName(?string $name): string
     {
         $value = trim((string) $name);

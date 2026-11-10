@@ -339,10 +339,38 @@ function keepActiveCallVisible(statusText) {
 }
 
 function isLiveAcceptedCall() {
+    if (S.ringingPreview && !S.callConnected && !S.startingCall && !S.pc) return false;
     if (S.startingCall || S.callConnected || S.pc || S.pendingStart) return true;
-    if (S.els.inCall && !S.els.inCall.hidden && S.currentCall) return true;
+    if (S.els.inCall && !S.els.inCall.hidden && S.currentCall && !S.ringingPreview) return true;
     if (S.currentCall && S.currentCall.id != null && S.answeredCallIds[Number(S.currentCall.id)]) return true;
     return false;
+}
+
+function revealRingingPreview(call) {
+    api.remountCallEls();
+    if (!S.els.inCall) return;
+    api.hideEnded();
+    S.ringingPreview = true;
+    S.callConnected = false;
+    S.els.inCall.hidden = false;
+    S.els.inCall.removeAttribute('hidden');
+    S.els.inCall.classList.add('is-ringing-preview');
+    if (String((call && call.call_type) || '') === 'video') {
+        S.els.inCall.classList.add('is-video-call');
+    }
+    document.documentElement.classList.add('comms-in-call');
+    document.body.classList.add('comms-in-call');
+    if (S.els.peerName) {
+        S.els.peerName.textContent = (call && call.peer && call.peer.name) || 'Incoming call';
+    }
+    api.setCallPeerAvatar(call || {});
+    api.setCallStatus('Ringing...');
+    if (S.els.incoming) {
+        S.els.incoming.hidden = false;
+        S.els.incoming.removeAttribute('hidden');
+    }
+    api.attachLocalVideo();
+    api.syncLocalPipLayout();
 }
 
 function showInCall(call, statusText) {
@@ -358,6 +386,13 @@ function showInCall(call, statusText) {
         S.els.peerName.textContent = (call.peer && call.peer.name) || 'Call';
     }
     api.setCallPeerAvatar(call);
+    var videoCall = String((call && call.call_type) || '') === 'video' || !!S.wantsVideo;
+    var groupCall = S.els.inCall.classList.contains('is-group-call');
+    if (!groupCall) {
+        S.els.inCall.classList.toggle('is-video-call', videoCall);
+        S.els.inCall.classList.toggle('is-audio-call', !videoCall);
+        S.els.inCall.classList.toggle('is-ringing-preview', videoCall && !S.callConnected && !S.callAnswered);
+    }
     api.setCallStatus(statusText != null ? statusText : (S.callConnected ? 'Connected' : 'Calling...'));
     if (typeof api.syncCallTimerVisibility === 'function') api.syncCallTimerVisibility();
     api.setMuteUi(false);
@@ -382,4 +417,5 @@ api.setCallStatus = setCallStatus;
 api.remountCallEls = remountCallEls;
 api.keepActiveCallVisible = keepActiveCallVisible;
 api.isLiveAcceptedCall = isLiveAcceptedCall;
+api.revealRingingPreview = revealRingingPreview;
 api.showInCall = showInCall;

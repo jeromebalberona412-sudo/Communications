@@ -591,3 +591,51 @@
 .comms-call-ui {
     z-index: 10000 !important;
 }
+
+.comms-msg-notices {
+    position: fixed;
+    top: 4.25rem;
+    right: 1rem;
+    z-index: 10040;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    width: min(320px, calc(100vw - 1.5rem));
+}
+.comms-msg-notice {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    width: 100%;
+    text-align: left;
+    border: 0;
+    border-radius: 14px;
+    padding: 0.7rem 0.8rem;
+    background: #fff;
+    color: #0f172a;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+    cursor: pointer;
+}
+.comms-msg-notice img {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: 0 0 auto;
+}
+.comms-msg-notice span {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+.comms-msg-notice strong {
+    font-size: 0.92rem;
+}
+.comms-msg-notice em {
+    font-style: normal;
+    color: #475569;
+    font-size: 0.82rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}

@@ -1,6 +1,8 @@
 /**
  * Chat manager — conversations
  */
+import { portalTypesMatchJs } from '../realtime/helpers.js';
+
 export function register(ctx) {
     var root = ctx.root;
     var state = ctx.state;
@@ -155,8 +157,50 @@ function loadConversations() {
         if (Comms.writeInboxCache) Comms.writeInboxCache(state.conversations);
         renderConversations(els.convFilter ? els.convFilter.value : '');
     }).catch(function (err) {
-        Comms.showToast(err.message || 'Failed to load conversations.', 'error');
+        if (!state.conversations || !state.conversations.length) {
+            Comms.showToast(err.message || 'Failed to load conversations.', 'error');
+        }
     });
+}
+
+function noteInboxActivity(row) {
+    if (!row || row.conversation_id == null) return;
+    var cid = Number(row.conversation_id);
+    var list = state.conversations || [];
+    var idx = list.findIndex(function (c) { return Number(c.id) === cid; });
+    var preview = {
+        body: row.body || '',
+        message_type: row.message_type || 'text',
+        created_at: row.created_at || new Date().toISOString()
+    };
+    var item = idx === -1 ? { id: cid, unread_count: 0, other_user: { name: row.sender_name || 'Chat' } } : list[idx];
+    item.last_message = preview;
+    item.updated_at = preview.created_at;
+    var root = document.getElementById('commsApp') || document.getElementById('commsRealtimeBoot');
+    var mine = !!(root && Number(row.sender_id) === Number(root.dataset.currentUserId || 0)
+        && portalTypesMatchJs(row.sender_type, root.dataset.portalUserType));
+    var open = Number(state.activeId) === cid && document.visibilityState !== 'hidden';
+    if (open) item.unread_count = 0;
+    else if (!mine) item.unread_count = Number(item.unread_count || 0) + 1;
+    if (idx === -1) list.unshift(item);
+    else {
+        list.splice(idx, 1);
+        list.unshift(item);
+    }
+    state.conversations = list;
+    if (Comms.writeInboxCache) Comms.writeInboxCache(list);
+    renderConversations(els.convFilter ? els.convFilter.value : '');
+    if (Array.isArray(window.__COMMS_HEADER_CONVERSATIONS__)) {
+        var header = window.__COMMS_HEADER_CONVERSATIONS__;
+        var hIdx = header.findIndex(function (c) { return Number(c.id) === cid; });
+        if (hIdx !== -1) {
+            header[hIdx].last_message = preview;
+            header[hIdx].updated_at = preview.created_at;
+            header[hIdx].unread_count = item.unread_count;
+            var moved = header.splice(hIdx, 1)[0];
+            header.unshift(moved);
+        }
+    }
 }
 
 function hydrateFromCache() {
@@ -173,6 +217,7 @@ function hydrateFromCache() {
         loadConversation: loadConversation,
         loadConversations: loadConversations,
         renderConversations: renderConversations,
+        noteInboxActivity: noteInboxActivity,
         setThreadOpen: setThreadOpen
     });
 }

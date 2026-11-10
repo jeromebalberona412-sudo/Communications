@@ -48,6 +48,7 @@ function stopCallTimer() {
     }
     S.timerCallId = null;
     S.callStartedAt = null;
+    S.timerAnchored = false;
     S.lastCallDurationMs = 0;
     if (S.els.timer) {
         S.els.timer.textContent = '00:00';
@@ -62,7 +63,7 @@ function stopCallTimer() {
 function syncCallTimerVisibility() {
     if (!S.els.timer) S.els.timer = document.getElementById('commsCallTimer');
     if (!S.els.timer) return;
-    if (S.callConnected && S.callStartedAt) {
+    if ((S.callAnswered || S.callConnected) && S.callStartedAt) {
         S.els.timer.hidden = false;
         S.els.timer.removeAttribute('hidden');
         S.els.timer.classList.add('is-live');
@@ -142,21 +143,23 @@ function startTimer(serverStartedAt, serverTime) {
     var groupActive = !!(window.CommsWebRTC
         && typeof window.CommsWebRTC.__meshActive === 'function'
         && window.CommsWebRTC.__meshActive());
-    if (!S.callConnected && !groupActive) {
+    if (!S.callAnswered && !S.callConnected && !groupActive) {
         return;
     }
 
-    var nextStarted = Date.now() + S.clockOffsetMs;
-    if (serverStartedAt) {
-        var parsed = Date.parse(serverStartedAt);
-        if (!isNaN(parsed)) nextStarted = parsed;
-    }
-    var cid = S.currentCall && S.currentCall.id != null ? Number(S.currentCall.id) : null;
-    if (S.callTimer && S.timerCallId != null && cid != null && S.timerCallId === cid
-        && S.callStartedAt && Math.abs(S.callStartedAt - nextStarted) < 1500) {
-        api.renderTimer();
+    var parsed = serverStartedAt ? Date.parse(serverStartedAt) : NaN;
+    var hasServer = !isNaN(parsed);
+    if (!hasServer) {
+        if (S.callTimer && S.timerAnchored) api.renderTimer();
         return;
     }
+    var cid = S.currentCall && S.currentCall.id != null ? Number(S.currentCall.id) : null;
+    if (S.callTimer && S.timerAnchored && S.callStartedAt === parsed) {
+        api.renderTimer();
+        api.syncCallTimerVisibility();
+        return;
+    }
+    var nextStarted = parsed;
 
     if (S.callTimer) {
         clearInterval(S.callTimer);
@@ -164,6 +167,16 @@ function startTimer(serverStartedAt, serverTime) {
     }
     S.timerCallId = cid;
     S.callStartedAt = nextStarted;
+    S.timerAnchored = true;
+    if (S.els.timer) {
+        S.els.timer.hidden = false;
+        S.els.timer.removeAttribute('hidden');
+        S.els.timer.classList.add('is-live');
+    }
+    if (S.els.inCall && !S.els.inCall.classList.contains('is-group-call')) {
+        S.els.inCall.classList.add('is-connected');
+        S.els.inCall.classList.remove('is-ringing-preview');
+    }
     api.renderTimer();
     S.callTimer = setInterval(function () {
         api.renderTimer();
@@ -180,19 +193,39 @@ function maybeStartConnectedTimer() {
             role: S.role
         });
     }
-    if (!S.callConnected) {
-        if (window.CALL_DEBUG) console.warn('[CALL] maybeStartConnectedTimer ABORTED: S.callConnected=false');
+    if (!S.callAnswered && !S.callConnected) {
+        if (window.CALL_DEBUG) console.warn('[CALL] maybeStartConnectedTimer ABORTED: call not answered');
         return;
     }
     var ts = S.currentCall && (S.currentCall.started_at || S.currentCall.answered_at);
-    // FIX: If server didn't provide timestamp, use current time to start timer
-    if (!ts) {
-        if (window.CALL_DEBUG) console.log('[CALL] maybeStartConnectedTimer: no server timestamp, using now');
-        ts = new Date().toISOString();
+    if (!ts) return;
+    api.publishDuration(ts, S.currentCall && S.currentCall.server_time);
+}
+
+function publishDuration(startedAt, serverTime) {
+    if (!startedAt) return;
+    S.callAnswered = true;
+    if (S.currentCall) {
+        S.currentCall.started_at = startedAt;
+        if (serverTime) S.currentCall.server_time = serverTime;
     }
-    api.startTimer(ts, S.currentCall && S.currentCall.server_time);
+    api.startTimer(startedAt, serverTime || (S.currentCall && S.currentCall.server_time));
     api.syncCallTimerVisibility();
     api.startCallHeartbeat();
+    if (S.els.inCall && !S.els.inCall.classList.contains('is-group-call') && S.els.callStatus) {
+        S.els.callStatus.textContent = '';
+    }
+}
+
+function pullSharedDuration() {
+    var id = S.currentCall && S.currentCall.id;
+    if (!id || typeof api.fetchCallState !== 'function') return;
+    api.fetchCallState(id).then(function (row) {
+        if (!row || !S.currentCall || Number(S.currentCall.id) !== Number(id)) return;
+        var ts = row.started_at || row.answered_at;
+        if (!ts) return;
+        api.publishDuration(ts, row.server_time);
+    });
 }
 
 /**
@@ -213,7 +246,7 @@ function applyServerClock(serverTime) {
  */
 function callElapsedMs() {
     if (!S.callStartedAt) return 0;
-    return Math.max(0, (Date.now() + S.clockOffsetMs) - S.callStartedAt);
+    return Math.max(0, Date.now() - S.callStartedAt);
 }
 
 function renderTimer() {
@@ -232,6 +265,8 @@ api.formatDuration = formatDuration;
 api.startTimer = startTimer;
 api.syncCallTimerVisibility = syncCallTimerVisibility;
 api.maybeStartConnectedTimer = maybeStartConnectedTimer;
+api.publishDuration = publishDuration;
+api.pullSharedDuration = pullSharedDuration;
 api.applyServerClock = applyServerClock;
 api.callElapsedMs = callElapsedMs;
 api.renderTimer = renderTimer;

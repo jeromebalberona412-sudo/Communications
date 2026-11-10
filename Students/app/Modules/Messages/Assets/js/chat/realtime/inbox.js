@@ -27,7 +27,19 @@ function bindInboxChannel(sb, name) {
         .on('broadcast', { event: 'message' }, function (raw) {
             var data = (raw && raw.payload) ? raw.payload : (raw || {});
             var msg = data.message || data;
-            if (msg) deliverRealtimeInsert(msg);
+            if (msg && msg.id != null) deliverRealtimeInsert(msg);
+        })
+        .on('broadcast', { event: 'message-read' }, function (raw) {
+            var data = (raw && raw.payload) ? raw.payload : (raw || {});
+            if (window.CommsChat && typeof window.CommsChat.applyReadReceipt === 'function') {
+                window.CommsChat.applyReadReceipt(data);
+            }
+        })
+        .on('broadcast', { event: 'message-delivered' }, function (raw) {
+            var data = (raw && raw.payload) ? raw.payload : (raw || {});
+            if (window.CommsChat && typeof window.CommsChat.applyDelivered === 'function') {
+                window.CommsChat.applyDelivered(data);
+            }
         })
         .subscribe();
 }

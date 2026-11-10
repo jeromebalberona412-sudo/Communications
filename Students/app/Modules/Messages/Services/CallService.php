@@ -69,9 +69,17 @@ class CallService
         $receiverType = null;
         $receiverId = null;
 
+        $callerTypes = $this->types->equivalentTypes($callerType);
+        if ($callerTypes === []) {
+            $callerTypes = [$callerType];
+        }
+
         $otherQuery = ConversationParticipant::query()
             ->where('conversation_id', $conversation->id)
-            ->where('user_id', '!=', $callerId);
+            ->where(function ($query) use ($callerId, $callerTypes) {
+                $query->where('user_id', '!=', $callerId)
+                    ->orWhereNotIn('user_type', $callerTypes);
+            });
 
         if ($conversation->isGroup()) {
             if ($receiverUserId !== null) {
@@ -88,10 +96,6 @@ class CallService
                 $other = null;
             }
         } else {
-            $callerTypes = $this->types->equivalentTypes($callerType);
-            if ($callerTypes === []) {
-                $callerTypes = [$callerType];
-            }
             $other = ConversationParticipant::query()
                 ->where('conversation_id', $conversation->id)
                 ->where(function ($query) use ($callerId, $callerTypes) {
@@ -178,9 +182,16 @@ class CallService
             : (string) ($caller->name ?? 'Incoming caller');
         $extraReceivers = [];
         if ($isGroupCall) {
+            $callerTypeAliases = $this->types->equivalentTypes($callerType);
+            if ($callerTypeAliases === []) {
+                $callerTypeAliases = [$callerType];
+            }
             $extraReceivers = ConversationParticipant::query()
                 ->where('conversation_id', $conversation->id)
-                ->where('user_id', '!=', $callerId)
+                ->where(function ($query) use ($callerId, $callerTypeAliases) {
+                    $query->where('user_id', '!=', $callerId)
+                        ->orWhereNotIn('user_type', $callerTypeAliases);
+                })
                 ->get(['user_id', 'user_type'])
                 ->map(fn (ConversationParticipant $row) => [
                     'id' => (int) $row->user_id,
@@ -648,6 +659,7 @@ class CallService
         // is a participant (not the host) so Answer/Decline can appear without a refresh.
         $memberConversationIds = ConversationParticipant::query()
             ->where('user_id', $userId)
+            ->whereIn('user_type', $types)
             ->pluck('conversation_id')
             ->unique()
             ->values()
@@ -659,7 +671,10 @@ class CallService
                 ->where('status', Call::STATUS_RINGING)
                 ->whereIn('conversation_id', $memberConversationIds)
                 ->whereColumn('caller_id', '=', 'receiver_id')
-                ->where('caller_id', '!=', $userId)
+                ->where(function ($query) use ($userId, $types) {
+                    $query->where('caller_id', '!=', $userId)
+                        ->orWhereNotIn('caller_type', $types);
+                })
                 ->with(['caller', 'receiver', 'conversation'])
                 ->orderByDesc('id')
                 ->limit(5)
@@ -697,9 +712,16 @@ class CallService
 
         $invitees = [];
         if ($isGroupCall && $conversation) {
+            $viewerTypes = $this->types->equivalentTypes($viewerType);
+            if ($viewerTypes === []) {
+                $viewerTypes = [$viewerType];
+            }
             $invitees = ConversationParticipant::query()
                 ->where('conversation_id', $conversation->id)
-                ->where('user_id', '!=', (int) $viewer->id)
+                ->where(function ($query) use ($viewer, $viewerTypes) {
+                    $query->where('user_id', '!=', (int) $viewer->id)
+                        ->orWhereNotIn('user_type', $viewerTypes);
+                })
                 ->with('user')
                 ->get()
                 ->map(function (ConversationParticipant $row) {

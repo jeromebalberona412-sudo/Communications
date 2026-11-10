@@ -435,6 +435,7 @@ function showIncoming(call) {
     }
 
     if (api.isCallAlreadyHandled(callId)) return;
+    if (S.incomingCallId === callId && S.els.incoming && !S.els.incoming.hidden) return;
 
     // One modal at a time. A different call never replaces the one on screen.
     if (S.incomingCallId !== null && S.incomingCallId !== callId) {
@@ -550,12 +551,18 @@ function showIncoming(call) {
         S.els.incoming.hidden = false;
         S.els.incoming.removeAttribute('hidden');
         api.startRingtone('incoming', callId);
+        if (isVideo && window.CommsWebRTC && typeof window.CommsWebRTC.__prepareGroupRingPreview === 'function') {
+            window.CommsWebRTC.__prepareGroupRingPreview();
+        }
         api.clearRingTimeout();
         S.ringTimeout = setTimeout(function () {
             if (call.id != null) S.dismissedRingIds[Number(call.id)] = true;
             api.hideIncoming();
             api.stopRingtone();
             window.__commsPendingGroupInvite = null;
+            if (window.CommsWebRTC && typeof window.CommsWebRTC.__releaseGroupRingPreview === 'function') {
+                window.CommsWebRTC.__releaseGroupRingPreview();
+            }
         }, RING_TIMEOUT_MS);
         return;
     }
@@ -574,7 +581,31 @@ function showIncoming(call) {
     S.els.incoming.hidden = false;
     S.els.incoming.removeAttribute('hidden');
     api.startRingtone('incoming', callId);
+    api.beginIncomingPreview(call);
     api.armRingTimeout(true);
+}
+
+function beginIncomingPreview(call) {
+    if (!call || call.is_group_call || call._groupInvite) return;
+    var video = String(call.call_type || '') === 'video';
+    S.ringingPreview = true;
+    S.wantsVideo = video;
+    S.lifecycle = 'ringing';
+    S.callConnected = false;
+    if (video && typeof api.revealRingingPreview === 'function') {
+        api.revealRingingPreview(call);
+    }
+    var generation = S.previewGeneration || 0;
+    api.prepareLocalPreview(video).then(function () {
+        if (generation !== (S.previewGeneration || 0) || !S.ringingPreview) return;
+        api.attachLocalVideo();
+        if (typeof api.syncCameraUi === 'function') api.syncCameraUi();
+    }).catch(function (err) {
+        if (generation !== (S.previewGeneration || 0)) return;
+        S.cameraEnabled = false;
+        api.toast((err && err.message) || 'Microphone/camera permission was denied. Allow access and try again.', 'error');
+        if (typeof api.syncCameraUi === 'function') api.syncCameraUi();
+    });
 }
 
 function setIncomingActionState(mode) {
@@ -638,6 +669,7 @@ api.isInvitationExpired = isInvitationExpired;
 api.isActivelyInCall = isActivelyInCall;
 api.isOutboundCallerBusy = isOutboundCallerBusy;
 api.resetCallerRoleIfIdle = resetCallerRoleIfIdle;
+api.beginIncomingPreview = beginIncomingPreview;
 api.showIncoming = showIncoming;
 api.setIncomingActionState = setIncomingActionState;
 api.hideIncoming = hideIncoming;

@@ -163,12 +163,16 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
     var earlyPeer = (conversation && conversation.other_user) || { name: 'Contact' };
     S.role = 'caller';
     S.callConnected = false;
-    api.showInCall({ peer: earlyPeer, call_type: callType }, 'Calling...');
+    S.wantsVideo = callType === 'video';
+    S.cameraEnabled = callType === 'video';
+    api.showInCall({ peer: earlyPeer, call_type: callType }, 'Ringing...');
     
     var r = api.routes();
     api.startRingtone('outgoing');
     try {
         api.assertMediaReady();
+        S.wantsVideo = callType === 'video';
+        var previewPromise = api.prepareLocalPreview(callType === 'video');
         if (!window.CommsRealtime || !window.CommsRealtime.enabled) {
             throw new Error('Realtime is not configured. Rebuild after setting VITE_SUPABASE keys.');
         }
@@ -228,7 +232,7 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
             receiver_type: S.currentCall.receiver_type,
             caller_profile: caller_profile
         });
-        await Promise.all([channelReady, ringSignal]);
+        await Promise.all([channelReady, ringSignal, previewPromise]);
         api.setCallStatus('Ringing...');
         await api.ensurePeerConnection(S.wantsVideo);
         if (S.wantsVideo) {
@@ -238,6 +242,7 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
             api.attachLocalVideo();
             api.syncCameraUi();
         }
+        if (typeof api.ensureOutboundVideo === 'function') api.ensureOutboundVideo();
         var offer = await S.pc.createOffer();
         await S.pc.setLocalDescription(offer);
         if (S.pendingRemoteAnswer && typeof api.applyRemoteAnswer === 'function') {

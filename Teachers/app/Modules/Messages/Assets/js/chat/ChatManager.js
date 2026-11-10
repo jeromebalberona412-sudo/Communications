@@ -39,6 +39,38 @@ if (!ctx) {
 
     window.CommsChat = {
         appendMessage: api.appendMessage,
+        openConversation: api.openConversation,
+        noteInboxActivity: api.noteInboxActivity,
+        applyReadReceipt: function (payload) {
+            if (!payload || !state.activeId) return;
+            if (Number(payload.conversation_id) !== Number(state.activeId)) return;
+            var upto = Number(payload.last_read_message_id || 0);
+            if (!upto) return;
+            var changed = false;
+            state.messages.forEach(function (m) {
+                if (!m || !m.mine || String(m.id).indexOf('local-') === 0) return;
+                if (Number(m.id) > upto) return;
+                if (m.send_status !== 'read') {
+                    m.send_status = 'read';
+                    changed = true;
+                }
+            });
+            if (changed) api.renderMessages({ preserveScroll: true });
+        },
+        applyDelivered: function (payload) {
+            if (!payload || !state.activeId) return;
+            if (Number(payload.conversation_id) !== Number(state.activeId)) return;
+            var id = payload.message_id;
+            var changed = false;
+            state.messages.forEach(function (m) {
+                if (!m || !m.mine || String(m.id) !== String(id)) return;
+                if (m.send_status !== 'read' && m.send_status !== 'delivered') {
+                    m.send_status = 'delivered';
+                    changed = true;
+                }
+            });
+            if (changed) api.renderMessages({ preserveScroll: true });
+        },
         publishSentMessage: api.publishSentMessage,
         reloadConversations: api.loadConversations,
         reloadActiveMessages: api.reloadActiveMessages,

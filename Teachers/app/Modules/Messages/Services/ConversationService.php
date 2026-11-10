@@ -511,6 +511,17 @@ class ConversationService
             ->where('user_id', $userId)
             ->whereIn('user_type', $types)
             ->update($payload);
+
+        try {
+            app(ConversationRealtimeNotifier::class)->notifyRead(
+                $conversation,
+                $userId,
+                $userType,
+                (int) ($payload['last_read_message_id'] ?? $latestMessageId)
+            );
+        } catch (\Throwable $e) {
+            // The read cursor is already saved.
+        }
     }
 
     public function markAllRead(Authenticatable $user): void

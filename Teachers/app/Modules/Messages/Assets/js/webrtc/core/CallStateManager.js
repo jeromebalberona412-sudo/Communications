@@ -57,12 +57,14 @@ export const S = {
     lastCallContext: null,
     callTimer: null,
     callStartedAt: null,
+    timerAnchored: false,
     lastCallDurationMs: 0,
     iceQueue: [],
     startingCall: false,
     cameraEnabled: false,
     wantsVideo: false,
     callConnected: false,
+    callAnswered: false,
     ringTimeout: null,
     connectionTimeout: null,
     endedAutoClose: null,
@@ -105,6 +107,9 @@ export const S = {
     acceptGeneration: 0,
     answerAppliedFor: null,
     decliningCall: false,
+    ringingPreview: false,
+    previewGeneration: 0,
+    _previewJob: null,
     redialLock: false,
     dismissedRingIds: Object.create(null),
     answeredCallIds: Object.create(null),
@@ -127,6 +132,7 @@ export function resetCallFields() {
     S.localStream = null;
     S.currentCall = null;
     S.callConnected = false;
+    S.callAnswered = false;
     S.role = null;
     S.startingCall = false;
     S.cameraEnabled = false;

@@ -61,6 +61,7 @@ async function tryCompleteCalleeAnswer() {
         }
         var answerSdp = S.pc.localDescription;
         if (S.pc.signalingState === 'have-remote-offer') {
+            if (typeof api.ensureOutboundVideo === 'function') api.ensureOutboundVideo();
             answerSdp = await S.pc.createAnswer();
             await S.pc.setLocalDescription(answerSdp);
         }
@@ -156,6 +157,8 @@ async function acceptIncoming() {
     S.acceptGeneration = (S.acceptGeneration || 0) + 1;
     var generation = S.acceptGeneration;
     S.startingCall = true;
+    S.ringingPreview = false;
+    S.callAnswered = true;
     S.lifecycle = 'accepted';
     S.answeredCall = call;
     api.rememberCallId(S.answeredCallIds, callId);
@@ -165,7 +168,7 @@ async function acceptIncoming() {
     api.hideIncoming();
     S.wantsVideo = call.call_type === 'video';
     S.lifecycle = 'accepted';
-    api.showInCall(call, '');
+    api.showInCall(call, 'Connecting...');
     api.updateCameraUi();
     api.unlockRemotePlayback();
 
@@ -185,7 +188,19 @@ async function acceptIncoming() {
         if (!alive() || !accepted) return;
         S.currentCall = Object.assign({}, S.currentCall, accepted);
         S.answeredCall = S.currentCall;
-        if (S.callConnected) api.maybeStartConnectedTimer();
+        var startedAt = accepted.started_at || accepted.answered_at;
+        if (startedAt) api.publishDuration(startedAt, accepted.server_time);
+        api.signalPeer({
+            type: 'call-timer',
+            call_id: accepted.id,
+            conversation_id: accepted.conversation_id,
+            started_at: startedAt,
+            server_time: accepted.server_time || null,
+            caller_id: accepted.caller_id,
+            caller_type: accepted.caller_type,
+            receiver_id: accepted.receiver_id,
+            receiver_type: accepted.receiver_type
+        }).catch(function () { /* the caller also reads the same row */ });
     }).catch(function () {});
 
     api.subscribeCallChannel(call.conversation_id);

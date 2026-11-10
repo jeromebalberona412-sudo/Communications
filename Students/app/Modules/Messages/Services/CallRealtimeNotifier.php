@@ -73,10 +73,14 @@ class CallRealtimeNotifier
                 if ($id <= 0) {
                     continue;
                 }
-                $topics[] = $this->primaryInboxTopic($type, $id);
+                foreach ($this->inboxTopics($type, $id) as $topic) {
+                    $topics[] = $topic;
+                }
             }
         } else {
-            $topics[] = $this->primaryInboxTopic((string) $call->receiver_type, (int) $call->receiver_id);
+            foreach ($this->inboxTopics((string) $call->receiver_type, (int) $call->receiver_id) as $topic) {
+                $topics[] = $topic;
+            }
         }
 
         if ($call->conversation_id) {

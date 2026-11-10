@@ -18,7 +18,8 @@ import {
     ensureCallChannel,
     teardownCallChannel,
     broadcastSignal,
-    broadcastMessage
+    broadcastMessage,
+    sendBroadcast
 } from './realtime/channels.js';
 import { broadcastTyping, stopTyping } from './realtime/typing.js';
 import { flushPendingSignals } from './realtime/signals.js';
@@ -50,6 +51,7 @@ import { attachLifecycleListeners } from './realtime/lifecycle.js';
         stopTyping: stopTyping,
         broadcastSignal: broadcastSignal,
         broadcastMessage: broadcastMessage,
+        sendBroadcast: sendBroadcast,
         refreshUnread: refreshUnread,
         updateHeaderBadge: updateHeaderBadge,
         flushPendingSignals: flushPendingSignals

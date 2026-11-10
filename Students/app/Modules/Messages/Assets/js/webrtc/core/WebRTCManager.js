@@ -16,7 +16,8 @@ function reconcileWithServerState(data) {
         if (S.currentCall && S.currentCall.id) {
             var staleId = Number(S.currentCall.id);
             if (staleId !== S.lastEndedCallId && !api.isCallAlreadyHandled(staleId)) {
-                if (!S.callConnected && !S.startingCall && !S.pc) {
+                if (!S.callConnected && !S.startingCall && !S.pc && !S.ringingPreview
+                    && !(S.els.incoming && !S.els.incoming.hidden)) {
                     api.markCallTerminal(staleId);
                     S.currentCall = null;
                     S.role = null;
@@ -72,6 +73,10 @@ export function exposePublicApi() {
         __paintIncoming: function () { return api.showIncoming.apply(null, arguments); },
         __showEnded: function () { return api.showCallEnded.apply(null, arguments); },
         __startTimer: function () { return api.startTimer.apply(null, arguments); },
+        __syncTimer: function (startedAt, serverTime) {
+            if (typeof api.publishDuration === 'function') api.publishDuration(startedAt, serverTime);
+        },
+        __markAnswered: function () { S.callAnswered = true; },
         __stopCallTimer: function () { return api.stopCallTimer.apply(null, arguments); },
         primeOutgoingRingtone: function () { return api.primeOutgoingRingtone(); },
         __startRingtone: function () { return api.startRingtone.apply(null, arguments); },

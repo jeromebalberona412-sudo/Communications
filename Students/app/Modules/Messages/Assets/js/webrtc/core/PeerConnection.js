@@ -164,10 +164,8 @@ function scheduleRemoteVideoUiRefresh() {
     });
 }
 
-function showTapToPlay(show) {
-    var btn = document.getElementById('commsTapToPlay');
-    if (!btn) return;
-    btn.hidden = !show;
+function showTapToPlay() {
+    // Manual "tap to play / open camera" is not part of the call UI.
 }
 
 function unlockRemotePlayback() {
@@ -188,12 +186,8 @@ function unlockRemotePlayback() {
             S.els.remoteVideo.playsInline = true;
             S.els.remoteVideo.setAttribute('playsinline', '');
             var vp = S.els.remoteVideo.play();
-            if (vp && typeof vp.then === 'function') {
-                vp.then(function () { api.showTapToPlay(false); }).catch(function () { api.showTapToPlay(true); });
-            }
-        } catch (e2) {
-            api.showTapToPlay(true);
-        }
+            if (vp && typeof vp.catch === 'function') vp.catch(function () {});
+        } catch (e2) { /* autoplay retry is handled by the next track event */ }
     }
 }
 
@@ -286,11 +280,26 @@ function refreshRemoteFromReceivers() {
         return;
     }
     S.pc.getReceivers().forEach(function (recv) {
-        if (recv && recv.track && recv.track.readyState !== 'ended') {
-            api.mergeRemoteTrack(recv.track, null);
-        }
+        if (!recv || !recv.track || recv.track.readyState === 'ended') return;
+        if (S.localStream && S.localStream.getTracks().some(function (local) {
+            return local && local.id === recv.track.id;
+        })) return;
+        rememberRemoteVideoTrack(recv.track, null);
+        api.mergeRemoteTrack(recv.track, null);
     });
-    if (S.remoteStream) api.bindRemoteMedia(S.remoteStream);
+    if (S.remotePlaybackStream || S.remoteDisplayStream || S.remoteStream) {
+        api.bindRemoteMedia(S.remoteStream);
+    }
+}
+
+function ensureOutboundVideo() {
+    if (!S.pc) return;
+    S.pc.getTransceivers().forEach(function (tx) {
+        var track = tx.sender && tx.sender.track;
+        if (!track || track.readyState !== 'live') return;
+        try { tx.direction = 'sendrecv'; } catch (eDir) { /* ignore */ }
+        if (track.kind === 'video') S.videoSender = tx.sender;
+    });
 }
 
 function remoteVideoSignature(stream) {
@@ -370,12 +379,8 @@ function bindRemoteMedia(stream) {
         }
         try {
             var vp = S.els.remoteVideo.play();
-            if (vp && typeof vp.then === 'function') {
-                vp.then(function () { api.showTapToPlay(false); }).catch(function () { api.showTapToPlay(true); });
-            }
-        } catch (e) {
-            api.showTapToPlay(true);
-        }
+            if (vp && typeof vp.catch === 'function') vp.catch(function () {});
+        } catch (e) { /* the next frame event retries playback */ }
         if (!S.els.remoteVideo._commsMetricsBound) {
             S.els.remoteVideo._commsMetricsBound = true;
             S.els.remoteVideo.addEventListener('loadedmetadata', applyRemoteVideoMetrics);
@@ -408,6 +413,55 @@ function bindRemoteMedia(stream) {
     api.updateCameraUi();
 }
 
+function localPreviewUsable(videoEnabled) {
+    if (!S.localStream || typeof S.localStream.getTracks !== 'function') return false;
+    var tracks = S.localStream.getTracks();
+    if (!tracks.length) return false;
+    if (tracks.some(function (track) { return !track || track.readyState === 'ended'; })) return false;
+    var audio = S.localStream.getAudioTracks().filter(function (track) {
+        return track && track.readyState !== 'ended';
+    });
+    if (!audio.length) return false;
+    if (videoEnabled && typeof api.findLiveVideoTrack === 'function' && !api.findLiveVideoTrack()) return false;
+    return true;
+}
+
+function prepareLocalPreview(videoEnabled) {
+    if (S._previewJob) return S._previewJob;
+    S.wantsVideo = !!videoEnabled;
+    if (localPreviewUsable(!!videoEnabled)) {
+        S.cameraEnabled = !!videoEnabled;
+        api.remountCallEls();
+        api.attachLocalVideo();
+        if (typeof api.syncCameraUi === 'function') api.syncCameraUi();
+        return Promise.resolve(S.localStream);
+    }
+    var generation = S.previewGeneration || 0;
+    var job = api.getLocalStream(!!videoEnabled).then(function (stream) {
+        if (!stream) return null;
+        if (generation !== (S.previewGeneration || 0)) {
+            stream.getTracks().forEach(function (track) { try { track.stop(); } catch (e) { /* ignore */ } });
+            return null;
+        }
+        if (S.localStream && S.localStream !== stream) {
+            S.localStream.getTracks().forEach(function (track) { try { track.stop(); } catch (e2) { /* ignore */ } });
+        }
+        S.localStream = stream;
+        S.cameraEnabled = !!videoEnabled && !!(typeof api.findLiveVideoTrack === 'function' && api.findLiveVideoTrack());
+        api.remountCallEls();
+        api.attachLocalVideo();
+        if (typeof api.updateCameraUi === 'function') api.updateCameraUi();
+        return stream;
+    });
+    S._previewJob = job;
+    job.then(function () {
+        if (S._previewJob === job) S._previewJob = null;
+    }, function () {
+        if (S._previewJob === job) S._previewJob = null;
+    });
+    return job;
+}
+
 async function ensurePeerConnection(videoEnabled) {
     if (S.pc) {
         api.attachLocalVideo();
@@ -424,10 +478,11 @@ async function ensurePeerConnection(videoEnabled) {
     }
 
     S.wantsVideo = !!videoEnabled;
-    S.cameraEnabled = !!videoEnabled;
-    S.localStream = await api.getLocalStream(!!videoEnabled);
-    
-    // FIX BUG #1: Immediately attach local video after acquiring stream
+    await api.prepareLocalPreview(!!videoEnabled);
+    if (!S.localStream) {
+        throw new Error('Camera/microphone is not available.');
+    }
+    S.cameraEnabled = !!videoEnabled && !!(typeof api.findLiveVideoTrack === 'function' && api.findLiveVideoTrack());
     api.attachLocalVideo();
 
     S.pc = new RTCPeerConnection(stunConfig());
@@ -558,10 +613,12 @@ async function ensurePeerConnection(videoEnabled) {
 api.findVideoSender = findVideoSender;
 api.hasLiveRemoteVideo = hasLiveRemoteVideo;
 api.installLocalSenders = installLocalSenders;
+api.ensureOutboundVideo = ensureOutboundVideo;
 api.applyRemoteOfferIfReady = applyRemoteOfferIfReady;
 api.plainDescription = plainDescription;
 api.scheduleRemoteVideoUiRefresh = scheduleRemoteVideoUiRefresh;
 api.showTapToPlay = showTapToPlay;
+api.prepareLocalPreview = prepareLocalPreview;
 api.unlockRemotePlayback = unlockRemotePlayback;
 api.ensureRemoteAudioPlaying = ensureRemoteAudioPlaying;
 api.dropRemoteTracksOfKind = dropRemoteTracksOfKind;

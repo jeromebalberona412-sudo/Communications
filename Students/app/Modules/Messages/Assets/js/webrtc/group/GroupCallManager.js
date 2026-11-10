@@ -60,7 +60,9 @@ export function installGroupCalls() {
         isActive: lifecycle.isActive,
         handleSignal: router.handleSignal,
         setCameraEnabled: camera.setCameraEnabled,
-        setMuted: camera.setMuted
+        setMuted: camera.setMuted,
+        prepareRingPreview: lifecycle.prepareRingPreview,
+        releaseRingPreview: lifecycle.releaseRingPreview
     };
 
     installGroupCoreHooks(ctx, mesh);

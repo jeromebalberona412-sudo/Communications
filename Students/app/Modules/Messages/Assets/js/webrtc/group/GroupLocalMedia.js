@@ -48,10 +48,23 @@ export function createGroupLocalMedia(ctx, ui) {
     async function ensureLocalMedia() {
         if (ctx.meshLocalStream) return ctx.meshLocalStream;
         ctx.meshLocalStream = await getLocalStream(ctx.meshWantsVideo);
-        ctx.meshCameraOn = ctx.meshWantsVideo;
+        ctx.meshCameraOn = !!ctx.meshWantsVideo;
         var e = ui.els();
+        if (e.inCall) {
+            e.inCall.hidden = false;
+            e.inCall.classList.add('is-group-call');
+            if (ctx.meshWantsVideo) e.inCall.classList.add('is-video-call');
+        }
         if (e.localVideo) {
             e.localVideo.srcObject = ctx.meshLocalStream;
+            e.localVideo.muted = true;
+            e.localVideo.defaultMuted = true;
+            e.localVideo.setAttribute('muted', '');
+            e.localVideo.playsInline = true;
+            e.localVideo.setAttribute('playsinline', '');
+            e.localVideo.autoplay = true;
+            e.localVideo.hidden = false;
+            e.localVideo.classList.remove('is-camera-off');
             var play = e.localVideo.play();
             if (play && typeof play.catch === 'function') play.catch(function () { /* ignore */ });
             e.localVideo.classList.toggle('is-cam-landscape', false);
@@ -66,6 +79,8 @@ export function createGroupLocalMedia(ctx, ui) {
                 }
             } catch (err) { /* ignore */ }
         }
+        var off = document.getElementById('commsLocalVideoOff');
+        if (off) off.hidden = !!ctx.meshCameraOn;
         return ctx.meshLocalStream;
     }
 

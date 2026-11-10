@@ -30,12 +30,6 @@ export function bindCallControls() {
     bindCallControls._bound = true;
 
     document.addEventListener('click', function (e) {
-        if (e.target && e.target.closest('#commsTapToPlay')) {
-            e.preventDefault();
-            api.unlockRemotePlayback();
-            api.showTapToPlay(false);
-            return;
-        }
         if (e.target && e.target.closest('#commsIncomingCall') && S.ringtonePlaying) {
             api.unlockCallAudio();
         }

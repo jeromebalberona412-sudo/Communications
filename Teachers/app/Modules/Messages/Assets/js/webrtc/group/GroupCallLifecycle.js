@@ -24,6 +24,7 @@ export function createGroupCallLifecycle(ctx, deps) {
             ui.removeTile(key);
         });
         ctx.meshPeers = Object.create(null);
+        ctx.pendingSignals = [];
         if (ctx.meshLocalStream) {
             ctx.meshLocalStream.getTracks().forEach(function (t) { t.stop(); });
             ctx.meshLocalStream = null;
@@ -35,7 +36,7 @@ export function createGroupCallLifecycle(ctx, deps) {
             e.remoteGrid.hidden = true;
         }
         if (e.inCall) {
-            e.inCall.classList.remove('is-group-call', 'has-remote-video', 'is-video-call', 'is-connected');
+            e.inCall.classList.remove('is-group-call', 'has-remote-video', 'is-video-call', 'is-connected', 'is-ringing-preview');
             if (!opts.keepOverlay) e.inCall.hidden = true;
         }
         ctx.meshCall = null;
@@ -44,21 +45,34 @@ export function createGroupCallLifecycle(ctx, deps) {
         ctx.meshRole = null;
         ctx.meshWantsVideo = false;
         ctx.meshCameraOn = false;
+        ctx.meshStarting = false;
         window.__commsMeshTimerStarted = false;
     }
 
     async function startGroupCall(conversationId, callType, conversation) {
         if (!window.Comms) return;
-        if (ctx.meshCall) return;
+        if (ctx.meshCall || ctx.meshStarting) return;
+        ctx.meshStarting = true;
         try {
             if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
                 window.CommsWebRTC.__stopCallTimer();
             }
+            ctx.meshWantsVideo = callType === 'video';
+            ctx.meshCameraOn = callType === 'video';
+            ctx.meshRole = 'caller';
+            var peer = (conversation && conversation.other_user) || {};
+            ui.showGroupUi({
+                peer: {
+                    name: peer.name || (conversation && conversation.name) || 'Group',
+                    is_group: true,
+                    profile_image_url: peer.profile_image_url || peer.avatar_url || ''
+                },
+                call_type: callType
+            }, 'Ringing...');
             if (window.CommsWebRTC && typeof window.CommsWebRTC.__startRingtone === 'function') {
                 window.CommsWebRTC.__startRingtone('outgoing');
             }
-            ctx.meshWantsVideo = callType === 'video';
-            ctx.meshRole = 'caller';
+            var mediaReady = media.ensureLocalMedia();
             var r = routes();
             var data = await window.Comms.api(window.Comms.route(r.startCall, conversationId), {
                 method: 'POST',
@@ -71,6 +85,7 @@ export function createGroupCallLifecycle(ctx, deps) {
                 if (typeof window.CommsChat.appendMessage === 'function') window.CommsChat.appendMessage(data.message);
             }
             if (!ctx.meshCall || !ctx.meshCall.is_group_call) {
+                try { await mediaReady; } catch (eMedia) { /* direct call acquires its own media */ }
                 await cleanupMesh({ keepOverlay: true });
                 if (window.CommsWebRTC.__startDirect) {
                     return window.CommsWebRTC.__startDirect(conversationId, callType, conversation);
@@ -78,8 +93,14 @@ export function createGroupCallLifecycle(ctx, deps) {
                 return;
             }
             ctx.meshInvitees = Array.isArray(ctx.meshCall.invitees) ? ctx.meshCall.invitees.slice() : [];
-            await media.ensureLocalMedia();
-            ui.showGroupUi(ctx.meshCall, 'Ringing group…');
+            await mediaReady;
+            ui.showGroupUi(Object.assign({}, ctx.meshCall, {
+                peer: (ctx.meshCall && ctx.meshCall.peer) || {
+                    name: peer.name || (conversation && conversation.name) || 'Group',
+                    is_group: true,
+                    profile_image_url: peer.profile_image_url || peer.avatar_url || ''
+                }
+            }), 'Ringing...');
             await signaling.signal({
                 type: 'group-invite',
                 call_type: callType,
@@ -99,6 +120,20 @@ export function createGroupCallLifecycle(ctx, deps) {
         } catch (err) {
             toast((err && err.message) || 'Unable to start group call.', 'error');
             await cleanupMesh();
+        }
+    }
+
+    async function flushPendingSignals() {
+        var queued = (ctx.pendingSignals || []).slice();
+        ctx.pendingSignals = [];
+        var i;
+        for (i = 0; i < queued.length; i += 1) {
+            var payload = queued[i];
+            try {
+                if (payload.type === 'group-offer') await peers.handleGroupOffer(payload);
+                else if (payload.type === 'group-answer') await peers.handleGroupAnswer(payload);
+                else if (payload.type === 'group-ice') await peers.handleGroupIce(payload);
+            } catch (e) { /* a later signal retries the media */ }
         }
     }
 
@@ -126,11 +161,21 @@ export function createGroupCallLifecycle(ctx, deps) {
         ctx.meshInvitees = Array.isArray(ctx.meshCall.invitees) ? ctx.meshCall.invitees.slice() : [];
         await media.ensureLocalMedia();
         ui.showGroupUi(ctx.meshCall, 'Connecting…');
-        await signaling.updateStatus('accepted');
+        await flushPendingSignals();
+        var accepted = await signaling.updateStatus('accepted');
+        if (accepted && (accepted.started_at || accepted.answered_at)) {
+            ctx.meshCall.started_at = accepted.started_at || accepted.answered_at;
+            ctx.meshCall.server_time = accepted.server_time || null;
+            if (window.CommsWebRTC && typeof window.CommsWebRTC.__syncTimer === 'function') {
+                window.CommsWebRTC.__syncTimer(ctx.meshCall.started_at, ctx.meshCall.server_time);
+            }
+        }
         await signaling.signal({
             type: 'group-join',
             peer_name: me().name,
-            call_type: ctx.meshCall.call_type
+            call_type: ctx.meshCall.call_type,
+            started_at: ctx.meshCall.started_at || null,
+            server_time: ctx.meshCall.server_time || null
         });
         if (payload.caller_id) {
             await peers.connectToPeer(payload.caller_id, payload.caller_type, payload.peer_name || 'Caller');
@@ -175,7 +220,46 @@ export function createGroupCallLifecycle(ctx, deps) {
     }
 
     function isActive() {
-        return !!ctx.meshCall;
+        return !!(ctx.meshCall || ctx.meshStarting || ctx.meshLocalStream);
+    }
+
+    async function prepareRingPreview() {
+        if (ctx.meshCall) return;
+        ctx.meshWantsVideo = true;
+        try {
+            await media.ensureLocalMedia();
+        } catch (err) {
+            toast((err && err.message) || 'Microphone/camera permission was denied. Allow access and try again.', 'error');
+            return;
+        }
+        if (ctx.meshCall) return;
+        var e = ui.els();
+        if (e.inCall) {
+            e.inCall.hidden = false;
+            e.inCall.classList.add('is-group-call', 'is-video-call', 'is-ringing-preview');
+        }
+        var incoming = document.getElementById('commsIncomingCall');
+        if (incoming) {
+            incoming.hidden = false;
+            incoming.removeAttribute('hidden');
+        }
+        ui.setStatus('Ringing...');
+    }
+
+    function releaseRingPreview() {
+        if (ctx.meshCall) return;
+        if (ctx.meshLocalStream) {
+            ctx.meshLocalStream.getTracks().forEach(function (track) {
+                try { track.stop(); } catch (e) { /* ignore */ }
+            });
+            ctx.meshLocalStream = null;
+        }
+        var e = ui.els();
+        if (e.localVideo) e.localVideo.srcObject = null;
+        if (e.inCall) {
+            e.inCall.hidden = true;
+            e.inCall.classList.remove('is-group-call', 'is-video-call', 'is-ringing-preview');
+        }
     }
 
     return {
@@ -183,6 +267,8 @@ export function createGroupCallLifecycle(ctx, deps) {
         startGroupCall: startGroupCall,
         acceptGroupInvite: acceptGroupInvite,
         leaveGroupCall: leaveGroupCall,
-        isActive: isActive
+        isActive: isActive,
+        prepareRingPreview: prepareRingPreview,
+        releaseRingPreview: releaseRingPreview
     };
 }

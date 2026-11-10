@@ -200,7 +200,7 @@
 }
 
 #commsIncomingCall.comms-modal {
-    z-index: 10150;
+    z-index: 10180;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -212,7 +212,7 @@
 
 #commsCallEnded.comms-modal {
     box-sizing: border-box;
-    z-index: 10160;
+    z-index: 10190;
     display: flex;
     align-items: center;
     justify-content: center;

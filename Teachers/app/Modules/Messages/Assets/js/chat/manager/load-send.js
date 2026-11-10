@@ -1,6 +1,8 @@
 /**
  * Chat manager — load-send
  */
+import { state as realtimeState } from '../realtime/state.js';
+
 export function register(ctx) {
     var root = ctx.root;
     var state = ctx.state;
@@ -212,7 +214,9 @@ function openConversation(id, opts) {
             return api.loadConversations();
         }
     }).catch(function (err) {
-        Comms.showToast(err.message || 'Unable to open conversation.', 'error');
+        if (!cached || !cached.messages || !cached.messages.length) {
+            Comms.showToast(err.message || 'Unable to open conversation.', 'error');
+        }
     });
 }
 
@@ -237,7 +241,9 @@ function appendMessage(message) {
 
     state.messages.push(Object.assign({}, message, message.mine ? { send_status: message.send_status || 'sent' } : {}));
     saveMsgCache(state.activeId, state.messages, state.reactionEmojis);
-    api.renderMessages({ stickBottom: true });
+    var box = els.messages;
+    var nearBottom = !box || (box.scrollHeight - box.scrollTop - box.clientHeight) < 140;
+    api.renderMessages(nearBottom ? { stickBottom: true } : { preserveScroll: true });
 }
 
 function reloadActiveMessages() {
@@ -331,6 +337,7 @@ function sendMessage(body) {
         }).then(function (data) {
             if (!data || !data.message) return;
             var sent = Object.assign({}, data.message, { send_status: 'sent', mine: true, _sentAt: Date.now() });
+            if (sent.id != null) realtimeState.seenMessageIds[String(sent.id)] = Date.now();
             publishSentMessage(sent);
             var realIdx = state.messages.findIndex(function (m) { return Number(m.id) === Number(sent.id); });
             var tempIdx = state.messages.findIndex(function (m) { return String(m.id) === tempId; });
@@ -388,6 +395,7 @@ function sendMessage(body) {
                 api.setUploadProgress(100, false);
                 if (!data || !data.message) return;
                 var sent = Object.assign({}, data.message, { send_status: 'sent', mine: true });
+                if (sent.id != null) realtimeState.seenMessageIds[String(sent.id)] = Date.now();
                 publishSentMessage(sent);
                 var realIdx = state.messages.findIndex(function (m) { return Number(m.id) === Number(sent.id); });
                 var tempIdx = state.messages.findIndex(function (m) { return String(m.id) === fileTempId; });

@@ -14,6 +14,7 @@ export function createMeshState() {
         meshPeerCameraSeq: Object.create(null),
         ringTimer: null,
         meshCameraChain: Promise.resolve(),
-        meshCameraPending: null
+        meshCameraPending: null,
+        pendingSignals: []
     };
 }

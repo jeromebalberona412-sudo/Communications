@@ -28,6 +28,7 @@ async function cleanupMediaOnly() {
     S.callTimer = null;
     S.lastCallDurationMs = api.callElapsedMs();
     S.callStartedAt = null;
+    S.timerAnchored = false;
     if (S.els.timer) {
         S.els.timer.textContent = '00:00';
         S.els.timer.hidden = true;
@@ -37,6 +38,7 @@ async function cleanupMediaOnly() {
     S.cameraEnabled = false;
     S.wantsVideo = false;
     S.callConnected = false;
+    S.callAnswered = false;
     S.peerAnsweredFor = null;
     S.remoteCameraEnabled = true;
     S.remoteMicEnabled = true;
@@ -50,6 +52,9 @@ async function cleanupMediaOnly() {
     S.acceptingCallId = null;
     S.answerAppliedFor = null;
     S.decliningCall = false;
+    S.ringingPreview = false;
+    S.previewGeneration = (S.previewGeneration || 0) + 1;
+    S._previewJob = null;
     S.cameraChain = Promise.resolve();
     S.negotiating = false;
     
@@ -122,7 +127,7 @@ async function cleanupMediaOnly() {
     if (S.els.remoteAudio) S.els.remoteAudio.srcObject = null;
     if (S.els.inCall) {
         S.els.inCall.hidden = true;
-        S.els.inCall.classList.remove('is-connected', 'has-remote-video', 'is-video-call', 'is-remote-portrait', 'is-remote-landscape');
+        S.els.inCall.classList.remove('is-connected', 'has-remote-video', 'is-video-call', 'is-remote-portrait', 'is-remote-landscape', 'is-ringing-preview');
     }
     if (S.els.remoteVideo) {
         S.els.remoteVideo.classList.remove('is-remote-portrait', 'is-remote-landscape');

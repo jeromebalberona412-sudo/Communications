@@ -539,21 +539,6 @@ button.comms-bubble-image {
     font-size: 0.85rem;
     color: #b45309;
 }
-.comms-tap-to-play {
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    z-index: 6;
-    transform: translate(-50%, -50%);
-    min-height: 48px;
-    padding: 0.65rem 1.1rem;
-    border: 0;
-    border-radius: 999px;
-    background: rgba(0, 0, 0, 0.7);
-    color: #fff;
-    font-weight: 700;
-    cursor: pointer;
-}
 
 .comms-modal-peer {
     margin: 0.35rem 0 0;

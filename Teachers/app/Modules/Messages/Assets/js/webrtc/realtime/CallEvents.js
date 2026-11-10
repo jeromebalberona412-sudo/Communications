@@ -23,18 +23,24 @@ function applyPeerAnswered() {
         return;
     }
     S.peerAnsweredFor = cid;
+    S.callAnswered = true;
+    S.lifecycle = 'accepted';
     S.startingCall = true;
     S.role = 'caller';
-    api.keepActiveCallVisible('');
+    api.keepActiveCallVisible('Connecting...');
     api.armConnectionTimeout();
     api.attachLocalVideo();
     api.updateCameraUi();
     api.unlockRemotePlayback();
+    if (S.currentCall && (S.currentCall.started_at || S.currentCall.answered_at)) {
+        api.publishDuration(S.currentCall.started_at || S.currentCall.answered_at, S.currentCall.server_time);
+    } else if (typeof api.pullSharedDuration === 'function') {
+        api.pullSharedDuration();
+    }
     var ice = S.pc && (S.pc.iceConnectionState || S.pc.connectionState);
     if (ice === 'connected' || ice === 'completed') {
         S.callConnected = true;
-        api.setCallStatus('Connected');
-        api.maybeStartConnectedTimer();
+        api.setCallStatus('');
     }
     api.startCallHeartbeat();
     api.signalMediaState();
@@ -116,7 +122,7 @@ async function handleSignal(payload) {
             return;
         }
 
-        if (S.role === 'caller' && api.sameCall(payload)) return;
+        if (S.role === 'caller' && api.sameCall(payload) && !payload.renegotiate) return;
         if (payload.type === 'offer' && S.currentCall && S.currentCall._remoteOffer
             && Number(S.currentCall.id) === Number(payload.call_id)) {
             S.currentCall._remoteOffer = payload.sdp;
@@ -261,11 +267,14 @@ async function handleSignal(payload) {
         api.stopVibration();
 
         var isRenego = !!(payload.renegotiate) || (S.callConnected && S.pc && S.pc.signalingState === 'have-local-offer');
-        if (S.role === 'callee' && !isRenego) return;
+        var haveLocalOffer = !!(S.pc && S.pc.signalingState === 'have-local-offer');
+        if (S.role === 'callee' && !isRenego && !haveLocalOffer) return;
 
-        if (payload.sdp) {
+        if (payload.sdp && haveLocalOffer) {
             try {
                 await api.applyRemoteAnswer(payload.sdp);
+                api.refreshRemoteFromReceivers();
+                api.updateCameraUi();
             } catch (e) { /* ignore duplicate/stale SDP */ }
         }
 
@@ -277,14 +286,23 @@ async function handleSignal(payload) {
         }
 
         if (S.role === 'callee' && !isRenego) return;
-        api.applyPeerAnswered();
         if (payload.started_at || payload.answered_at) {
             S.currentCall = Object.assign({}, S.currentCall || {}, {
                 started_at: payload.started_at || payload.answered_at,
                 server_time: payload.server_time || null
             });
         }
+        api.applyPeerAnswered();
         api.refreshCallChat(S.currentCall && S.currentCall.conversation_id);
+        return;
+    }
+
+    if (payload.type === 'call-timer') {
+        if (!S.currentCall || payload.call_id == null || Number(S.currentCall.id) !== Number(payload.call_id)) return;
+        var sharedStart = payload.started_at || payload.answered_at;
+        if (sharedStart && typeof api.publishDuration === 'function') {
+            api.publishDuration(sharedStart, payload.server_time || null);
+        }
         return;
     }
 
