@@ -1,5 +1,5 @@
 import { RING_MS } from './GroupMeshState.js';
-import { me, routes, toast } from './GroupCallUtils.js';
+import { me, routes, samePortalType, toast } from './GroupCallUtils.js';
 
 export function createGroupCallLifecycle(ctx, deps) {
     var ui = deps.ui;
@@ -94,13 +94,59 @@ export function createGroupCallLifecycle(ctx, deps) {
             }
             ctx.meshInvitees = Array.isArray(ctx.meshCall.invitees) ? ctx.meshCall.invitees.slice() : [];
             await mediaReady;
-            ui.showGroupUi(Object.assign({}, ctx.meshCall, {
-                peer: (ctx.meshCall && ctx.meshCall.peer) || {
-                    name: peer.name || (conversation && conversation.name) || 'Group',
-                    is_group: true,
-                    profile_image_url: peer.profile_image_url || peer.avatar_url || ''
+            var self = me();
+            var joining = !!(data && data.joined_existing);
+            var iAmHost = Number(ctx.meshCall.caller_id) === Number(self.id)
+                && samePortalType(ctx.meshCall.caller_type, self.type);
+            var groupPeer = (ctx.meshCall && ctx.meshCall.peer) || {
+                name: peer.name || (conversation && conversation.name) || 'Group',
+                is_group: true,
+                profile_image_url: peer.profile_image_url || peer.avatar_url || ''
+            };
+            if (joining && !iAmHost) {
+                ctx.meshRole = 'callee';
+                ctx.meshWantsVideo = (ctx.meshCall.call_type || callType) === 'video' || callType === 'video';
+                ctx.meshCameraOn = ctx.meshWantsVideo;
+                if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
+                    window.CommsWebRTC.__stopRingtone();
                 }
-            }), 'Ringing...');
+                ui.showGroupUi(Object.assign({}, ctx.meshCall, { peer: groupPeer }), 'Connecting...');
+                var acceptedJoin = await signaling.updateStatus('accepted');
+                if (acceptedJoin && (acceptedJoin.started_at || acceptedJoin.answered_at)) {
+                    ctx.meshCall.started_at = acceptedJoin.started_at || acceptedJoin.answered_at;
+                    ctx.meshCall.server_time = acceptedJoin.server_time || null;
+                    if (window.CommsWebRTC && typeof window.CommsWebRTC.__syncTimer === 'function') {
+                        window.CommsWebRTC.__syncTimer(ctx.meshCall.started_at, ctx.meshCall.server_time);
+                    }
+                }
+                await signaling.signal({
+                    type: 'group-join',
+                    peer_name: self.name,
+                    call_type: ctx.meshCall.call_type || callType,
+                    started_at: ctx.meshCall.started_at || null,
+                    server_time: ctx.meshCall.server_time || null
+                });
+                if (ctx.meshCall.caller_id) {
+                    await peers.connectToPeer(ctx.meshCall.caller_id, ctx.meshCall.caller_type, 'Host');
+                }
+                (ctx.meshInvitees || []).forEach(function (person) {
+                    var pid = person.id || person.user_id;
+                    var ptype = person.user_type || person.type;
+                    if (!pid) return;
+                    peers.connectToPeer(pid, ptype, person.name || 'Participant');
+                });
+                ctx.meshConnected = true;
+                ui.setStatus('Connected');
+                return;
+            }
+            if (joining && iAmHost) {
+                if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
+                    window.CommsWebRTC.__stopRingtone();
+                }
+                ui.showGroupUi(Object.assign({}, ctx.meshCall, { peer: groupPeer }), 'Ringing...');
+                return;
+            }
+            ui.showGroupUi(Object.assign({}, ctx.meshCall, { peer: groupPeer }), 'Ringing...');
             await signaling.signal({
                 type: 'group-invite',
                 call_type: callType,

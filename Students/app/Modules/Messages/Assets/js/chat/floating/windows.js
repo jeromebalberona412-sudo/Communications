@@ -275,6 +275,26 @@ export function attachWindows(ctx) {
         if (!w || !w.el) return;
 
         w.el.addEventListener('click', function (e) {
+            var more = e.target.closest('[data-float-more]');
+            if (more) {
+                e.preventDefault();
+                e.stopPropagation();
+                var menuId = more.getAttribute('data-float-more');
+                var menu = w.el.querySelector('[data-float-menu="' + menuId + '"]');
+                w.el.querySelectorAll('[data-float-menu]').forEach(function (item) {
+                    if (item !== menu) item.hidden = true;
+                });
+                if (menu) menu.hidden = !menu.hidden;
+                return;
+            }
+            var del = e.target.closest('[data-float-delete]');
+            if (del) {
+                e.preventDefault();
+                e.stopPropagation();
+                w.el.querySelectorAll('[data-float-menu]').forEach(function (item) { item.hidden = true; });
+                ctx.deleteFloatingMessage(cid, del.getAttribute('data-float-delete'), del.getAttribute('data-float-mine') === '1');
+                return;
+            }
             var btn = e.target.closest('[data-action]');
             if (!btn) return;
 
@@ -301,11 +321,16 @@ export function attachWindows(ctx) {
                 ctx.hideAttachMenu(w.el);
                 var photos = w.el.querySelector('.floating-chat-photo-input');
                 if (photos) photos.click();
-            } else if (action === 'files') {
+            }             else if (action === 'files') {
                 ctx.hideAttachMenu(w.el);
                 var files = w.el.querySelector('.floating-chat-file-input');
                 if (files) files.click();
             }
+        });
+
+        document.addEventListener('click', function (ev) {
+            if (!w.el || ev.target.closest('[data-float-more]') || ev.target.closest('[data-float-menu]')) return;
+            w.el.querySelectorAll('[data-float-menu]').forEach(function (item) { item.hidden = true; });
         });
 
         var cameraInput = w.el.querySelector('.floating-chat-camera-input');

@@ -94,6 +94,7 @@ class CallController extends Controller
         return response()->json([
             'call' => $this->calls->serialize($call->load(['caller', 'receiver', 'conversation']), $viewer),
             'message' => $notice ? $this->messages->serialize($notice->load('sender'), $viewer) : null,
+            'joined_existing' => $this->calls->reusedGroupCall(),
         ], 201);
     }
 

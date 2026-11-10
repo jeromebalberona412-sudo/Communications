@@ -1,4 +1,4 @@
-import { toast } from './GroupCallUtils.js';
+import { me, toast } from './GroupCallUtils.js';
 
 export function createGroupMeshCamera(ctx, deps) {
     var ui = deps.ui;
@@ -47,6 +47,9 @@ export function createGroupMeshCamera(ctx, deps) {
                 });
             });
             ctx.meshCameraOn = false;
+            if (!ctx.meshCall || ctx.meshCall.call_type !== 'video') {
+                ctx.meshWantsVideo = false;
+            }
             syncMeshCameraUi();
             ctx.meshCameraSeq += 1;
             console.debug('[cam] Broadcasting camera OFF, seq:', ctx.meshCameraSeq);
@@ -73,23 +76,6 @@ export function createGroupMeshCamera(ctx, deps) {
             });
 
             ctx.meshLocalStream.addTrack(newTrack);
-            Object.keys(ctx.meshPeers).forEach(function (key) {
-                var pc = ctx.meshPeers[key].pc;
-                if (!pc) return;
-                var videoSender = pc.getSenders().find(function (s) {
-                    return s && s.track && s.track.kind === 'video';
-                }) || pc.getTransceivers().reduce(function (found, t) {
-                    if (found) return found;
-                    var kind = (t.receiver && t.receiver.track && t.receiver.track.kind)
-                        || (t.sender && t.sender.track && t.sender.track.kind);
-                    return kind === 'video' ? t.sender : null;
-                }, null);
-                if (videoSender) {
-                    videoSender.replaceTrack(newTrack).catch(function () {});
-                } else {
-                    pc.addTrack(newTrack, ctx.meshLocalStream);
-                }
-            });
             var e = ui.els();
             if (e.localVideo) {
                 e.localVideo.srcObject = ctx.meshLocalStream;
@@ -102,11 +88,88 @@ export function createGroupMeshCamera(ctx, deps) {
             live.forEach(function (t) { t.enabled = true; });
         }
 
+        ctx.meshWantsVideo = true;
         ctx.meshCameraOn = true;
         syncMeshCameraUi();
+        await pushVideoToPeers();
         ctx.meshCameraSeq += 1;
         console.debug('[cam] Broadcasting camera ON, seq:', ctx.meshCameraSeq);
         await signaling.signal({ type: 'camera-state', enabled: true, seq: ctx.meshCameraSeq });
+    }
+
+    function findVideoSender(pc) {
+        var sender = pc.getSenders().find(function (item) {
+            return item && item.track && item.track.kind === 'video';
+        });
+        if (sender) return sender;
+        return pc.getTransceivers().reduce(function (found, item) {
+            if (found) return found;
+            var kind = (item.receiver && item.receiver.track && item.receiver.track.kind)
+                || (item.sender && item.sender.track && item.sender.track.kind);
+            return kind === 'video' ? item.sender : null;
+        }, null);
+    }
+
+    async function pushVideoToPeers() {
+        if (!ctx.meshLocalStream) return;
+        var track = ctx.meshLocalStream.getVideoTracks().find(function (item) {
+            return item && item.readyState === 'live' && item.enabled !== false;
+        });
+        if (!track) return;
+        var offerKeys = [];
+        var keys = Object.keys(ctx.meshPeers);
+        var n;
+        for (n = 0; n < keys.length; n += 1) {
+            var key = keys[n];
+            var entry = ctx.meshPeers[key];
+            var pc = entry && entry.pc;
+            if (!pc) continue;
+            var sender = findVideoSender(pc);
+            if (sender) {
+                var hadTrack = !!sender.track;
+                try { await sender.replaceTrack(track); } catch (eReplace) { /* offer still carries the m-line */ }
+                try {
+                    var tx = pc.getTransceivers().find(function (item) { return item.sender === sender; });
+                    if (tx && (tx.direction === 'inactive' || tx.direction === 'recvonly')) tx.direction = 'sendrecv';
+                } catch (eDir) { /* direction is best-effort */ }
+                if (!hadTrack) offerKeys.push(key);
+                continue;
+            }
+            try {
+                pc.addTrack(track, ctx.meshLocalStream);
+                offerKeys.push(key);
+            } catch (eAdd) { /* already attached */ }
+        }
+        var i;
+        for (i = 0; i < offerKeys.length; i += 1) {
+            await renegotiatePeer(offerKeys[i]);
+        }
+        if (typeof ui.refreshGridLayout === 'function') ui.refreshGridLayout();
+    }
+
+    async function renegotiatePeer(key, attempt) {
+        var entry = ctx.meshPeers[key];
+        if (!entry || !entry.pc) return;
+        if (entry.pc.signalingState !== 'stable') {
+            if ((attempt || 0) < 4) {
+                await new Promise(function (resolve) { window.setTimeout(resolve, 350); });
+                return renegotiatePeer(key, (attempt || 0) + 1);
+            }
+            return;
+        }
+        try {
+            var offer = await entry.pc.createOffer();
+            await entry.pc.setLocalDescription(offer);
+            await signaling.signal({
+                type: 'group-offer',
+                renegotiate: true,
+                sdp: { type: offer.type, sdp: offer.sdp },
+                to_user_id: entry.id,
+                to_user_type: entry.type,
+                call_type: 'video',
+                peer_name: me().name || ''
+            }, { id: entry.id, type: entry.type });
+        } catch (eOffer) { /* the next camera toggle retries */ }
     }
 
     function syncMeshCameraUi() {

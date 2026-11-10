@@ -224,7 +224,78 @@
     flex-direction: column;
     gap: 0.125rem;
     max-width: 75%;
+    position: relative;
     animation: fadeInUp 0.2s ease;
+}
+
+.floating-chat-actions {
+    position: absolute;
+    top: 0;
+    z-index: 2;
+}
+
+.floating-chat-msg.is-mine .floating-chat-actions {
+    left: -1.6rem;
+}
+
+.floating-chat-msg.is-theirs .floating-chat-actions {
+    right: -1.6rem;
+}
+
+.floating-chat-more {
+    width: 1.4rem;
+    height: 1.4rem;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: #65676b;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0;
+}
+
+.floating-chat-msg:hover .floating-chat-more,
+.floating-chat-msg:focus-within .floating-chat-more,
+.floating-chat-more:focus-visible {
+    opacity: 1;
+}
+
+.floating-chat-menu {
+    position: absolute;
+    top: 1.5rem;
+    min-width: 8.5rem;
+    background: #fff;
+    border: 1px solid #e4e6eb;
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    padding: 0.25rem;
+}
+
+.floating-chat-msg.is-mine .floating-chat-menu {
+    right: 0;
+}
+
+.floating-chat-msg.is-theirs .floating-chat-menu {
+    left: 0;
+}
+
+.floating-chat-menu button {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    padding: 0.45rem 0.6rem;
+    border-radius: 6px;
+    color: #e41e3f;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.floating-chat-menu button:hover,
+.floating-chat-menu button:focus-visible {
+    background: #f0f2f5;
 }
 
 @keyframes fadeInUp {
@@ -254,22 +325,26 @@
 }
 
 .floating-chat-msg-body {
-    padding: 0.5rem 0.75rem;
-    border-radius: 18px;
+    padding: 0.55rem 0.75rem;
+    border-radius: 14px;
     font-size: 0.875rem;
     line-height: 1.4;
     word-wrap: break-word;
-    overflow-wrap: break-word;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
 }
 
 .floating-chat-msg.is-mine .floating-chat-msg-body {
     background: #0039A8;
     color: #fff;
+    border-bottom-right-radius: 4px;
 }
 
 .floating-chat-msg.is-theirs .floating-chat-msg-body {
-    background: #e4e6eb;
+    background: #fff;
     color: #050505;
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
 }
 
 .floating-chat-msg.is-system .floating-chat-msg-body {

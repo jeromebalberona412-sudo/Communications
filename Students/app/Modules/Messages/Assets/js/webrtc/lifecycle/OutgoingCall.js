@@ -187,8 +187,6 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
             dedupe: false
         });
         S.role = 'caller';
-        S.lifecycle = 'ringing';
-        S.callConnected = false;
         S.lastEndedCallId = null;
         S.lastCallDurationMs = 0;
         S.currentCall = data.call;
@@ -201,10 +199,17 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
         if (S.els.muteBtn) S.els.muteBtn.hidden = false;
         if (S.els.cameraBtn) S.els.cameraBtn.hidden = false;
         api.setCtrlLabel(S.els.endBtn, 'End');
+        var alreadyAnswered = !!(S.callAnswered || S.callConnected
+            || (S.currentCall && S.currentCall.id != null && S.answeredCallIds[Number(S.currentCall.id)]));
+        if (!alreadyAnswered) {
+            S.lifecycle = 'ringing';
+            S.callConnected = false;
+        }
         api.showInCall(Object.assign({}, S.currentCall, {
             peer: S.currentCall.peer || (conversation && conversation.other_user) || { name: 'Contact' }
-        }), 'Ringing...');
-        api.startRingtone('outgoing');
+        }), alreadyAnswered ? 'Connecting...' : 'Ringing...');
+        if (alreadyAnswered) api.stopRingtone();
+        else api.startRingtone('outgoing');
         api.armRingTimeout();
         var callerDisplayName = (api.myIdentity().name)
             || document.getElementById('commsPeerName')?.textContent

@@ -75,6 +75,87 @@ export function attachThread(ctx) {
         if (w) ctx.syncJumpButton(w);
     };
 
+    ctx.messageActionsHtml = function (message, mine) {
+        if (!message || message.id == null) return '';
+        var id = String(message.id);
+        if (id.indexOf('temp') === 0 || id.indexOf('local-') === 0) return '';
+        if (message.message_type === 'call' || message.message_type === 'system' || message.message_type === 'deleted' || message.deleted_for_all) {
+            return '';
+        }
+        return '<div class="floating-chat-actions">' +
+            '<button type="button" class="floating-chat-more" data-float-more="' + ctx.escapeHtml(id) + '" aria-label="Message options">' +
+            '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="5" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="19" r="1.7" fill="currentColor"></circle></svg>' +
+            '</button>' +
+            '<div class="floating-chat-menu" data-float-menu="' + ctx.escapeHtml(id) + '" hidden>' +
+            '<button type="button" data-float-delete="' + ctx.escapeHtml(id) + '" data-float-mine="' + (mine ? '1' : '0') + '">Delete</button>' +
+            '</div></div>';
+    };
+
+    ctx.applyFloatingDelete = function (conversationId, messageId, scope, message) {
+        var w = ctx.openWindows[String(conversationId)];
+        var bodyEl = w && w.el ? w.el.querySelector('.floating-chat-body') : null;
+        var row = bodyEl ? bodyEl.querySelector('[data-message-id="' + messageId + '"]') : null;
+        if (row) {
+            if (scope === 'me') {
+                row.parentNode.removeChild(row);
+            } else {
+                var text = (message && message.body) || 'This message was deleted';
+                var bubble = row.querySelector('.floating-chat-msg-body');
+                if (bubble) bubble.textContent = text;
+                var actions = row.querySelector('.floating-chat-actions');
+                if (actions) actions.parentNode.removeChild(actions);
+                row.classList.add('is-deleted');
+            }
+        }
+        var key = ctx.messageCacheKey(conversationId);
+        var cached = ctx.readMessageCache(key) || [];
+        if (scope === 'me') {
+            cached = cached.filter(function (item) { return String(item.id) !== String(messageId); });
+        } else {
+            cached = cached.map(function (item) {
+                if (String(item.id) !== String(messageId)) return item;
+                return Object.assign({}, item, message || {}, {
+                    body: (message && message.body) || 'This message was deleted',
+                    message_type: 'deleted',
+                    deleted_for_all: true
+                });
+            });
+        }
+        ctx.writeMessageCache(key, cached);
+    };
+
+    ctx.deleteFloatingMessage = function (conversationId, messageId, mine) {
+        var route = ctx.routes && ctx.routes.deleteMessage;
+        if (!route || !window.Comms || typeof window.Comms.api !== 'function') return;
+        var canDeleteAll = !!mine;
+        var ask = typeof window.Comms.openDeleteMessageDialog === 'function'
+            ? window.Comms.openDeleteMessageDialog({ canDeleteAll: canDeleteAll })
+            : Promise.resolve(canDeleteAll ? 'all' : 'me');
+        ask.then(function (scope) {
+            if (!scope) return null;
+            return window.Comms.api(window.Comms.route(route, messageId) + '?scope=' + encodeURIComponent(scope), {
+                method: 'DELETE',
+                body: JSON.stringify({ scope: scope }),
+                dedupe: false
+            }).then(function (data) {
+                var applied = (data && data.scope) || scope;
+                ctx.applyFloatingDelete(conversationId, messageId, applied, data && data.message);
+                if (window.CommsChat && data && data.message && typeof window.CommsChat.onMessageChange === 'function') {
+                    window.CommsChat.onMessageChange(data.message);
+                } else if (applied === 'me' && window.CommsChat && typeof window.CommsChat.reloadActiveMessages === 'function') {
+                    window.CommsChat.reloadActiveMessages();
+                }
+                if (window.Comms.showToast) {
+                    window.Comms.showToast(applied === 'me' ? 'Message deleted for you.' : 'Message deleted for everyone.', 'success');
+                }
+            }).catch(function (err) {
+                if (window.Comms.showToast) {
+                    window.Comms.showToast((err && err.message) || 'Unable to delete message.', 'error');
+                }
+            });
+        });
+    };
+
     ctx.renderMessages = function (bodyEl, messages) {
         if (!bodyEl) return;
         if (!messages.length) {
@@ -91,7 +172,8 @@ export function attachThread(ctx) {
                     '<div class="floating-chat-msg-body comms-call-text">' + body + '</div>' +
                     '</div>';
             }
-            return '<div class="floating-chat-msg ' + (mine ? 'is-mine' : 'is-theirs') + '">' +
+            return '<div class="floating-chat-msg ' + (mine ? 'is-mine' : 'is-theirs') + '" data-message-id="' + ctx.escapeHtml(String(m.id)) + '">' +
+                ctx.messageActionsHtml(m, mine) +
                 ctx.renderAttachmentHtml(m.attachments) +
                 (body ? '<div class="floating-chat-msg-body">' + body + '</div>' : '') +
                 '<div class="floating-chat-msg-time">' + time + '</div>' +
@@ -122,7 +204,8 @@ export function attachThread(ctx) {
             var msgEl2 = document.createElement('div');
             msgEl2.className = 'floating-chat-msg ' + (mine ? 'is-mine' : 'is-theirs');
             msgEl2.dataset.messageId = message.id;
-            msgEl2.innerHTML = ctx.renderAttachmentHtml(message.attachments) +
+            msgEl2.innerHTML = ctx.messageActionsHtml(message, mine) +
+                ctx.renderAttachmentHtml(message.attachments) +
                 (body ? '<div class="floating-chat-msg-body">' + body + '</div>' : '') +
                 '<div class="floating-chat-msg-time">' + time + '</div>';
             bodyEl.appendChild(msgEl2);

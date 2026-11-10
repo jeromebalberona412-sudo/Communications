@@ -27,6 +27,13 @@ class CallService
 
     protected ?Message $lastCallNotice = null;
 
+    protected bool $reusedGroupCall = false;
+
+    public function reusedGroupCall(): bool
+    {
+        return $this->reusedGroupCall;
+    }
+
     public function pullLastCallNotice(): ?Message
     {
         $notice = $this->lastCallNotice;
@@ -46,6 +53,8 @@ class CallService
         string $callType,
         ?int $receiverUserId = null
     ): Call {
+        $this->reusedGroupCall = false;
+
         if (! $this->conversations->isParticipant($conversation, $caller)) {
             abort(403);
         }
@@ -131,6 +140,15 @@ class CallService
             // Soft cap: still allow the call; clients limit connected mesh peers.
         }
 
+        if ($isGroupCall) {
+            $open = $this->openGroupCall($conversation);
+            if ($open) {
+                $this->reusedGroupCall = true;
+
+                return $open;
+            }
+        }
+
         $call = DB::transaction(function () use (
             $conversation,
             $caller,
@@ -144,7 +162,11 @@ class CallService
             $this->releaseStaleActiveCalls();
             // Caller is starting a new outbound call — abandon their own unanswered rings.
             $this->cancelCallerOutboundRinging($callerId);
-            $this->assertParticipantsAvailableForCall($callerId, $isGroupCall ? null : $receiverId);
+            $this->assertParticipantsAvailableForCall(
+                $callerId,
+                $isGroupCall ? null : $receiverId,
+                $isGroupCall ? (int) $conversation->id : null
+            );
 
             $call = Call::query()->create([
                 'conversation_id' => $conversation->id,
@@ -413,7 +435,18 @@ class CallService
             ]);
     }
 
-    protected function assertParticipantsAvailableForCall(int $callerId, ?int $receiverId): void
+    protected function openGroupCall(Conversation $conversation): ?Call
+    {
+        return Call::query()
+            ->where('conversation_id', $conversation->id)
+            ->whereColumn('caller_id', 'receiver_id')
+            ->whereIn('status', [Call::STATUS_RINGING, Call::STATUS_ACCEPTED])
+            ->whereNull('ended_at')
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    protected function assertParticipantsAvailableForCall(int $callerId, ?int $receiverId, ?int $ignoreGroupConversationId = null): void
     {
         $active = Call::query()
             ->whereIn('status', Call::ACTIVE_STATUSES)
@@ -458,11 +491,18 @@ class CallService
                 ? ($callIsCaller || $callIsReceiver)
                 : $callIsCaller;
 
+            if ($ignoreGroupConversationId !== null
+                && $isGroupStub
+                && (int) $call->conversation_id === $ignoreGroupConversationId) {
+                continue;
+            }
+
             if (! $userIsBusy && $call->status === Call::STATUS_ACCEPTED && $isGroupStub) {
-                // Accepted group call: every member of the room is busy.
+                // Accepted group call: every member of the room is busy for a different call.
                 $userIsBusy = ConversationParticipant::query()
                     ->where('conversation_id', $call->conversation_id)
                     ->where('user_id', $callerId)
+                    ->whereIn('user_type', $this->types->equivalentTypes($this->types->portalType()) ?: [$this->types->portalType()])
                     ->exists();
             }
 

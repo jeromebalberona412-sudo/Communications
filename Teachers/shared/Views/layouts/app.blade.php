@@ -28,6 +28,7 @@
             'conversations' => route('api.communications.conversations.index'),
             'storeConversation' => route('api.communications.conversations.store'),
             'messages' => url('/api/communications/conversations/__ID__/messages'),
+            'deleteMessage' => url('/api/communications/messages/__ID__'),
             'read' => url('/api/communications/conversations/__ID__/read'),
             'unreadCount' => route('api.communications.unread-count'),
             'startCall' => url('/api/communications/conversations/__ID__/calls'),
