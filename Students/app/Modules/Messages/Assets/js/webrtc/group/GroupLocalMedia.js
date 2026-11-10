@@ -49,6 +49,13 @@ export function createGroupLocalMedia(ctx, ui) {
         if (ctx.meshLocalStream) return ctx.meshLocalStream;
         ctx.meshLocalStream = await getLocalStream(ctx.meshWantsVideo);
         ctx.meshCameraOn = !!ctx.meshWantsVideo;
+        if (ctx.meshWantsVideo && ctx.meshLocalStream && typeof ctx.meshLocalStream.getVideoTracks === 'function') {
+            ctx.meshLocalStream.getVideoTracks().forEach(function (track) {
+                if (track && track.readyState === 'live') {
+                    try { track.enabled = true; } catch (eOn) { /* ignore */ }
+                }
+            });
+        }
         var e = ui.els();
         if (e.inCall) {
             e.inCall.hidden = false;
@@ -63,7 +70,7 @@ export function createGroupLocalMedia(ctx, ui) {
             e.localVideo.playsInline = true;
             e.localVideo.setAttribute('playsinline', '');
             e.localVideo.autoplay = true;
-            e.localVideo.hidden = !ctx.meshCameraOn;
+            e.localVideo.hidden = false;
             e.localVideo.classList.toggle('is-camera-off', !ctx.meshCameraOn);
             var play = e.localVideo.play();
             if (play && typeof play.catch === 'function') play.catch(function () { /* ignore */ });

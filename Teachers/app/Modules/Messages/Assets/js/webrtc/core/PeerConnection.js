@@ -52,6 +52,7 @@ function hasLiveRemoteVideo() {
     if (!live) return false;
     if (S.els.remoteVideo && Number(S.els.remoteVideo.videoWidth || 0) > 0) return true;
     if (S.remoteHasFrames) return true;
+    if (S.currentCall && String(S.currentCall.call_type || '') === 'video') return true;
     return false;
 }
 
@@ -462,9 +463,10 @@ function prepareLocalPreview(videoEnabled) {
     if (S._previewJob) return S._previewJob;
     S.wantsVideo = !!videoEnabled;
     if (localPreviewUsable(!!videoEnabled)) {
-        if (!videoEnabled && S.localStream) {
+        if (S.localStream) {
             S.localStream.getVideoTracks().forEach(function (track) {
-                try { track.enabled = false; } catch (eOff) { /* ignore */ }
+                if (!track || track.readyState !== 'live') return;
+                try { track.enabled = !!videoEnabled; } catch (eOff) { /* ignore */ }
             });
         }
         S.cameraEnabled = !!videoEnabled && !!(typeof api.findLiveVideoTrack === 'function' && api.findLiveVideoTrack());

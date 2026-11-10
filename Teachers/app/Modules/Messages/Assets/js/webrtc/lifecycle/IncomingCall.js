@@ -591,14 +591,14 @@ function showIncoming(call) {
 
 function beginIncomingPreview(call) {
     if (!call || call.is_group_call || call._groupInvite) return;
+    if (S.callAnswered || S.callConnected || S.acceptingCallId) return;
     var video = String(call.call_type || '') === 'video';
     S.ringingPreview = false;
     S.wantsVideo = video;
     S.cameraEnabled = false;
     S.lifecycle = 'ringing';
     S.callConnected = false;
-    S.previewGeneration = (S.previewGeneration || 0) + 1;
-    if (S.els.inCall && !S.callConnected) {
+    if (S.els.inCall && !S.callConnected && !S.callAnswered) {
         S.els.inCall.hidden = true;
         S.els.inCall.classList.remove('is-ringing-preview', 'is-video-call');
     }

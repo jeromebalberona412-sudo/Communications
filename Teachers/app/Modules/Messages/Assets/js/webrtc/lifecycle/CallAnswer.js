@@ -166,11 +166,15 @@ async function acceptIncoming() {
     api.clearRingTimeout();
     api.stopRingtone();
     api.hideIncoming();
-    S.wantsVideo = call.call_type === 'video';
+    S.wantsVideo = String(call.call_type || '') === 'video';
+    if (S.wantsVideo) S.cameraEnabled = true;
     S.lifecycle = 'accepted';
     api.showInCall(call, 'Connecting...');
     api.updateCameraUi();
     api.unlockRemotePlayback();
+    var answerPreview = S.wantsVideo && typeof api.prepareLocalPreview === 'function'
+        ? api.prepareLocalPreview(true)
+        : null;
 
     var alive = function () { return callStillLive(generation, callId); };
 
@@ -209,6 +213,9 @@ async function acceptIncoming() {
         api.assertMediaReady();
         api.armConnectionTimeout();
         S.lifecycle = 'connecting';
+        if (answerPreview) {
+            try { await answerPreview; } catch (ePreview) { /* the peer connection retries the camera */ }
+        }
         await api.ensurePeerConnection(!!S.wantsVideo);
         if (!alive()) return;
         if (S.wantsVideo) {
@@ -217,6 +224,7 @@ async function acceptIncoming() {
             if (pickupTrack) pickupTrack.enabled = true;
             api.attachLocalVideo();
             api.syncCameraUi();
+            api.updateCameraUi();
         }
         if (S.currentCall && S.currentCall._remoteOffer) {
             call._remoteOffer = S.currentCall._remoteOffer;

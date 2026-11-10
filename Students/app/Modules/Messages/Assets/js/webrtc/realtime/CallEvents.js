@@ -27,6 +27,17 @@ function applyPeerAnswered() {
     S.lifecycle = 'accepted';
     S.startingCall = true;
     S.role = 'caller';
+    if (S.currentCall && String(S.currentCall.call_type || '') === 'video') {
+        S.cameraEnabled = true;
+        S.wantsVideo = true;
+        if (S.localStream && typeof S.localStream.getVideoTracks === 'function') {
+            S.localStream.getVideoTracks().forEach(function (track) {
+                if (track && track.readyState === 'live') {
+                    try { track.enabled = true; } catch (eOn) { /* ignore */ }
+                }
+            });
+        }
+    }
     api.keepActiveCallVisible('Connecting...');
     api.armConnectionTimeout();
     api.attachLocalVideo();

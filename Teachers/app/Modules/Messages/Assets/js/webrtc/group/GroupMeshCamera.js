@@ -175,7 +175,7 @@ export function createGroupMeshCamera(ctx, deps) {
     function syncMeshCameraUi() {
         var e = ui.els();
         if (e.localVideo) {
-            e.localVideo.hidden = !ctx.meshCameraOn;
+            e.localVideo.hidden = false;
             e.localVideo.classList.toggle('is-camera-off', !ctx.meshCameraOn);
         }
         if (typeof ui.refreshGridLayout === 'function') ui.refreshGridLayout();

@@ -34,6 +34,33 @@ function loadMsgCache(id) {
     return null;
 }
 
+function mergeLoadedMessages(current, incoming) {
+    var server = Array.isArray(incoming) ? incoming.slice() : [];
+    var maxId = 0;
+    server.forEach(function (message) {
+        var id = Number(message && message.id);
+        if (isFinite(id) && id > maxId) maxId = id;
+    });
+    var extra = (current || []).filter(function (message) {
+        if (!message || message.id == null) return false;
+        var raw = String(message.id);
+        if (raw.indexOf('local-') === 0 || raw.indexOf('temp-') === 0) return true;
+        var id = Number(raw);
+        return isFinite(id) && id > maxId;
+    });
+    var byId = Object.create(null);
+    server.concat(extra).forEach(function (message) {
+        if (message && message.id != null) byId[String(message.id)] = message;
+    });
+    return Object.keys(byId).map(function (key) { return byId[key]; }).sort(function (a, b) {
+        var left = Number(a.id);
+        var right = Number(b.id);
+        if (!isFinite(left)) left = Number.MAX_SAFE_INTEGER;
+        if (!isFinite(right)) right = Number.MAX_SAFE_INTEGER;
+        return left - right;
+    });
+}
+
 function applyMessages(messages, emojis, opts) {
     state.messages = messages || [];
     if (Array.isArray(emojis) && emojis.length) {
@@ -190,12 +217,16 @@ function openConversation(id, opts) {
         var freshEmojis = Array.isArray(data.reaction_emojis) ? data.reaction_emojis : [];
 
         // Only re-render if conversation is still active
+        var mergedMessages = mergeLoadedMessages(
+            Number(state.activeId) === Number(id) ? state.messages : (cached && cached.messages),
+            freshMessages
+        );
         if (Number(state.activeId) === Number(id)) {
             state.messagesHasMore = freshMessages.length >= 40;
-            applyMessages(freshMessages, freshEmojis, { stickBottom: !cached, hasMore: state.messagesHasMore });
+            applyMessages(mergedMessages, freshEmojis, { stickBottom: !cached, hasMore: state.messagesHasMore });
         }
 
-        saveMsgCache(id, freshMessages, freshEmojis);
+        saveMsgCache(id, mergedMessages, freshEmojis);
 
         if (document.visibilityState === 'hidden') return null;
         window.__COMMS_INBOX_EPOCH__ = (Number(window.__COMMS_INBOX_EPOCH__) || 0) + 1;
@@ -250,7 +281,7 @@ function reloadActiveMessages() {
     if (!state.activeId) return Promise.resolve();
     var cid = state.activeId;
     return Comms.api(Comms.route(routes.messages, cid)).then(function (data) {
-        var msgs = data.messages || [];
+        var msgs = mergeLoadedMessages(state.messages, data.messages || []);
         var emojis = Array.isArray(data.reaction_emojis) ? data.reaction_emojis : [];
         saveMsgCache(cid, msgs, emojis);
         if (Number(state.activeId) === Number(cid)) {

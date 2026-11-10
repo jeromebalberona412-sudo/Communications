@@ -188,13 +188,47 @@ export function attachThread(ctx) {
         });
     };
 
+    ctx.threadMessages = ctx.threadMessages || {};
+
+    function messageOrder(message) {
+        var raw = String(message && message.id != null ? message.id : '');
+        if (raw.indexOf('temp-') === 0) return Number.MAX_SAFE_INTEGER;
+        var id = Number(raw);
+        return isFinite(id) ? id : Number.MAX_SAFE_INTEGER - 1;
+    }
+
+    function mergeThreadMessages(current, incoming) {
+        var byId = Object.create(null);
+        (current || []).concat(incoming || []).forEach(function (message) {
+            if (!message || message.id == null) return;
+            byId[String(message.id)] = message;
+        });
+        var list = Object.keys(byId).map(function (key) { return byId[key]; });
+        list.sort(function (a, b) { return messageOrder(a) - messageOrder(b); });
+        var savedBody = Object.create(null);
+        list.forEach(function (message) {
+            if (String(message.id).indexOf('temp-') === 0) return;
+            savedBody[String(message.body || '') + '|' + String(message.message_type || '')] = true;
+        });
+        return list.filter(function (message) {
+            if (String(message.id).indexOf('temp-') !== 0) return true;
+            return !savedBody[String(message.body || '') + '|' + String(message.message_type || '')];
+        });
+    }
+
+    ctx.rememberThread = function (conversationId, messages) {
+        var key = String(conversationId);
+        ctx.threadMessages[key] = mergeThreadMessages(ctx.threadMessages[key], messages);
+        return ctx.threadMessages[key];
+    };
+
     ctx.renderMessages = function (bodyEl, messages) {
         if (!bodyEl) return;
-        if (!messages.length) {
+        var rows = Array.isArray(messages) ? messages : [];
+        if (!rows.length) {
             bodyEl.innerHTML = '<div class="floating-chat-empty">No messages yet</div>';
             return;
         }
-        var rows = messages.slice().reverse();
         var html = rows.map(function (m) {
             var mine = Number(m.sender_id) === Number(ctx.currentUserId);
             var time = ctx.formatTime(m.created_at);
@@ -270,6 +304,12 @@ export function attachThread(ctx) {
             tempEl.dataset.messageId = realMessage.id;
             tempEl.classList.remove('is-sending');
         }
+        var bucket = ctx.threadMessages && ctx.threadMessages[String(conversationId)];
+        if (bucket) {
+            bucket.forEach(function (row) {
+                if (String(row.id) === String(tempId)) Object.assign(row, realMessage);
+            });
+        }
     };
 
     ctx.markMessageFailed = function (conversationId, messageId) {
@@ -299,33 +339,34 @@ export function attachThread(ctx) {
         var cached = ctx.readMessageCache(cacheKey);
         var shared = window.Comms.readThreadCache ? window.Comms.readThreadCache(conversationId) : null;
         var sharedMessages = shared && Array.isArray(shared.messages) ? shared.messages : null;
-        var instant = (cached && cached.length) ? cached : sharedMessages;
-        if (instant && instant.length) {
+        var instant = ctx.rememberThread(conversationId, (cached && cached.length) ? cached : (sharedMessages || []));
+        if (instant.length) {
             ctx.renderMessages(bodyEl, instant);
         } else if (!bodyEl.childNodes.length) {
             bodyEl.innerHTML = '';
         }
 
-        window.Comms.api(url + '?per_page=20', { dedupe: true }).then(function (data) {
+        window.Comms.api(url, { dedupe: false }).then(function (data) {
             var messages = (data && data.messages) || [];
-            if (!messages.length) {
-                if (!instant || !instant.length) {
+            var merged = ctx.rememberThread(conversationId, messages);
+            if (!merged.length) {
+                if (!instant.length) {
                     bodyEl.innerHTML = '<div class="floating-chat-empty">No messages yet</div>';
                 }
                 return;
             }
 
-            ctx.writeMessageCache(cacheKey, messages);
+            ctx.writeMessageCache(cacheKey, merged);
             if (window.Comms.writeThreadCache) {
                 window.Comms.writeThreadCache(conversationId, {
-                    messages: messages,
+                    messages: merged,
                     reactionEmojis: (data && data.reaction_emojis) || [],
                     ts: Date.now()
                 });
             }
-            ctx.renderMessages(bodyEl, messages);
+            ctx.renderMessages(bodyEl, merged);
         }).catch(function () {
-            if (!instant || !instant.length) {
+            if (!instant.length) {
                 bodyEl.innerHTML = '<div class="floating-chat-empty">Unable to load messages</div>';
             }
         });
@@ -338,6 +379,14 @@ export function attachThread(ctx) {
         if (!url) return Promise.reject(new Error('No URL'));
 
         var tempId = 'temp-' + Date.now();
+        ctx.rememberThread(conversationId, [{
+            id: tempId,
+            body: body,
+            sender_id: ctx.currentUserId,
+            mine: true,
+            created_at: new Date().toISOString(),
+            message_type: 'text'
+        }]);
         ctx.appendMessageToWindow(conversationId, {
             id: tempId,
             body: body,
@@ -421,8 +470,14 @@ export function attachThread(ctx) {
     ctx.handleRealtimeMessage = function (message) {
         var cid = String(message.conversation_id);
         if (!ctx.openWindows[cid]) return;
+        if (!message || message.id == null) return;
 
-        if (Number(message.sender_id) === Number(ctx.currentUserId)) return;
+        ctx.rememberThread(cid, [message]);
+        var w = ctx.openWindows[cid];
+        var bodyEl = w && w.el ? w.el.querySelector('.floating-chat-body') : null;
+        if (bodyEl && bodyEl.querySelector('[data-message-id="' + String(message.id).replace(/"/g, '') + '"]')) {
+            return;
+        }
 
         ctx.appendMessageToWindow(cid, message);
 

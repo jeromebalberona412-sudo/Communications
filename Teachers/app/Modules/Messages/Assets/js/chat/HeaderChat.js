@@ -18,6 +18,8 @@
     var threadActive = document.getElementById('commsChatFsActive');
     var searchInput = document.getElementById('commsChatFsSearch');
     var loading = false;
+    var inboxPending = false;
+    var inboxGen = 0;
     var allItems = [];
     var filterMode = 'all';
 
@@ -228,10 +230,51 @@
         }
     }
 
+    function applyHeaderMessage(message) {
+        if (!message || message.conversation_id == null) return;
+        var cid = Number(message.conversation_id);
+        if (!cid) return;
+        var idx = allItems.findIndex(function (c) { return Number(c.id) === cid; });
+        var preview = {
+            body: message.body || '',
+            message_type: message.message_type || 'text',
+            created_at: message.created_at || new Date().toISOString()
+        };
+        var item = idx === -1
+            ? {
+                id: cid,
+                unread_count: 0,
+                name: message.sender_name || 'Chat',
+                other_user: {
+                    name: message.sender_name || 'Chat',
+                    profile_image_url: message.sender_avatar_url || ''
+                }
+            }
+            : allItems[idx];
+        item.last_message = preview;
+        item.updated_at = preview.created_at;
+        var win = document.getElementById('floatingChat' + cid);
+        var viewing = !!(win && !win.classList.contains('is-minimized') && document.visibilityState !== 'hidden');
+        if (viewing || message.mine) item.unread_count = viewing ? 0 : Number(item.unread_count || 0);
+        else item.unread_count = Number(item.unread_count || 0) + 1;
+        if (idx === -1) allItems.unshift(item);
+        else {
+            allItems.splice(idx, 1);
+            allItems.unshift(item);
+        }
+        allItems = dedupeHeaderConversations(allItems);
+        if (window.Comms && window.Comms.writeInboxCache) window.Comms.writeInboxCache(allItems);
+        applyUnreadFromList(allItems);
+        renderList();
+    }
+
     function loadInbox() {
-        if (loading) return;
         var routes = bootRoutes();
         if (!routes.conversations) return;
+        if (loading) {
+            inboxPending = true;
+            return;
+        }
         if (!allItems.length && window.Comms && typeof window.Comms.readInboxCache === 'function') {
             var cachedInbox = window.Comms.readInboxCache();
             if (Array.isArray(cachedInbox) && cachedInbox.length) {
@@ -240,8 +283,32 @@
             }
         }
         loading = true;
-        window.Comms.api(routes.conversations, { dedupe: true }).then(function (data) {
-            allItems = dedupeHeaderConversations((data && data.conversations) || []);
+        var gen = ++inboxGen;
+        window.Comms.api(routes.conversations, { dedupe: false }).then(function (data) {
+            if (gen !== inboxGen) return;
+            var next = dedupeHeaderConversations((data && data.conversations) || []);
+            if (!next.length && allItems.length) return;
+            var kept = Object.create(null);
+            allItems.forEach(function (row) { kept[Number(row.id)] = row; });
+            next.forEach(function (row) {
+                var prev = kept[Number(row.id)];
+                if (!prev) return;
+                var prevAt = Date.parse(prev.updated_at || '') || 0;
+                var nextAt = Date.parse(row.updated_at || '') || 0;
+                if (prevAt > nextAt) {
+                    row.last_message = prev.last_message;
+                    row.updated_at = prev.updated_at;
+                    row.unread_count = prev.unread_count;
+                }
+            });
+            var seen = Object.create(null);
+            next.forEach(function (row) { seen[Number(row.id)] = true; });
+            allItems.forEach(function (row) {
+                if (seen[Number(row.id)]) return;
+                var stamp = Date.parse(row.updated_at || '') || 0;
+                if (stamp && Date.now() - stamp < 20000) next.unshift(row);
+            });
+            allItems = dedupeHeaderConversations(next);
             if (window.Comms.writeInboxCache) window.Comms.writeInboxCache(allItems);
             applyUnreadFromList(allItems);
             renderList();
@@ -251,6 +318,10 @@
             }
         }).finally(function () {
             loading = false;
+            if (inboxPending) {
+                inboxPending = false;
+                loadInbox();
+            }
         });
     }
 
@@ -337,8 +408,8 @@
         renderList();
     }
 
-    window.onCommsHeaderMessageInsert = function () {
-        paintCachedInbox();
+    window.onCommsHeaderMessageInsert = function (message) {
+        applyHeaderMessage(message);
         loadInbox();
     };
     window.onCommsHeaderPresence = function () {

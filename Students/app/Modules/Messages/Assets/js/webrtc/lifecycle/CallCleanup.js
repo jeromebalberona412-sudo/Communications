@@ -36,6 +36,7 @@ async function cleanupMediaOnly() {
     }
     
     S.cameraEnabled = false;
+    S.videoLayoutLatched = false;
     S.wantsVideo = false;
     S.callConnected = false;
     S.callAnswered = false;

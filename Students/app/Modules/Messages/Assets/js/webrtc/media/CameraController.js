@@ -84,8 +84,11 @@ function updateCameraUi() {
  */
 function isVideoCallType() {
     if (callStartedAsVideo()) return true;
-    if (S.cameraEnabled) return true;
-    return remoteCameraOn();
+    if (S.cameraEnabled || remoteCameraOn()) {
+        S.videoLayoutLatched = true;
+        return true;
+    }
+    return !!S.videoLayoutLatched;
 }
 
 function syncLocalPipLayout() {
@@ -352,7 +355,7 @@ function syncCameraUi() {
         S.els.localVideo.classList.toggle('is-camera-on', showing);
     }
     if (S.els.localVideoOff) {
-        S.els.localVideoOff.hidden = !S.localStream || showing;
+        S.els.localVideoOff.hidden = !!showing;
         var localOffAvatar = document.getElementById('commsLocalVideoOffAvatar');
         if (localOffAvatar) {
             var me = api.myIdentity();

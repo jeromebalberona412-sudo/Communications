@@ -110,7 +110,8 @@ export function createGroupCallUi(ctx) {
         if (e.inCall) {
             var localCamera = !!ctx.meshCameraOn;
             var startedAsVideo = !!(ctx.meshCall && ctx.meshCall.call_type === 'video');
-            var showVideo = startedAsVideo || remoteVideoLive || localCamera;
+            if (localCamera || remoteVideoLive) ctx.meshVideoLatched = true;
+            var showVideo = startedAsVideo || remoteVideoLive || localCamera || !!ctx.meshVideoLatched;
             e.inCall.classList.toggle('has-remote-video', remoteVideoLive);
             e.inCall.classList.toggle('is-video-call', showVideo);
             e.inCall.classList.toggle('is-audio-call', !showVideo);
@@ -231,7 +232,7 @@ export function createGroupCallUi(ctx) {
         if (e.cameraBtn) e.cameraBtn.hidden = false;
         if (e.localVideo) {
             e.localVideo.hidden = false;
-            var cameraOff = !!(ctx.meshLocalStream && !ctx.meshCameraOn);
+            var cameraOff = !ctx.meshCameraOn;
             e.localVideo.classList.toggle('is-camera-off', cameraOff);
             if (ctx.meshLocalStream && e.localVideo.srcObject !== ctx.meshLocalStream) {
                 e.localVideo.srcObject = ctx.meshLocalStream;
@@ -243,7 +244,7 @@ export function createGroupCallUi(ctx) {
             }
         }
         var off = document.getElementById('commsLocalVideoOff');
-        if (off) off.hidden = !ctx.meshLocalStream || !!ctx.meshCameraOn;
+        if (off) off.hidden = !!ctx.meshCameraOn;
         if (e.timer) e.timer.hidden = !ctx.meshConnected;
     }
 

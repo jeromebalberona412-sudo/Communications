@@ -62,6 +62,7 @@ export const S = {
     iceQueue: [],
     startingCall: false,
     cameraEnabled: false,
+    videoLayoutLatched: false,
     wantsVideo: false,
     callConnected: false,
     callAnswered: false,

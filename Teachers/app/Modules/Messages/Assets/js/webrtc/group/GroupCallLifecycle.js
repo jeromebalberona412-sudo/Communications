@@ -45,6 +45,7 @@ export function createGroupCallLifecycle(ctx, deps) {
         ctx.meshRole = null;
         ctx.meshWantsVideo = false;
         ctx.meshCameraOn = false;
+        ctx.meshVideoLatched = false;
         ctx.meshStarting = false;
         window.__commsMeshTimerStarted = false;
     }
@@ -195,6 +196,7 @@ export function createGroupCallLifecycle(ctx, deps) {
             window.CommsWebRTC.__stopRingtone();
         }
         ctx.meshWantsVideo = (payload.call_type || 'voice') === 'video';
+        ctx.meshCameraOn = ctx.meshWantsVideo;
         ctx.meshRole = 'callee';
         ctx.meshCall = {
             id: payload.call_id,
