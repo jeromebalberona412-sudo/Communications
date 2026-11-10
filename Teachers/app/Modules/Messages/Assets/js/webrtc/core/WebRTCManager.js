@@ -72,6 +72,7 @@ export function exposePublicApi() {
         suggestedHttpsUrl: function () { return api.suggestedHttpsUrl(); },
         __paintIncoming: function () { return api.showIncoming.apply(null, arguments); },
         __showEnded: function () { return api.showCallEnded.apply(null, arguments); },
+        __rememberCall: function () { return api.rememberCallContext.apply(null, arguments); },
         __startTimer: function () { return api.startTimer.apply(null, arguments); },
         __syncTimer: function (startedAt, serverTime) {
             if (typeof api.publishDuration === 'function') api.publishDuration(startedAt, serverTime);

@@ -72,6 +72,7 @@ class CallController extends Controller
         $validated = $request->validate([
             'call_type' => ['required', 'string', 'in:voice,video'],
             'receiver_id' => ['nullable', 'integer', 'min:1', 'exists:users,id'],
+            'force_new' => ['sometimes', 'boolean'],
         ]);
 
         $receiverId = isset($validated['receiver_id']) ? (int) $validated['receiver_id'] : null;
@@ -85,7 +86,8 @@ class CallController extends Controller
             $conversation,
             Auth::user(),
             $validated['call_type'],
-            $receiverId
+            $receiverId,
+            $request->boolean('force_new')
         );
 
         $viewer = Auth::user();

@@ -17,6 +17,10 @@ export function createGroupSignalRouter(ctx, deps) {
             if (Number(payload.from_user_id) === self.id && samePortalType(payload.from_user_type, self.type)) {
                 return true;
             }
+            if (ctx.meshCall && Number(ctx.meshCall.id) === Number(payload.call_id)) return true;
+            if (ctx.meshCall && Number(ctx.meshCall.conversation_id) === Number(payload.conversation_id)) {
+                await lifecycle.cleanupMesh();
+            }
             window.__commsPendingGroupInvite = payload;
             if (window.CommsWebRTC && typeof window.CommsWebRTC.__showIncomingGroup === 'function') {
                 window.CommsWebRTC.__showIncomingGroup(payload);

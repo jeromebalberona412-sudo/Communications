@@ -51,7 +51,8 @@ class CallService
         Conversation $conversation,
         Authenticatable $caller,
         string $callType,
-        ?int $receiverUserId = null
+        ?int $receiverUserId = null,
+        bool $forceNew = false
     ): Call {
         $this->reusedGroupCall = false;
 
@@ -140,7 +141,7 @@ class CallService
             // Soft cap: still allow the call; clients limit connected mesh peers.
         }
 
-        if ($isGroupCall) {
+        if ($isGroupCall && ! $forceNew) {
             $open = $this->openGroupCall($conversation);
             if ($open) {
                 $this->reusedGroupCall = true;
@@ -157,8 +158,12 @@ class CallService
             $callerType,
             $isGroupCall,
             $receiverId,
-            $receiverType
+            $receiverType,
+            $forceNew
         ) {
+            if ($forceNew) {
+                $this->endLiveCallsOnConversation((int) $conversation->id);
+            }
             $this->releaseStaleActiveCalls();
             // Caller is starting a new outbound call — abandon their own unanswered rings.
             $this->cancelCallerOutboundRinging($callerId);
@@ -430,6 +435,20 @@ class CallService
             ->where('caller_id', $callerId)
             ->update([
                 'status' => Call::STATUS_CANCELLED,
+                'ended_at' => $now,
+                'updated_at' => $now,
+            ]);
+    }
+
+    protected function endLiveCallsOnConversation(int $conversationId): void
+    {
+        $now = now();
+        Call::query()
+            ->where('conversation_id', $conversationId)
+            ->whereIn('status', [Call::STATUS_RINGING, Call::STATUS_ACCEPTED])
+            ->whereNull('ended_at')
+            ->update([
+                'status' => Call::STATUS_ENDED,
                 'ended_at' => $now,
                 'updated_at' => $now,
             ]);

@@ -80,11 +80,16 @@ function endedCopy(reason, endedByRole) {
 
 function rememberCallContext(call) {
     if (!call) return;
+    var groupCall = !!(call.is_group_call || (call.peer && call.peer.is_group));
     S.lastCallContext = {
         conversationId: call.conversation_id,
         callType: call.call_type || 'voice',
+        isGroup: groupCall,
         conversation: {
             id: call.conversation_id,
+            conversation_type: groupCall ? 'group' : 'private',
+            is_default_group: groupCall,
+            name: (call.peer && call.peer.name) || '',
             other_user: call.peer || null
         },
         peerName: (call.peer && call.peer.name) || '',
@@ -281,15 +286,24 @@ function redialLastCall() {
     S.answerAppliedFor = null;
     S.acceptingCallId = null;
     S.peerAnsweredFor = null;
+    S.callAnswered = false;
+    S.callConnected = false;
     S.iceQueue = [];
     S.remoteCameraSeq = 0;
     S.cameraSeq = 0;
+    S.wantsVideo = ctx.callType === 'video';
+    S.cameraEnabled = S.wantsVideo;
+    S.videoLayoutLatched = S.wantsVideo;
 
     Promise.resolve(api.cleanupMediaOnly()).then(function () {
         S.startingCall = false;
         S.currentCall = null;
+        S.callConnected = false;
+        S.wantsVideo = ctx.callType === 'video';
+        S.cameraEnabled = S.wantsVideo;
+        S.videoLayoutLatched = S.wantsVideo;
         try {
-            api.startCall(ctx.conversationId, ctx.callType, ctx.conversation);
+            api.startCall(ctx.conversationId, ctx.callType, ctx.conversation, null, true);
         } finally {
             S.redialLock = false;
         }

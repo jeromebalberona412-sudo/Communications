@@ -50,7 +50,7 @@ export function createGroupCallLifecycle(ctx, deps) {
         window.__commsMeshTimerStarted = false;
     }
 
-    async function startGroupCall(conversationId, callType, conversation) {
+    async function startGroupCall(conversationId, callType, conversation, forceNew) {
         if (!window.Comms) return;
         var now = Date.now();
         if (ctx.meshCall || ctx.meshStarting) return;
@@ -80,7 +80,7 @@ export function createGroupCallLifecycle(ctx, deps) {
             var r = routes();
             var data = await window.Comms.api(window.Comms.route(r.startCall, conversationId), {
                 method: 'POST',
-                body: JSON.stringify({ call_type: callType }),
+                body: JSON.stringify({ call_type: callType, force_new: !!forceNew }),
                 dedupe: false
             });
             ctx.meshCall = data.call;
@@ -99,7 +99,7 @@ export function createGroupCallLifecycle(ctx, deps) {
             ctx.meshInvitees = Array.isArray(ctx.meshCall.invitees) ? ctx.meshCall.invitees.slice() : [];
             await mediaReady;
             var self = me();
-            var joining = !!(data && data.joined_existing);
+            var joining = !!(data && data.joined_existing) && !forceNew;
             var iAmHost = Number(ctx.meshCall.caller_id) === Number(self.id)
                 && samePortalType(ctx.meshCall.caller_type, self.type);
             var groupPeer = (ctx.meshCall && ctx.meshCall.peer) || {
@@ -258,6 +258,15 @@ export function createGroupCallLifecycle(ctx, deps) {
             await signaling.updateStatus(nextStatus);
         } else if (reason === 'rejected') {
             await signaling.updateStatus('rejected');
+        }
+        if (window.CommsWebRTC && typeof window.CommsWebRTC.__rememberCall === 'function') {
+            window.CommsWebRTC.__rememberCall({
+                id: callId,
+                conversation_id: convId,
+                call_type: ctx.meshCall.call_type || (ctx.meshWantsVideo ? 'video' : 'voice'),
+                is_group_call: true,
+                peer: Object.assign({ is_group: true, name: 'Group call' }, ctx.meshCall.peer || {})
+            });
         }
         await cleanupMesh();
         if (window.CommsWebRTC && typeof window.CommsWebRTC.__showEnded === 'function') {

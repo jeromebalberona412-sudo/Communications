@@ -57,6 +57,7 @@ export function installGroupCalls() {
         startGroupCall: lifecycle.startGroupCall,
         acceptGroupInvite: lifecycle.acceptGroupInvite,
         leaveGroupCall: lifecycle.leaveGroupCall,
+        cleanupMesh: lifecycle.cleanupMesh,
         isActive: lifecycle.isActive,
         handleSignal: router.handleSignal,
         setCameraEnabled: camera.setCameraEnabled,

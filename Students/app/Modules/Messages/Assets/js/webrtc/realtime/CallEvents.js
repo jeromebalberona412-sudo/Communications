@@ -91,10 +91,18 @@ async function handleSignal(payload) {
         }
         if (S.callConnected && S.currentCall && payload.type === 'incoming-call'
             && Number(S.currentCall.id) !== Number(payload.call_id)) {
-            api.replyBusy(payload);
-            return;
+            var endedOpen = S.els.ended && !S.els.ended.hidden;
+            var sameRoom = Number(S.currentCall.conversation_id) === Number(payload.conversation_id);
+            var ice = S.pc && (S.pc.iceConnectionState || S.pc.connectionState);
+            var live = ice === 'connected' || ice === 'completed';
+            if (!endedOpen && !sameRoom && live) {
+                api.replyBusy(payload);
+                return;
+            }
+            S.callConnected = false;
         }
-        if (S.callConnected && S.currentCall && payload.type === 'incoming-call') {
+        if (S.callConnected && S.currentCall && payload.type === 'incoming-call'
+            && Number(S.currentCall.id) === Number(payload.call_id)) {
             return;
         }
 
@@ -137,7 +145,8 @@ async function handleSignal(payload) {
         if (payload.type === 'offer' && S.currentCall && S.currentCall._remoteOffer
             && Number(S.currentCall.id) === Number(payload.call_id)) {
             S.currentCall._remoteOffer = payload.sdp;
-            if (!payload.renegotiate && typeof api.tryCompleteCalleeAnswer === 'function') {
+            if (!payload.renegotiate && (S.callAnswered || S.acceptingCallId)
+                && typeof api.tryCompleteCalleeAnswer === 'function') {
                 api.tryCompleteCalleeAnswer();
             }
             return;

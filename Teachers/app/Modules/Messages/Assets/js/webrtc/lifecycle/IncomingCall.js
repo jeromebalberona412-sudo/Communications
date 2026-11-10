@@ -460,7 +460,14 @@ function showIncoming(call) {
         return;
     }
     // Never interrupt a connected call with a stale ring.
-    if (api.isActivelyInCall(null) && S.callConnected) return;
+    if (api.isActivelyInCall(null) && S.callConnected) {
+        var endedVisible = S.els.ended && !S.els.ended.hidden;
+        var sameRoom = S.currentCall && Number(S.currentCall.conversation_id) === Number(call.conversation_id);
+        var iceNow = S.pc && (S.pc.iceConnectionState || S.pc.connectionState);
+        var liveNow = iceNow === 'connected' || iceNow === 'completed';
+        if (!endedVisible && !sameRoom && liveNow) return;
+        S.callConnected = false;
+    }
 
     if (!S.els.incoming) {
         S.els.incoming = document.getElementById('commsIncomingCall');
@@ -488,6 +495,12 @@ function showIncoming(call) {
 
     S.lastIncomingCallId = callId;
     api.rememberCallId(S.shownIncomingIds, callId);
+    if (S.pc && (!S.currentCall || Number(S.currentCall.id) !== callId)) {
+        try { S.pc.ontrack = null; S.pc.close(); } catch (eClose) { /* ignore */ }
+        S.pc = null;
+    }
+    S.callAnswered = false;
+    S.acceptingCallId = null;
 
     S.role = 'callee';
     S.lifecycle = 'ringing';

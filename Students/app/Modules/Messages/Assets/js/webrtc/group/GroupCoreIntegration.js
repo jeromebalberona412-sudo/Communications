@@ -47,16 +47,16 @@ export function installGroupCoreHooks(ctx, mesh) {
         });
     };
 
-    core.startCall = function (conversationId, callType, conversation, receiverId) {
+    core.startCall = function (conversationId, callType, conversation, receiverId, forceNew) {
         var isGroup = conversation && (
             conversation.conversation_type === 'group'
             || conversation.is_default_group
             || (conversation.other_user && conversation.other_user.is_group)
         );
         if (isGroup && !receiverId) {
-            return mesh.startGroupCall(conversationId, callType, conversation);
+            return mesh.startGroupCall(conversationId, callType, conversation, !!forceNew);
         }
-        return originalStart(conversationId, callType, conversation, receiverId);
+        return originalStart(conversationId, callType, conversation, receiverId, !!forceNew);
     };
 
     core.handleSignal = async function (payload) {

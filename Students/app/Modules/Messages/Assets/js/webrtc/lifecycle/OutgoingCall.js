@@ -155,7 +155,7 @@ function callErrorMessage(err) {
     return msg;
 }
 
-async function placeCall(conversationId, callType, conversation, receiverId) {
+async function placeCall(conversationId, callType, conversation, receiverId, forceNew) {
     var now = Date.now();
     if (!window.Comms || S.startingCall || S.callConnected || S.currentCall) return;
     if (S.lastStartAt && (now - S.lastStartAt) < 2000) return;
@@ -168,6 +168,7 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
     S.callConnected = false;
     S.wantsVideo = callType === 'video';
     S.cameraEnabled = callType === 'video';
+    S.videoLayoutLatched = callType === 'video';
     api.showInCall({ peer: earlyPeer, call_type: callType }, 'Ringing...');
     
     var r = api.routes();
@@ -184,6 +185,7 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
         if (receiverId) {
             body.receiver_id = Number(receiverId);
         }
+        if (forceNew) body.force_new = true;
         var data = await window.Comms.api(window.Comms.route(r.startCall, conversationId), {
             method: 'POST',
             body: JSON.stringify(body),
@@ -285,7 +287,7 @@ async function placeCall(conversationId, callType, conversation, receiverId) {
     }
 }
 
-async function startCall(conversationId, callType, conversation, receiverId) {
+async function startCall(conversationId, callType, conversation, receiverId, forceNew) {
     // Groups skip offline peer check — recipient is chosen explicitly.
     if (conversation && (conversation.conversation_type === 'group' || conversation.is_default_group || (conversation.other_user && conversation.other_user.is_group))) {
         if (S.startingCall || S.pendingStart || S.currentCall) return;
@@ -301,10 +303,10 @@ async function startCall(conversationId, callType, conversation, receiverId) {
             api.toast('Realtime is not configured. Rebuild after setting VITE_SUPABASE keys.', 'error');
             return;
         }
-        api.placeCall(conversationId, callType, conversation, receiverId);
+        api.placeCall(conversationId, callType, conversation, receiverId, !!forceNew);
         return;
     }
-    api.placeCall(conversationId, callType, conversation, receiverId);
+    api.placeCall(conversationId, callType, conversation, receiverId, !!forceNew);
 }
 
 
