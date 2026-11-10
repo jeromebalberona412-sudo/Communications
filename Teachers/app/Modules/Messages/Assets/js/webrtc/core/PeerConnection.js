@@ -51,7 +51,8 @@ function hasLiveRemoteVideo() {
     }
     if (!live) return false;
     if (S.els.remoteVideo && Number(S.els.remoteVideo.videoWidth || 0) > 0) return true;
-    return live;
+    if (S.remoteHasFrames) return true;
+    return false;
 }
 
 function transceiverKind(transceiver) {
@@ -291,6 +292,11 @@ function applyRemoteVideoMetrics() {
     if (!S.els.remoteVideo || !S.els.inCall) return;
     var w = Number(S.els.remoteVideo.videoWidth || 0);
     var h = Number(S.els.remoteVideo.videoHeight || 0);
+    var hasFrames = w > 0 && h > 0;
+    if (hasFrames !== !!S.remoteHasFrames) {
+        S.remoteHasFrames = hasFrames;
+        if (typeof api.updateCameraUi === 'function') api.updateCameraUi();
+    }
     if (!w || !h) return;
     var portrait = (w / h) < 0.92;
     S.els.remoteVideo.classList.toggle('is-remote-portrait', portrait);
@@ -456,7 +462,12 @@ function prepareLocalPreview(videoEnabled) {
     if (S._previewJob) return S._previewJob;
     S.wantsVideo = !!videoEnabled;
     if (localPreviewUsable(!!videoEnabled)) {
-        S.cameraEnabled = !!videoEnabled;
+        if (!videoEnabled && S.localStream) {
+            S.localStream.getVideoTracks().forEach(function (track) {
+                try { track.enabled = false; } catch (eOff) { /* ignore */ }
+            });
+        }
+        S.cameraEnabled = !!videoEnabled && !!(typeof api.findLiveVideoTrack === 'function' && api.findLiveVideoTrack());
         api.remountCallEls();
         api.attachLocalVideo();
         if (typeof api.syncCameraUi === 'function') api.syncCameraUi();
@@ -473,6 +484,11 @@ function prepareLocalPreview(videoEnabled) {
             S.localStream.getTracks().forEach(function (track) { try { track.stop(); } catch (e2) { /* ignore */ } });
         }
         S.localStream = stream;
+        if (!videoEnabled) {
+            stream.getVideoTracks().forEach(function (track) {
+                try { track.enabled = false; } catch (eOff) { /* ignore */ }
+            });
+        }
         S.cameraEnabled = !!videoEnabled && !!(typeof api.findLiveVideoTrack === 'function' && api.findLiveVideoTrack());
         api.remountCallEls();
         api.attachLocalVideo();

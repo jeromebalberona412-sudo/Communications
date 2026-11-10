@@ -52,7 +52,8 @@ export function createGroupCallUi(ctx) {
             var stream = video && video.srcObject;
             if (!stream || typeof stream.getVideoTracks !== 'function') return;
             if (stream.getVideoTracks().some(function (t) {
-                return t && t.readyState === 'live' && t.enabled !== false;
+                return t && t.readyState === 'live' && t.enabled !== false && t.muted !== true
+                    && video && Number(video.videoWidth || 0) > 0;
             })) {
                 remoteVideoLive = true;
             }
@@ -107,8 +108,13 @@ export function createGroupCallUi(ctx) {
             });
         }
         if (e.inCall) {
+            var localCamera = !!ctx.meshCameraOn;
+            var startedAsVideo = !!(ctx.meshCall && ctx.meshCall.call_type === 'video');
+            var showVideo = startedAsVideo || remoteVideoLive || localCamera;
             e.inCall.classList.toggle('has-remote-video', remoteVideoLive);
-            e.inCall.classList.toggle('is-video-call', remoteVideoLive || !!ctx.meshWantsVideo);
+            e.inCall.classList.toggle('is-video-call', showVideo);
+            e.inCall.classList.toggle('is-audio-call', !showVideo);
+            e.inCall.classList.toggle('is-local-camera-off', !localCamera);
             e.inCall.classList.toggle('is-connected', ctx.meshConnected || count > 0);
         }
         if (e.callCenter) {
@@ -163,6 +169,17 @@ export function createGroupCallUi(ctx) {
             }
             var play = video.play();
             if (play && typeof play.catch === 'function') play.catch(function () { /* ignore */ });
+            if (!video._commsCameraBound) {
+                video._commsCameraBound = true;
+                video.addEventListener('resize', function () { refreshGridLayout(); });
+                video.addEventListener('loadeddata', function () { refreshGridLayout(); });
+            }
+            videoTracks.forEach(function (track) {
+                if (track._commsGroupMuteBound) return;
+                track._commsGroupMuteBound = true;
+                track.addEventListener('mute', function () { refreshGridLayout(); });
+                track.addEventListener('unmute', function () { refreshGridLayout(); });
+            });
         }
         var audio = tile.querySelector('audio');
         if (!audio) {

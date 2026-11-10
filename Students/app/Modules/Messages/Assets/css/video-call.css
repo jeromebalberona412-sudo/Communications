@@ -303,6 +303,9 @@
 .comms-call-overlay.is-audio-call:not(.is-group-call) .comms-call-stage {
     background: transparent;
 }
+.comms-call-overlay.is-group-call.is-audio-call .comms-local-pip {
+    display: none !important;
+}
 .comms-call-overlay.is-audio-call:not(.is-group-call) .comms-remote-stage,
 .comms-call-overlay.is-audio-call:not(.is-group-call) .comms-local-pip,
 .comms-call-overlay.is-audio-call:not(.is-group-call) .comms-remote-grid {

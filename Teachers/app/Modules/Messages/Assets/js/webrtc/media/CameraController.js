@@ -31,11 +31,8 @@ function setCameraUi(enabled) {
 }
 
 function callStartedAsVideo() {
-    if (S.currentCall && S.currentCall.call_type) {
-        return String(S.currentCall.call_type) === 'video';
-    }
-    if (S.lastCallContext && S.lastCallContext.callType) {
-        return String(S.lastCallContext.callType) === 'video';
+    if (S.currentCall) {
+        return String(S.currentCall.call_type || '') === 'video';
     }
     return !!S.wantsVideo;
 }
@@ -162,6 +159,13 @@ async function applyCameraState(enabled) {
                     try { track.enabled = false; } catch (eOff) { /* ignore */ }
                 });
             }
+            if (S.pc && typeof S.pc.getSenders === 'function') {
+                S.pc.getSenders().forEach(function (sender) {
+                    if (sender && sender.track && sender.track.kind === 'video') {
+                        try { sender.track.enabled = false; } catch (eSender) { /* ignore */ }
+                    }
+                });
+            }
             S.cameraEnabled = false;
             api.attachLocalVideo();
             api.syncCameraUi();
@@ -178,8 +182,10 @@ async function applyCameraState(enabled) {
 
         var liveTrack = api.findLiveVideoTrack();
         if (liveTrack) {
+            var wasOff = liveTrack.enabled === false;
             liveTrack.enabled = true;
             needsRenegotiate = await api.attachVideoTrackToSender(liveTrack);
+            if (wasOff) needsRenegotiate = true;
             S.cameraEnabled = true;
             api.attachLocalVideo();
             api.syncCameraUi();
@@ -317,9 +323,8 @@ function attachLocalVideo() {
     S.els.localVideo.autoplay = true;
     S.els.localVideo.hidden = false;
     var liveLocal = typeof api.findLiveVideoTrack === 'function' && api.findLiveVideoTrack();
-    var showing = !!(liveLocal && liveLocal.enabled !== false);
-    if (showing) S.cameraEnabled = true;
-    S.els.localVideo.classList.toggle('is-camera-off', !!S.localStream && !showing);
+    var showing = !!S.cameraEnabled && !!(liveLocal && liveLocal.enabled !== false);
+    S.els.localVideo.classList.toggle('is-camera-off', !showing);
     try {
         var lp = S.els.localVideo.play();
         if (lp && typeof lp.catch === 'function') {
@@ -334,10 +339,10 @@ function attachLocalVideo() {
  * the real media state.
  */
 function syncCameraUi() {
+    if (S.els.inCall && S.els.inCall.classList.contains('is-group-call')) return;
     var liveLocal = typeof api.findLiveVideoTrack === 'function' && api.findLiveVideoTrack();
-    var showing = !!(liveLocal && liveLocal.enabled !== false);
-    if (showing) S.cameraEnabled = true;
-    var on = showing || (!S.localStream && !!S.cameraEnabled);
+    var showing = !!S.cameraEnabled && !!(liveLocal && liveLocal.enabled !== false);
+    var on = !!S.cameraEnabled;
     api.setCameraUi(on);
     if (S.els.cameraBtn) {
         S.els.cameraBtn.classList.remove('is-busy');
@@ -387,9 +392,15 @@ function syncCameraUi() {
     }
 }
 
-async function renegotiateForCamera() {
-    if (!S.pc || !S.currentCall || S.negotiating) return;
-    if (S.pc.signalingState !== 'stable') return;
+async function renegotiateForCamera(attempt) {
+    if (!S.pc || !S.currentCall) return;
+    if (S.negotiating || S.pc.signalingState !== 'stable') {
+        if ((attempt || 0) < 6) {
+            await new Promise(function (resolve) { window.setTimeout(resolve, 280); });
+            return renegotiateForCamera((attempt || 0) + 1);
+        }
+        return;
+    }
     S.negotiating = true;
     try {
         var offer = await S.pc.createOffer();
@@ -403,7 +414,7 @@ async function renegotiateForCamera() {
             renegotiate: true
         });
     } catch (e) {
-        /* ignore */
+        /* the retry above covers a busy connection */
     } finally {
         S.negotiating = false;
     }

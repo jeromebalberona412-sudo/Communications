@@ -63,8 +63,8 @@ export function createGroupLocalMedia(ctx, ui) {
             e.localVideo.playsInline = true;
             e.localVideo.setAttribute('playsinline', '');
             e.localVideo.autoplay = true;
-            e.localVideo.hidden = false;
-            e.localVideo.classList.remove('is-camera-off');
+            e.localVideo.hidden = !ctx.meshCameraOn;
+            e.localVideo.classList.toggle('is-camera-off', !ctx.meshCameraOn);
             var play = e.localVideo.play();
             if (play && typeof play.catch === 'function') play.catch(function () { /* ignore */ });
             e.localVideo.classList.toggle('is-cam-landscape', false);

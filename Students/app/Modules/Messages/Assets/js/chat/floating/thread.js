@@ -79,14 +79,15 @@ export function attachThread(ctx) {
         if (!message || message.id == null) return '';
         var id = String(message.id);
         if (id.indexOf('temp') === 0 || id.indexOf('local-') === 0) return '';
-        if (message.message_type === 'call' || message.message_type === 'system' || message.message_type === 'deleted' || message.deleted_for_all) {
-            return '';
-        }
-        return '<div class="floating-chat-actions">' +
+        if (String(id).indexOf('temp-') === 0) return '';
+        var deleted = message.message_type === 'deleted' || message.deleted_for_all;
+        var canEdit = !deleted && !!mine && message.message_type === 'text';
+        return '<div class="floating-chat-msg-actions">' +
             '<button type="button" class="floating-chat-more" data-float-more="' + ctx.escapeHtml(id) + '" aria-label="Message options">' +
             '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><circle cx="12" cy="5" r="1.7" fill="currentColor"></circle><circle cx="12" cy="12" r="1.7" fill="currentColor"></circle><circle cx="12" cy="19" r="1.7" fill="currentColor"></circle></svg>' +
             '</button>' +
             '<div class="floating-chat-menu" data-float-menu="' + ctx.escapeHtml(id) + '" hidden>' +
+            (canEdit ? '<button type="button" data-float-edit="' + ctx.escapeHtml(id) + '">Edit</button>' : '') +
             '<button type="button" data-float-delete="' + ctx.escapeHtml(id) + '" data-float-mine="' + (mine ? '1' : '0') + '">Delete</button>' +
             '</div></div>';
     };
@@ -102,7 +103,7 @@ export function attachThread(ctx) {
                 var text = (message && message.body) || 'This message was deleted';
                 var bubble = row.querySelector('.floating-chat-msg-body');
                 if (bubble) bubble.textContent = text;
-                var actions = row.querySelector('.floating-chat-actions');
+                var actions = row.querySelector('.floating-chat-msg-actions');
                 if (actions) actions.parentNode.removeChild(actions);
                 row.classList.add('is-deleted');
             }
@@ -122,6 +123,37 @@ export function attachThread(ctx) {
             });
         }
         ctx.writeMessageCache(key, cached);
+    };
+
+    ctx.saveFloatingEdit = function (conversationId, messageId, body) {
+        var route = ctx.routes && ctx.routes.updateMessage;
+        if (!route || !window.Comms || typeof window.Comms.api !== 'function') return;
+        var text = String(body || '').trim();
+        if (!text) return;
+        window.Comms.api(window.Comms.route(route, messageId), {
+            method: 'PATCH',
+            body: JSON.stringify({ body: text }),
+            dedupe: false
+        }).then(function (data) {
+            var message = data && data.message;
+            var w = ctx.openWindows[String(conversationId)];
+            var row = w && w.el ? w.el.querySelector('[data-message-id="' + messageId + '"]') : null;
+            var bubble = row ? row.querySelector('.floating-chat-msg-body') : null;
+            if (bubble) bubble.textContent = (message && message.body) || text;
+            var key = ctx.messageCacheKey(conversationId);
+            var cached = ctx.readMessageCache(key) || [];
+            ctx.writeMessageCache(key, cached.map(function (item) {
+                if (String(item.id) !== String(messageId)) return item;
+                return Object.assign({}, item, message || {}, { body: (message && message.body) || text, edited: true });
+            }));
+            if (window.CommsChat && message && typeof window.CommsChat.onMessageChange === 'function') {
+                window.CommsChat.onMessageChange(message);
+            }
+        }).catch(function (err) {
+            if (window.Comms && window.Comms.showToast) {
+                window.Comms.showToast((err && err.message) || 'Unable to edit message.', 'error');
+            }
+        });
     };
 
     ctx.deleteFloatingMessage = function (conversationId, messageId, mine) {
@@ -168,16 +200,21 @@ export function attachThread(ctx) {
             var time = ctx.formatTime(m.created_at);
             var body = ctx.escapeHtml(m.body || '');
             if (m.message_type === 'call' || m.message_type === 'system') {
-                return '<div class="' + ctx.callStatusClass(m.body) + '">' +
-                    '<div class="floating-chat-msg-body comms-call-text">' + body + '</div>' +
-                    '</div>';
+                return '<div class="' + ctx.callStatusClass(m.body) + (mine ? ' is-mine' : ' is-theirs') + '" data-message-id="' + ctx.escapeHtml(String(m.id)) + '">' +
+                    '<div class="floating-chat-msg-row">' +
+                    '<div class="floating-chat-msg-main"><div class="floating-chat-msg-body comms-call-text">' + body + '</div></div>' +
+                    ctx.messageActionsHtml(m, mine) +
+                    '</div></div>';
             }
             return '<div class="floating-chat-msg ' + (mine ? 'is-mine' : 'is-theirs') + '" data-message-id="' + ctx.escapeHtml(String(m.id)) + '">' +
-                ctx.messageActionsHtml(m, mine) +
+                '<div class="floating-chat-msg-row">' +
+                '<div class="floating-chat-msg-main">' +
                 ctx.renderAttachmentHtml(m.attachments) +
                 (body ? '<div class="floating-chat-msg-body">' + body + '</div>' : '') +
                 '<div class="floating-chat-msg-time">' + time + '</div>' +
-                '</div>';
+                '</div>' +
+                ctx.messageActionsHtml(m, mine) +
+                '</div></div>';
         }).join('');
         bodyEl.innerHTML = html;
         ctx.stickFloatingBody(bodyEl);
@@ -196,18 +233,25 @@ export function attachThread(ctx) {
 
         if (message.message_type === 'call' || message.message_type === 'system') {
             var msgEl = document.createElement('div');
-            msgEl.className = ctx.callStatusClass(message.body);
-            msgEl.innerHTML = '<div class="floating-chat-msg-body comms-call-text">' + body + '</div>';
+            msgEl.className = ctx.callStatusClass(message.body) + (mine ? ' is-mine' : ' is-theirs');
+            msgEl.innerHTML = '<div class="floating-chat-msg-row">' +
+                '<div class="floating-chat-msg-main"><div class="floating-chat-msg-body comms-call-text">' + body + '</div></div>' +
+                ctx.messageActionsHtml(message, mine) +
+                '</div>';
             msgEl.dataset.messageId = message.id;
             bodyEl.appendChild(msgEl);
         } else {
             var msgEl2 = document.createElement('div');
             msgEl2.className = 'floating-chat-msg ' + (mine ? 'is-mine' : 'is-theirs');
             msgEl2.dataset.messageId = message.id;
-            msgEl2.innerHTML = ctx.messageActionsHtml(message, mine) +
+            msgEl2.innerHTML = '<div class="floating-chat-msg-row">' +
+                '<div class="floating-chat-msg-main">' +
                 ctx.renderAttachmentHtml(message.attachments) +
                 (body ? '<div class="floating-chat-msg-body">' + body + '</div>' : '') +
-                '<div class="floating-chat-msg-time">' + time + '</div>';
+                '<div class="floating-chat-msg-time">' + time + '</div>' +
+                '</div>' +
+                ctx.messageActionsHtml(message, mine) +
+                '</div>';
             bodyEl.appendChild(msgEl2);
         }
 

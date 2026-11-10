@@ -243,6 +243,7 @@ async function handleSignal(payload) {
             if (!isNaN(incomingSeq)) S.remoteCameraSeq = incomingSeq;
         }
         S.remoteCameraEnabled = payload.enabled !== false;
+        if (payload.enabled === false) S.remoteHasFrames = false;
         api.refreshRemoteFromReceivers();
         api.unlockRemotePlayback();
         api.updateCameraUi();

@@ -131,7 +131,6 @@ export function bindCallControls() {
             }
             var next = !S.cameraEnabled;
             S.cameraPending = next;
-            api.syncCameraUi();
             api.setCameraEnabled(next).catch(function (err) {
                 api.toast((err && err.message) || 'Unable to toggle camera.', 'error');
                 api.syncCameraUi();

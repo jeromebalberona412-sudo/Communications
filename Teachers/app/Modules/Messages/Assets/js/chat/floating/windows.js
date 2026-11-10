@@ -287,6 +287,38 @@ export function attachWindows(ctx) {
                 if (menu) menu.hidden = !menu.hidden;
                 return;
             }
+            var edit = e.target.closest('[data-float-edit]');
+            if (edit && !edit.hasAttribute('data-float-edit-save')) {
+                e.preventDefault();
+                e.stopPropagation();
+                w.el.querySelectorAll('[data-float-menu]').forEach(function (item) { item.hidden = true; });
+                var editRow = edit.closest('[data-message-id]');
+                var editBody = editRow ? editRow.querySelector('.floating-chat-msg-body') : null;
+                if (editBody && !editBody.querySelector('textarea')) {
+                    var current = editBody.textContent || '';
+                    editBody.innerHTML = '<textarea class="floating-chat-edit" rows="2">' + ctx.escapeHtml(current) + '</textarea>' +
+                        '<div class="floating-chat-edit-actions">' +
+                        '<button type="button" data-float-edit-cancel>Cancel</button>' +
+                        '<button type="button" data-float-edit-save="' + ctx.escapeHtml(edit.getAttribute('data-float-edit')) + '">Save</button>' +
+                        '</div>';
+                    var area = editBody.querySelector('textarea');
+                    if (area) area.focus();
+                }
+                return;
+            }
+            var editSave = e.target.closest('[data-float-edit-save]');
+            if (editSave) {
+                e.preventDefault();
+                var editBox = editSave.closest('.floating-chat-msg-body');
+                var editInput = editBox ? editBox.querySelector('textarea') : null;
+                ctx.saveFloatingEdit(cid, editSave.getAttribute('data-float-edit-save'), editInput ? editInput.value : '');
+                return;
+            }
+            if (e.target.closest('[data-float-edit-cancel]')) {
+                e.preventDefault();
+                ctx.loadMessages(cid);
+                return;
+            }
             var del = e.target.closest('[data-float-delete]');
             if (del) {
                 e.preventDefault();
