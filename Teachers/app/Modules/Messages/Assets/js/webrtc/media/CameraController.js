@@ -30,42 +30,7 @@ function setCameraUi(enabled) {
     }
 }
 
-function updateCameraUi() {
-    if (S.els.cameraBtn) {
-        S.els.cameraBtn.hidden = false;
-    }
-    // The self-view element is never hidden: the camera-off placeholder is
-    // layered on top of it so the video element and its stream stay intact.
-    api.syncCameraUi();
-    var remoteVideoLive = api.hasLiveRemoteVideo();
-    var isVideoCall = api.isVideoCallType();
-    if (S.els.inCall && !S.els.inCall.classList.contains('is-group-call')) {
-        var connected = !!S.callConnected;
-        S.els.inCall.classList.toggle('is-connected', connected);
-        S.els.inCall.classList.toggle('has-remote-video', remoteVideoLive && S.remoteCameraEnabled !== false);
-        S.els.inCall.classList.toggle('is-video-call', isVideoCall);
-        S.els.inCall.classList.toggle('is-audio-call', !isVideoCall);
-        S.els.inCall.classList.toggle('is-remote-camera-off', S.remoteCameraEnabled === false);
-        S.els.inCall.classList.toggle('is-remote-mic-off', !S.remoteMicEnabled);
-        S.els.inCall.classList.toggle('is-ringing-preview', isVideoCall && !connected && !S.callAnswered);
-    }
-    if (S.els.callCenter) {
-        S.els.callCenter.hidden = false;
-        S.els.callCenter.removeAttribute('hidden');
-        S.els.callCenter.classList.toggle('is-compact', !!S.callConnected && remoteVideoLive);
-    }
-    api.syncLocalPipLayout();
-    if (typeof api.syncCallTimerVisibility === 'function') api.syncCallTimerVisibility();
-}
-
-/**
- * A call is a video call when it was started as one or when the peer is
- * sending video. The local camera state never controls this: switching the
- * camera off must not collapse the remote video layout.
- */
-function isVideoCallType() {
-    if (S.cameraEnabled) return true;
-    if (api.hasLiveRemoteVideo && api.hasLiveRemoteVideo()) return true;
+function callStartedAsVideo() {
     if (S.currentCall && S.currentCall.call_type) {
         return String(S.currentCall.call_type) === 'video';
     }
@@ -73,6 +38,57 @@ function isVideoCallType() {
         return String(S.lastCallContext.callType) === 'video';
     }
     return !!S.wantsVideo;
+}
+
+function remoteCameraOn() {
+    if (S.remoteCameraSeq > 0) return S.remoteCameraEnabled !== false;
+    return !!(typeof api.hasLiveRemoteVideo === 'function' && api.hasLiveRemoteVideo());
+}
+
+function applyCallLayout() {
+    if (!S.els.inCall || S.els.inCall.classList.contains('is-group-call')) return;
+    var startedAsVideo = callStartedAsVideo();
+    var remoteOn = remoteCameraOn();
+    var remoteFrames = !!(typeof api.hasLiveRemoteVideo === 'function' && api.hasLiveRemoteVideo());
+    var videoCall = isVideoCallType();
+    var connected = !!S.callConnected;
+    var remoteExplicitOff = S.remoteCameraSeq > 0 && S.remoteCameraEnabled === false;
+    S.els.inCall.classList.toggle('is-connected', connected);
+    S.els.inCall.classList.toggle('has-remote-video', remoteFrames && remoteOn);
+    S.els.inCall.classList.toggle('is-video-call', videoCall);
+    S.els.inCall.classList.toggle('is-audio-call', !videoCall);
+    S.els.inCall.classList.toggle('is-voice-origin', !startedAsVideo);
+    S.els.inCall.classList.toggle('has-local-camera', !!S.cameraEnabled && videoCall);
+    S.els.inCall.classList.toggle('is-remote-camera-off', remoteExplicitOff || (!startedAsVideo && videoCall && !remoteOn));
+    S.els.inCall.classList.toggle('is-remote-mic-off', !S.remoteMicEnabled);
+    S.els.inCall.classList.toggle('is-ringing-preview', startedAsVideo && videoCall && !connected && !S.callAnswered);
+}
+
+function updateCameraUi() {
+    if (S.els.cameraBtn) {
+        S.els.cameraBtn.hidden = false;
+    }
+    api.syncCameraUi();
+    var remoteFrames = !!(typeof api.hasLiveRemoteVideo === 'function' && api.hasLiveRemoteVideo());
+    applyCallLayout();
+    if (S.els.callCenter) {
+        S.els.callCenter.hidden = false;
+        S.els.callCenter.removeAttribute('hidden');
+        S.els.callCenter.classList.toggle('is-compact', !!S.callConnected && remoteFrames && remoteCameraOn());
+    }
+    api.syncLocalPipLayout();
+    if (typeof api.syncCallTimerVisibility === 'function') api.syncCallTimerVisibility();
+}
+
+/**
+ * Video layout is used when the call started as video, this side's camera
+ * is on, or the other side's camera is on. A voice call returns to the
+ * audio screen as soon as both cameras are off.
+ */
+function isVideoCallType() {
+    if (callStartedAsVideo()) return true;
+    if (S.cameraEnabled) return true;
+    return remoteCameraOn();
 }
 
 function syncLocalPipLayout() {
@@ -135,19 +151,17 @@ function setCameraEnabled(enabled) {
 }
 
 async function applyCameraState(enabled) {
-    if (!S.pc || !S.localStream) {
-        return;
-    }
-
     S.cameraBusy = true;
     var wantsOn = !!enabled;
     var needsRenegotiate = false;
 
     try {
         if (!wantsOn) {
-            S.localStream.getVideoTracks().forEach(function (track) {
-                try { track.enabled = false; } catch (eOff) { /* ignore */ }
-            });
+            if (S.localStream) {
+                S.localStream.getVideoTracks().forEach(function (track) {
+                    try { track.enabled = false; } catch (eOff) { /* ignore */ }
+                });
+            }
             S.cameraEnabled = false;
             api.attachLocalVideo();
             api.syncCameraUi();
@@ -155,14 +169,18 @@ async function applyCameraState(enabled) {
             return;
         }
 
+        if (!S.localStream) {
+            var opener = api.assertMediaReady();
+            var opened = await opener.getUserMedia(mediaConstraints(false));
+            await prepareLocalStream(opened);
+            S.localStream = opened;
+        }
+
         var liveTrack = api.findLiveVideoTrack();
         if (liveTrack) {
             liveTrack.enabled = true;
             needsRenegotiate = await api.attachVideoTrackToSender(liveTrack);
             S.cameraEnabled = true;
-            if (S.currentCall && String(S.currentCall.call_type) !== 'video') {
-                S.currentCall.call_type = 'video';
-            }
             api.attachLocalVideo();
             api.syncCameraUi();
             api.updateCameraUi();
@@ -209,9 +227,6 @@ async function applyCameraState(enabled) {
 
         newTrack.enabled = true;
         needsRenegotiate = await api.attachVideoTrackToSender(newTrack);
-        if (S.currentCall && String(S.currentCall.call_type) !== 'video') {
-            S.currentCall.call_type = 'video';
-        }
         S.cameraEnabled = true;
         api.attachLocalVideo();
         api.syncCameraUi();
@@ -222,7 +237,7 @@ async function applyCameraState(enabled) {
         api.syncCameraUi();
     }
 
-    if (needsRenegotiate) {
+    if (needsRenegotiate && S.pc) {
         await api.renegotiateForCamera();
     }
 }
@@ -345,14 +360,15 @@ function syncCameraUi() {
     }
     var remoteLive = typeof api.hasLiveRemoteVideo === 'function' && api.hasLiveRemoteVideo();
     var videoCall = typeof api.isVideoCallType === 'function' && api.isVideoCallType();
+    var remoteExplicitOff = S.remoteCameraSeq > 0 && S.remoteCameraEnabled === false;
     if (S.els.remoteVideoOff) {
         var attached = S.els.remoteVideo && S.els.remoteVideo.srcObject
             && typeof S.els.remoteVideo.srcObject.getVideoTracks === 'function'
             && S.els.remoteVideo.srcObject.getVideoTracks().some(function (track) {
-                return track && track.readyState !== 'ended';
+                return track && track.readyState !== 'ended' && track.muted !== true;
             });
-        var cameraOff = !!videoCall && S.remoteCameraEnabled === false;
-        var connecting = !!videoCall && S.remoteCameraEnabled !== false && !remoteLive && !attached;
+        var cameraOff = !!videoCall && (remoteExplicitOff || (!callStartedAsVideo() && !remoteCameraOn()));
+        var connecting = !!videoCall && !cameraOff && !remoteLive && !attached;
         var showRemotePlaceholder = cameraOff || connecting;
         S.els.remoteVideoOff.hidden = !showRemotePlaceholder;
         S.els.remoteVideoOff.setAttribute('aria-hidden', showRemotePlaceholder ? 'false' : 'true');
@@ -362,11 +378,8 @@ function syncCameraUi() {
         }
     }
     if (S.els.inCall && !S.els.inCall.classList.contains('is-group-call')) {
-        S.els.inCall.classList.toggle('is-remote-camera-off', S.remoteCameraEnabled === false);
         S.els.inCall.classList.toggle('is-local-camera-off', !on);
-        S.els.inCall.classList.toggle('is-remote-mic-off', !S.remoteMicEnabled);
-        S.els.inCall.classList.toggle('is-ringing-preview', !!videoCall && !S.callConnected && !S.callAnswered);
-        S.els.inCall.classList.toggle('is-audio-call', !videoCall);
+        applyCallLayout();
     }
     var remoteMicOff = document.getElementById('commsRemoteMicOff');
     if (remoteMicOff) {

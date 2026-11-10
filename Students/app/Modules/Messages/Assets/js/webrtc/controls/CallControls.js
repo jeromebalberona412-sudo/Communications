@@ -129,10 +129,6 @@ export function bindCallControls() {
                 }
                 return;
             }
-            if (!S.localStream || !S.pc) {
-                api.toast('The call is not connected yet.', 'error');
-                return;
-            }
             var next = !S.cameraEnabled;
             S.cameraPending = next;
             api.syncCameraUi();

@@ -35,18 +35,23 @@ function findVideoSender() {
     return S.videoSender;
 }
 
+function remoteVideoTrackShowing(track) {
+    return !!(track && track.readyState === 'live' && track.muted !== true && track.enabled !== false);
+}
+
 function hasLiveRemoteVideo() {
-    if (S.els.remoteVideo && Number(S.els.remoteVideo.videoWidth || 0) > 0) return true;
+    if (S.remoteCameraSeq > 0 && S.remoteCameraEnabled === false) return false;
     var streams = [S.remoteDisplayStream, S.remoteStream, S.els.remoteVideo && S.els.remoteVideo.srcObject];
     var i;
+    var live = false;
     for (i = 0; i < streams.length; i += 1) {
         var stream = streams[i];
         if (!stream || typeof stream.getVideoTracks !== 'function') continue;
-        if (stream.getVideoTracks().some(function (track) {
-            return !!(track && track.readyState === 'live');
-        })) return true;
+        if (stream.getVideoTracks().some(remoteVideoTrackShowing)) live = true;
     }
-    return false;
+    if (!live) return false;
+    if (S.els.remoteVideo && Number(S.els.remoteVideo.videoWidth || 0) > 0) return true;
+    return live;
 }
 
 function transceiverKind(transceiver) {
@@ -109,6 +114,7 @@ async function installLocalSenders(videoEnabled) {
 
     var a;
     for (a = 0; a < audioTracks.length; a += 1) {
+        try { audioTracks[a].enabled = true; } catch (eEn) { /* ignore */ }
         await place(audioTracks[a]);
     }
     if (wantVideo) {
@@ -121,11 +127,11 @@ async function installLocalSenders(videoEnabled) {
     if (!findKindTransceiver('audio')) {
         try { S.pc.addTransceiver('audio', { direction: 'recvonly' }); } catch (eAudio) { /* ignore */ }
     }
-    if (!findKindTransceiver('video')) {
+    if (videoEnabled && !findKindTransceiver('video')) {
         try {
             var videoTx = wantVideo
                 ? S.pc.addTransceiver(videoTracks[0], { direction: 'sendrecv', streams: [S.localStream] })
-                : S.pc.addTransceiver('video', { direction: videoEnabled ? 'sendrecv' : 'recvonly' });
+                : S.pc.addTransceiver('video', { direction: 'sendrecv' });
             if (videoTx && videoTx.sender) S.videoSender = videoTx.sender;
         } catch (eVideo) { /* ignore */ }
     }
@@ -192,15 +198,26 @@ function unlockRemotePlayback() {
 }
 
 function ensureRemoteAudioPlaying() {
+    if (!S.els.remoteAudio) S.els.remoteAudio = document.getElementById('commsRemoteAudio');
     if (!S.els.remoteAudio) return;
     try {
+        if ((!S.els.remoteAudio.srcObject || !S.els.remoteAudio.srcObject.getAudioTracks().length)
+            && S.remoteStream && S.remoteStream.getAudioTracks().length) {
+            S.els.remoteAudio.srcObject = new MediaStream(S.remoteStream.getAudioTracks());
+        }
         S.els.remoteAudio.muted = false;
         S.els.remoteAudio.removeAttribute('muted');
         S.els.remoteAudio.volume = 1;
         S.els.remoteAudio.autoplay = true;
         var playPromise = S.els.remoteAudio.play();
         if (playPromise && typeof playPromise.catch === 'function') {
-            playPromise.catch(function () {});
+            playPromise.catch(function () {
+                window.setTimeout(function () {
+                    if (!S.els.remoteAudio) return;
+                    var retry = S.els.remoteAudio.play();
+                    if (retry && typeof retry.catch === 'function') retry.catch(function () {});
+                }, 300);
+            });
         }
     } catch (e) { /* ignore */ }
 }
@@ -213,6 +230,10 @@ function dropRemoteTracksOfKind(kind, exceptId) {
         if (existing._commsUnmuteHandler) {
             existing.removeEventListener('unmute', existing._commsUnmuteHandler);
             delete existing._commsUnmuteHandler;
+        }
+        if (existing._commsMuteHandler) {
+            existing.removeEventListener('mute', existing._commsMuteHandler);
+            delete existing._commsMuteHandler;
         }
         if (existing._commsEndedHandler) {
             existing.removeEventListener('ended', existing._commsEndedHandler);
@@ -245,9 +266,14 @@ function mergeRemoteTrack(track, inboundStream) {
             api.refreshRemoteFromReceivers();
         };
 
+        var muteHandler = function () {
+            api.updateCameraUi();
+        };
         track.addEventListener('unmute', unmuteHandler);
+        track.addEventListener('mute', muteHandler);
         track.addEventListener('ended', endedHandler);
         track._commsUnmuteHandler = unmuteHandler;
+        track._commsMuteHandler = muteHandler;
         track._commsEndedHandler = endedHandler;
     }
     if (inboundStream && typeof inboundStream.getTracks === 'function') {
@@ -466,8 +492,8 @@ async function ensurePeerConnection(videoEnabled) {
     if (S.pc) {
         api.attachLocalVideo();
         try { await api.applyRemoteOfferIfReady(); } catch (eOffer) { /* answer path retries */ }
-        await api.installLocalSenders(!!videoEnabled);
-        if (videoEnabled && S.localStream && !api.findLiveVideoTrack()) {
+        await api.installLocalSenders(!!videoEnabled || !!S.cameraEnabled);
+        if ((videoEnabled || S.cameraEnabled) && S.localStream && !api.findLiveVideoTrack()) {
             try { await api.applyCameraState(true); } catch (eCam) { /* keep audio call */ }
         }
         return S.pc;
@@ -574,7 +600,7 @@ async function ensurePeerConnection(videoEnabled) {
 
     S.videoSender = null;
     try { await api.applyRemoteOfferIfReady(); } catch (eOffer) { /* answer path retries */ }
-    await api.installLocalSenders(!!videoEnabled);
+    await api.installLocalSenders(!!videoEnabled || !!S.cameraEnabled);
     // FIX BUG #1: Attach local video with all required attributes for immediate preview
     if (S.els.localVideo) {
         S.els.localVideo.srcObject = S.localStream;

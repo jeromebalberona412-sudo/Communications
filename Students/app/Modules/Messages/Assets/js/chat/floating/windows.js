@@ -339,15 +339,20 @@ export function attachWindows(ctx) {
                 if (!input) return;
 
                 var body = input.value.trim();
-                if (!body) return;
+                if (!body || form.dataset.sending === '1') return;
+                form.dataset.sending = '1';
 
                 ctx.sendMessage(cid, body).then(function () {
-                    input.value = '';
-                    input.style.height = 'auto';
+                    if (input.value.trim() === body) {
+                        input.value = '';
+                        input.style.height = 'auto';
+                    }
                 }).catch(function (err) {
                     if (window.Comms && typeof window.Comms.showToast === 'function') {
                         window.Comms.showToast(err.message || 'Failed to send', 'error');
                     }
+                }).finally(function () {
+                    delete form.dataset.sending;
                 });
             });
         }

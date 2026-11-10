@@ -77,18 +77,18 @@ class ConversationService
 
         $otherType = $this->types->fromUser($other);
 
-        $existingId = $this->findPrivateConversationId(
-            (int) $authUser->id,
-            $authType,
-            (int) $other->id,
-            $otherType
-        );
-
-        if ($existingId) {
-            return Conversation::query()->findOrFail($existingId);
-        }
-
         return DB::transaction(function () use ($authUser, $authType, $other, $otherType) {
+            $existingId = $this->findPrivateConversationId(
+                (int) $authUser->id,
+                $authType,
+                (int) $other->id,
+                $otherType
+            );
+
+            if ($existingId) {
+                return Conversation::query()->findOrFail($existingId);
+            }
+
             $conversation = Conversation::query()->create([
                 'conversation_type' => 'private',
             ]);
@@ -224,6 +224,7 @@ class ConversationService
 
         $conversationIds = ConversationParticipant::query()
             ->where('user_id', $userId)
+            ->whereIn('user_type', $this->viewerTypes($userType))
             ->pluck('conversation_id')
             ->unique()
             ->values();
@@ -347,7 +348,7 @@ class ConversationService
             }
 
             $other = $conversation->participants
-                ->first(fn (ConversationParticipant $p) => ! ((int) $p->user_id === $userId && $p->user_type === $userType));
+                ->first(fn (ConversationParticipant $p) => ! ((int) $p->user_id === $userId && $this->types->typesMatch($p->user_type, $userType)));
 
             if ($other?->user && $this->isPureSkFedAdministrator($other->user)) {
                 return null;
@@ -357,6 +358,8 @@ class ConversationService
 
             return $payload;
         })->filter()->values();
+
+        $items = $this->collapseDuplicateThreads($items);
 
         if ($search !== null && trim($search) !== '') {
             $q = mb_strtolower(trim($search));
@@ -970,19 +973,72 @@ class ConversationService
 
     protected function findPrivateConversationId(int $aId, string $aType, int $bId, string $bType): ?int
     {
+        $aTypes = $this->types->equivalentTypes($aType);
+        $bTypes = $this->types->equivalentTypes($bType);
+        if ($aTypes === []) {
+            $aTypes = [$aType];
+        }
+        if ($bTypes === []) {
+            $bTypes = [$bType];
+        }
+
         $rows = DB::table('conversation_participants as cp1')
-            ->join('conversation_participants as cp2', 'cp1.conversation_id', '=', 'cp2.conversation_id')
+            ->join('conversation_participants as cp2', function ($join) {
+                $join->on('cp1.conversation_id', '=', 'cp2.conversation_id')
+                    ->whereColumn('cp1.id', '!=', 'cp2.id');
+            })
             ->join('conversations as c', 'c.id', '=', 'cp1.conversation_id')
             ->where('c.conversation_type', 'private')
             ->where('cp1.user_id', $aId)
-            ->where('cp1.user_type', $aType)
+            ->whereIn('cp1.user_type', $aTypes)
             ->where('cp2.user_id', $bId)
-            ->where('cp2.user_type', $bType)
-            ->select('c.id')
-            ->limit(1)
-            ->value('id');
+            ->whereIn('cp2.user_type', $bTypes)
+            ->orderByDesc('c.updated_at')
+            ->orderByDesc('c.id')
+            ->value('c.id');
 
         return $rows ? (int) $rows : null;
+    }
+
+    /**
+     * One visible row per person. Older private threads for the same pair stay
+     * in the database and are not shown again.
+     *
+     * @param  Collection<int, array<string, mixed>>  $items
+     * @return Collection<int, array<string, mixed>>
+     */
+    protected function collapseDuplicateThreads(Collection $items): Collection
+    {
+        $seen = [];
+        $kept = [];
+
+        foreach ($items as $item) {
+            $isGroup = ($item['conversation_type'] ?? '') === 'group' || ! empty($item['is_default_group']);
+            if ($isGroup) {
+                $key = 'g:'.(int) ($item['id'] ?? 0);
+            } else {
+                $other = is_array($item['other_user'] ?? null) ? $item['other_user'] : [];
+                $otherId = (int) ($other['id'] ?? 0);
+                $otherType = (string) ($this->types->canonicalType($other['user_type'] ?? null) ?? '');
+                $key = $otherId > 0 ? ('p:'.$otherId.':'.$otherType) : ('c:'.(int) ($item['id'] ?? 0));
+            }
+
+            $stamp = strtotime((string) ($item['updated_at'] ?? '')) ?: 0;
+            if (! array_key_exists($key, $seen)) {
+                $seen[$key] = count($kept);
+                $kept[] = $item;
+
+                continue;
+            }
+
+            $index = $seen[$key];
+            $previous = strtotime((string) ($kept[$index]['updated_at'] ?? '')) ?: 0;
+            if ($stamp >= $previous) {
+                $kept[$index] = $item;
+            }
+        }
+
+        return collect($kept);
     }
 
     /**

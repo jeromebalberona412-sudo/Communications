@@ -522,13 +522,13 @@ function showIncoming(call) {
     var groupLabel = !!(call.is_group_call || call._groupInvite);
     if (titleEl) {
         titleEl.textContent = groupLabel
-            ? (isVideo ? 'Incoming Group Video Call' : 'Incoming Group Voice Call')
-            : (isVideo ? 'Incoming Video Call' : 'Incoming Voice Call');
+            ? (isVideo ? 'Incoming Group Video Call' : 'Incoming Group Audio Call')
+            : (isVideo ? 'Incoming Video Call' : 'Incoming Audio Call');
     }
     if (S.els.incomingType) {
         S.els.incomingType.textContent = groupLabel
-            ? (isVideo ? 'Group video call' : 'Group voice call')
-            : (isVideo ? 'Video call' : 'Voice call');
+            ? (isVideo ? 'Group video call' : 'Group audio call')
+            : (isVideo ? 'Video call' : 'Audio call');
     }
     api.setIncomingActionState('idle');
 

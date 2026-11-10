@@ -4,7 +4,9 @@ use App\Modules\Authentication\Controllers\TeacherLoginController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
-    return redirect()->route('teachers.login');
+    return auth()->check()
+        ? redirect()->route('teachers.dashboard')
+        : redirect()->route('teachers.login');
 });
 
 Route::middleware('guest')->group(function () {

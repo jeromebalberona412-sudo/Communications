@@ -387,6 +387,13 @@ function showInCall(call, statusText) {
     }
     api.setCallPeerAvatar(call);
     var videoCall = String((call && call.call_type) || '') === 'video' || !!S.wantsVideo;
+    var callId = call && call.id != null ? Number(call.id) : null;
+    if (callId != null && S.layoutCallId !== callId) {
+        S.layoutCallId = callId;
+        if (!S.remoteCameraSeq) S.remoteCameraEnabled = !!videoCall;
+    } else if (callId == null && !videoCall && !S.callConnected && !S.remoteCameraSeq) {
+        S.remoteCameraEnabled = false;
+    }
     var groupCall = S.els.inCall.classList.contains('is-group-call');
     if (!groupCall) {
         S.els.inCall.classList.toggle('is-video-call', videoCall);

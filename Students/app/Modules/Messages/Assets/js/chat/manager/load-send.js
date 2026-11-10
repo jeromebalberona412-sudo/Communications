@@ -284,8 +284,26 @@ function publishSentMessage(sent, extraPeers) {
     });
 }
 
+function composerInput() {
+    var live = document.getElementById('commsMessageInput');
+    if (live) els.input = live;
+    return els.input;
+}
+
+function clearComposerIfUnchanged(draft) {
+    var input = composerInput();
+    if (!input) return;
+    var current = api.normalizeMessageBody(input.value || '');
+    var sent = api.normalizeMessageBody(draft || '');
+    if (current !== sent) return;
+    input.value = '';
+    resizeComposer();
+    api.syncComposerEndControls();
+    input.focus();
+}
+
 function sendMessage(body) {
-    if (!state.activeId) return;
+    if (!state.activeId || state.sendInFlight) return;
     var files = (state.pendingAttachments || []).slice();
     var text = api.normalizeMessageBody(body);
     text = api.clampMessageToMaxLines(text);
@@ -302,11 +320,10 @@ function sendMessage(body) {
     } else {
         text = '';
     }
-    if (state.sendInFlight && files.length) return;
 
+    state.sendInFlight = true;
+    if (els.sendBtn) els.sendBtn.disabled = true;
     stopLocalTyping();
-    els.input.value = '';
-    resizeComposer();
     var previewUrls = (state.pendingPreviewUrls || []).slice();
     // Keep blob URLs for optimistic bubbles; clearPendingAttachment would revoke them.
     state.pendingPreviewUrls = [];
@@ -424,6 +441,7 @@ function sendMessage(body) {
 
     // Don't block the UI on slow inbox reloads — mark send done as soon as POSTs finish.
     Promise.all(jobs).then(function () {
+        clearComposerIfUnchanged(text);
         api.loadConversations();
     }).catch(function (err) {
         state.messages.forEach(function (m) {

@@ -98,6 +98,38 @@
         return 'https://ui-avatars.com/api/?name=' + encodeURIComponent(name || 'U') + '&background=0039A8&color=fff';
     }
 
+    function headerPeerKey(conversation) {
+        var peer = (conversation && conversation.other_user) || {};
+        var isGroup = conversation.conversation_type === 'group' || conversation.is_default_group || peer.is_group;
+        if (isGroup) return 'g:' + Number(conversation.id || 0);
+        var type = String(peer.user_type || peer.type || '').trim().toLowerCase();
+        if (type === 'student' || type === 'kabataan' || type === 'user') type = 'students';
+        if (type === 'teacher' || type === 'sk_official' || type === 'official') type = 'teachers';
+        var pid = Number(peer.id || peer.user_id || 0);
+        return pid > 0 ? ('p:' + pid + ':' + type) : ('c:' + Number(conversation.id || 0));
+    }
+
+    function dedupeHeaderConversations(list) {
+        var seen = Object.create(null);
+        var kept = [];
+        (list || []).forEach(function (conversation) {
+            if (!conversation) return;
+            var key = headerPeerKey(conversation);
+            var stamp = Date.parse(conversation.updated_at || '') || 0;
+            if (seen[key] == null) {
+                var id = Number(conversation.id || 0);
+                if (id && kept.some(function (row) { return Number(row.id) === id; })) return;
+                seen[key] = kept.length;
+                kept.push(conversation);
+                return;
+            }
+            var index = seen[key];
+            var previous = Date.parse(kept[index].updated_at || '') || 0;
+            if (stamp >= previous) kept[index] = conversation;
+        });
+        return kept;
+    }
+
     function filteredItems() {
         var q = searchInput ? String(searchInput.value || '').trim().toLowerCase() : '';
         return allItems.filter(function (c) {
@@ -203,13 +235,13 @@
         if (!allItems.length && window.Comms && typeof window.Comms.readInboxCache === 'function') {
             var cachedInbox = window.Comms.readInboxCache();
             if (Array.isArray(cachedInbox) && cachedInbox.length) {
-                allItems = cachedInbox;
+                allItems = dedupeHeaderConversations(cachedInbox);
                 renderList();
             }
         }
         loading = true;
         window.Comms.api(routes.conversations, { dedupe: true }).then(function (data) {
-            allItems = (data && data.conversations) || [];
+            allItems = dedupeHeaderConversations((data && data.conversations) || []);
             if (window.Comms.writeInboxCache) window.Comms.writeInboxCache(allItems);
             applyUnreadFromList(allItems);
             renderList();
@@ -300,7 +332,7 @@
         if (!window.Comms || typeof window.Comms.readInboxCache !== 'function') return;
         var cachedInbox = window.Comms.readInboxCache();
         if (!Array.isArray(cachedInbox) || !cachedInbox.length) return;
-        allItems = cachedInbox;
+        allItems = dedupeHeaderConversations(cachedInbox);
         applyUnreadFromList(allItems);
         renderList();
     }

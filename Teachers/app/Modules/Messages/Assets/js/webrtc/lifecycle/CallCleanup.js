@@ -41,6 +41,7 @@ async function cleanupMediaOnly() {
     S.callAnswered = false;
     S.peerAnsweredFor = null;
     S.remoteCameraEnabled = true;
+    S.layoutCallId = null;
     S.remoteMicEnabled = true;
     S.remoteCameraSeq = 0;
     S.cameraSeq = 0;

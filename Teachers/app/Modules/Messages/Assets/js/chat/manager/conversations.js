@@ -26,9 +26,44 @@ function isHiddenAdminPeer(peer) {
         || name.indexOf('sk federation admin') !== -1;
 }
 
+function peerKey(conversation) {
+    var peer = (conversation && conversation.other_user) || {};
+    var isGroup = conversation.conversation_type === 'group' || conversation.is_default_group || peer.is_group;
+    if (isGroup) return 'g:' + Number(conversation.id || 0);
+    var type = String(peer.user_type || peer.type || peer.portal || '').trim().toLowerCase();
+    if (type === 'student' || type === 'kabataan' || type === 'user') type = 'students';
+    if (type === 'teacher' || type === 'sk_official' || type === 'official') type = 'teachers';
+    var pid = Number(peer.id || peer.user_id || 0);
+    return pid > 0 ? ('p:' + pid + ':' + type) : ('c:' + Number(conversation.id || 0));
+}
+
+function dedupeConversations(list) {
+    var seen = Object.create(null);
+    var kept = [];
+    (list || []).forEach(function (conversation) {
+        if (!conversation) return;
+        var id = Number(conversation.id || 0);
+        var key = peerKey(conversation);
+        var stamp = Date.parse(conversation.updated_at || '') || 0;
+        if (seen[key] == null && id) {
+            var duplicateId = kept.some(function (row) { return Number(row.id) === id; });
+            if (duplicateId) return;
+        }
+        if (seen[key] == null) {
+            seen[key] = kept.length;
+            kept.push(conversation);
+            return;
+        }
+        var index = seen[key];
+        var previous = Date.parse(kept[index].updated_at || '') || 0;
+        if (stamp >= previous) kept[index] = conversation;
+    });
+    return kept;
+}
+
 function renderConversations(filter) {
     var q = String(filter || '').trim().toLowerCase();
-    var items = (state.conversations || []).filter(function (c) {
+    var items = dedupeConversations(state.conversations).filter(function (c) {
         if (c.conversation_type === 'group' || c.is_default_group) return true;
         return !isHiddenAdminPeer(c.other_user || {});
     }).slice().sort(function (a, b) {
@@ -153,7 +188,7 @@ function loadConversations() {
                 if (Number(c.id) === Number(state.activeId)) c.unread_count = 0;
             });
         }
-        state.conversations = list;
+        state.conversations = dedupeConversations(list);
         if (Comms.writeInboxCache) Comms.writeInboxCache(state.conversations);
         renderConversations(els.convFilter ? els.convFilter.value : '');
     }).catch(function (err) {
@@ -187,7 +222,7 @@ function noteInboxActivity(row) {
         list.splice(idx, 1);
         list.unshift(item);
     }
-    state.conversations = list;
+    state.conversations = dedupeConversations(list);
     if (Comms.writeInboxCache) Comms.writeInboxCache(list);
     renderConversations(els.convFilter ? els.convFilter.value : '');
     if (Array.isArray(window.__COMMS_HEADER_CONVERSATIONS__)) {
@@ -206,7 +241,7 @@ function noteInboxActivity(row) {
 function hydrateFromCache() {
     var inbox = Comms.readInboxCache ? Comms.readInboxCache() : null;
     if (Array.isArray(inbox) && inbox.length) {
-        state.conversations = inbox;
+        state.conversations = dedupeConversations(inbox);
         renderConversations(els.convFilter ? els.convFilter.value : '');
     }
 }
