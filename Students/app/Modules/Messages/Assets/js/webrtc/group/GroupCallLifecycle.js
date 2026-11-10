@@ -51,7 +51,10 @@ export function createGroupCallLifecycle(ctx, deps) {
 
     async function startGroupCall(conversationId, callType, conversation) {
         if (!window.Comms) return;
+        var now = Date.now();
         if (ctx.meshCall || ctx.meshStarting) return;
+        if (ctx.meshLastStartAt && (now - ctx.meshLastStartAt) < 2000) return;
+        ctx.meshLastStartAt = now;
         ctx.meshStarting = true;
         try {
             if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
@@ -270,26 +273,7 @@ export function createGroupCallLifecycle(ctx, deps) {
     }
 
     async function prepareRingPreview() {
-        if (ctx.meshCall) return;
-        ctx.meshWantsVideo = true;
-        try {
-            await media.ensureLocalMedia();
-        } catch (err) {
-            toast((err && err.message) || 'Microphone/camera permission was denied. Allow access and try again.', 'error');
-            return;
-        }
-        if (ctx.meshCall) return;
-        var e = ui.els();
-        if (e.inCall) {
-            e.inCall.hidden = false;
-            e.inCall.classList.add('is-group-call', 'is-video-call', 'is-ringing-preview');
-        }
-        var incoming = document.getElementById('commsIncomingCall');
-        if (incoming) {
-            incoming.hidden = false;
-            incoming.removeAttribute('hidden');
-        }
-        ui.setStatus('Ringing...');
+        return;
     }
 
     function releaseRingPreview() {

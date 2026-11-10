@@ -190,15 +190,6 @@ function stopVibration() {
 
 function startIncomingVibration() {
     api.stopVibration();
-    if (!navigator.vibrate) return;
-    try { navigator.vibrate([220, 120, 220, 400, 220, 120, 220]); } catch (eV) { /* ignore */ }
-    vibeTimer = setInterval(function () {
-        if (!S.ringtonePlaying || S.ringMode !== 'incoming') {
-            api.stopVibration();
-            return;
-        }
-        try { navigator.vibrate([220, 120, 220, 400]); } catch (e2) { /* ignore */ }
-    }, 1800);
 }
 
 function playToneBurst(ctx, freqs, when, duration, volume) {
@@ -567,9 +558,6 @@ function showIncoming(call) {
         S.els.incoming.hidden = false;
         S.els.incoming.removeAttribute('hidden');
         api.startRingtone('incoming', callId);
-        if (isVideo && window.CommsWebRTC && typeof window.CommsWebRTC.__prepareGroupRingPreview === 'function') {
-            window.CommsWebRTC.__prepareGroupRingPreview();
-        }
         api.clearRingTimeout();
         S.ringTimeout = setTimeout(function () {
             if (call.id != null) S.dismissedRingIds[Number(call.id)] = true;
@@ -604,24 +592,16 @@ function showIncoming(call) {
 function beginIncomingPreview(call) {
     if (!call || call.is_group_call || call._groupInvite) return;
     var video = String(call.call_type || '') === 'video';
-    S.ringingPreview = true;
+    S.ringingPreview = false;
     S.wantsVideo = video;
+    S.cameraEnabled = false;
     S.lifecycle = 'ringing';
     S.callConnected = false;
-    if (video && typeof api.revealRingingPreview === 'function') {
-        api.revealRingingPreview(call);
+    S.previewGeneration = (S.previewGeneration || 0) + 1;
+    if (S.els.inCall && !S.callConnected) {
+        S.els.inCall.hidden = true;
+        S.els.inCall.classList.remove('is-ringing-preview', 'is-video-call');
     }
-    var generation = S.previewGeneration || 0;
-    api.prepareLocalPreview(video).then(function () {
-        if (generation !== (S.previewGeneration || 0) || !S.ringingPreview) return;
-        api.attachLocalVideo();
-        if (typeof api.syncCameraUi === 'function') api.syncCameraUi();
-    }).catch(function (err) {
-        if (generation !== (S.previewGeneration || 0)) return;
-        S.cameraEnabled = false;
-        api.toast((err && err.message) || 'Microphone/camera permission was denied. Allow access and try again.', 'error');
-        if (typeof api.syncCameraUi === 'function') api.syncCameraUi();
-    });
 }
 
 function setIncomingActionState(mode) {

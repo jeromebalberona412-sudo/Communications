@@ -260,7 +260,9 @@ function openGroupInfoModal(mode, opts) {
 
 function beginGroupOrDirectCall(callType) {
     var conv = state.activeConversation;
-    if (!state.activeId) return;
+    if (!state.activeId || state.callStartLock) return;
+    state.callStartLock = true;
+    window.setTimeout(function () { state.callStartLock = false; }, 2000);
     ctx.withWebrtc(function (api) {
         api.startCall(state.activeId, callType, conv);
     });

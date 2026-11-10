@@ -182,10 +182,8 @@ async function applyCameraState(enabled) {
 
         var liveTrack = api.findLiveVideoTrack();
         if (liveTrack) {
-            var wasOff = liveTrack.enabled === false;
             liveTrack.enabled = true;
             needsRenegotiate = await api.attachVideoTrackToSender(liveTrack);
-            if (wasOff) needsRenegotiate = true;
             S.cameraEnabled = true;
             api.attachLocalVideo();
             api.syncCameraUi();

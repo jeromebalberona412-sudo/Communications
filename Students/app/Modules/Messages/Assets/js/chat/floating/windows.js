@@ -169,7 +169,9 @@ export function attachWindows(ctx) {
     };
 
     ctx.startCall = function (conversationId, callType) {
-        if (ctx.isCallActive()) return;
+        if (ctx.isCallActive() || ctx.callStartLock) return;
+        ctx.callStartLock = true;
+        window.setTimeout(function () { ctx.callStartLock = false; }, 2000);
         var type = callType === 'audio' ? 'voice' : callType;
         var w = ctx.openWindows[String(conversationId)];
         var conversation = w && w.isGroup
@@ -398,13 +400,14 @@ export function attachWindows(ctx) {
                 var body = input.value.trim();
                 if (!body || form.dataset.sending === '1') return;
                 form.dataset.sending = '1';
+                input.value = '';
+                input.style.height = 'auto';
 
-                ctx.sendMessage(cid, body).then(function () {
-                    if (input.value.trim() === body) {
-                        input.value = '';
+                ctx.sendMessage(cid, body).catch(function (err) {
+                    if (!input.value.trim()) {
+                        input.value = body;
                         input.style.height = 'auto';
                     }
-                }).catch(function (err) {
                     if (window.Comms && typeof window.Comms.showToast === 'function') {
                         window.Comms.showToast(err.message || 'Failed to send', 'error');
                     }

@@ -117,6 +117,9 @@ export function bindCallControls() {
     if (S.els && S.els.cameraBtn) {
         S.els.cameraBtn.hidden = false;
         S.els.cameraBtn.addEventListener('click', function () {
+            var now = Date.now();
+            if (S.cameraClickAt && (now - S.cameraClickAt) < 450) return;
+            S.cameraClickAt = now;
             if (window.CommsWebRTC && typeof window.CommsWebRTC.__meshActive === 'function' && window.CommsWebRTC.__meshActive()) {
                 var next = !(S.els.cameraBtn.getAttribute('aria-pressed') === 'true');
                 if (typeof window.CommsWebRTC.__meshSetCamera === 'function') {

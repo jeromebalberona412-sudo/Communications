@@ -156,7 +156,10 @@ function callErrorMessage(err) {
 }
 
 async function placeCall(conversationId, callType, conversation, receiverId) {
-    if (!window.Comms || S.startingCall || S.callConnected) return;
+    var now = Date.now();
+    if (!window.Comms || S.startingCall || S.callConnected || S.currentCall) return;
+    if (S.lastStartAt && (now - S.lastStartAt) < 2000) return;
+    S.lastStartAt = now;
     S.startingCall = true;
 
     api.stopCallTimer();

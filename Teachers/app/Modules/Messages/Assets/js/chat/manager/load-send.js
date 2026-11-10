@@ -323,6 +323,7 @@ function sendMessage(body) {
 
     state.sendInFlight = true;
     if (els.sendBtn) els.sendBtn.disabled = true;
+    clearComposerIfUnchanged(text);
     stopLocalTyping();
     var previewUrls = (state.pendingPreviewUrls || []).slice();
     // Keep blob URLs for optimistic bubbles; clearPendingAttachment would revoke them.
@@ -444,6 +445,11 @@ function sendMessage(body) {
         clearComposerIfUnchanged(text);
         api.loadConversations();
     }).catch(function (err) {
+        var input = composerInput();
+        if (input && !String(input.value || '').trim() && text) {
+            input.value = text;
+            resizeComposer();
+        }
         state.messages.forEach(function (m) {
             var id = String(m.id || '');
             if (id === tempId || id.indexOf('local-att-') === 0) {
