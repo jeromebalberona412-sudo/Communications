@@ -1030,9 +1030,18 @@ class DefaultGroupChatService
         // Restore default avatar (no file).
         if ($file === null) {
             $previous = (string) ($conversation->avatar_url ?? '');
+            $previousId = SchemaCache::hasColumn('conversations', 'avatar_public_id')
+                ? trim((string) ($conversation->avatar_public_id ?? ''))
+                : '';
             $conversation->avatar_url = null;
+            if (SchemaCache::hasColumn('conversations', 'avatar_public_id')) {
+                $conversation->avatar_public_id = null;
+            }
             $conversation->save();
             $this->deleteLocalAvatar($previous);
+            if ($previousId !== '') {
+                app(CloudinaryService::class)->delete($previousId);
+            }
 
             return $conversation->fresh();
         }

@@ -91,12 +91,28 @@ class CloudinaryService
             throw new RuntimeException('Unable to read the selected image.');
         }
 
-        $response = Http::timeout(45)
-            ->attach('file', $contents, $file->getClientOriginalName() ?: 'image.jpg')
-            ->post('https://api.cloudinary.com/v1_1/'.$cloud.'/image/upload', [
-                'upload_preset' => (string) (config('services.cloudinary.upload_preset') ?: self::PRESET),
+        $preset = (string) (config('services.cloudinary.upload_preset') ?: self::PRESET);
+        $filename = $file->getClientOriginalName() ?: 'image.jpg';
+        $response = $this->postUpload($cloud, $contents, $filename, [
+            'upload_preset' => $preset,
+            'asset_folder' => $folder,
+            'folder' => $folder,
+            'overwrite' => 'false',
+            'use_filename' => 'false',
+            'unique_filename' => 'false',
+            'use_filename_as_display_name' => 'true',
+            'use_asset_folder_as_public_id_prefix' => 'false',
+            'type' => 'upload',
+        ]);
+
+        // Unsigned presets reject flags that are already fixed on the preset.
+        if (! $response->successful()) {
+            $response = $this->postUpload($cloud, $contents, $filename, [
+                'upload_preset' => $preset,
+                'asset_folder' => $folder,
                 'folder' => $folder,
             ]);
+        }
 
         if (! $response->successful()) {
             throw new RuntimeException('Cloudinary rejected the image upload.');
@@ -122,6 +138,16 @@ class CloudinaryService
             'width' => (int) ($json['width'] ?? 0),
             'height' => (int) ($json['height'] ?? 0),
         ];
+    }
+
+    /**
+     * @param  array<string, string>  $fields
+     */
+    protected function postUpload(string $cloud, string $contents, string $filename, array $fields): \Illuminate\Http\Client\Response
+    {
+        return Http::timeout(45)
+            ->attach('file', $contents, $filename)
+            ->post('https://api.cloudinary.com/v1_1/'.$cloud.'/image/upload', $fields);
     }
 
     protected function allowedFolder(string $folder): string
