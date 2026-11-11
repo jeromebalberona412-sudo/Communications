@@ -35,6 +35,19 @@ function bindInboxChannel(sb, name) {
                 window.CommsChat.applyReadReceipt(data);
             }
         })
+        .on('broadcast', { event: 'message-reaction' }, function (raw) {
+            var data = (raw && raw.payload) ? raw.payload : (raw || {});
+            if (!data || data.message_id == null) return;
+            if (window.CommsChat && typeof window.CommsChat.onReactionChange === 'function') {
+                window.CommsChat.onReactionChange(data.message_id, { reactions: data.reactions || [] });
+            }
+        })
+        .on('broadcast', { event: 'call-history' }, function (raw) {
+            var data = (raw && raw.payload) ? raw.payload : (raw || {});
+            if (window.CommsCallHistory && typeof window.CommsCallHistory.upsert === 'function') {
+                window.CommsCallHistory.upsert(data.call || null);
+            }
+        })
         .on('broadcast', { event: 'message-delivered' }, function (raw) {
             var data = (raw && raw.payload) ? raw.payload : (raw || {});
             if (window.CommsChat && typeof window.CommsChat.applyDelivered === 'function') {

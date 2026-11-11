@@ -231,9 +231,33 @@ function patchRemoteReaction(messageId, eventType, row) {
     return true;
 }
 
+function reactionsForMe(reactions) {
+    var root = document.getElementById('commsApp') || document.getElementById('commsRealtimeBoot');
+    var myId = Number(root && root.dataset.currentUserId || 0);
+    var myType = String(root && root.dataset.portalUserType || '').toLowerCase();
+    return (reactions || []).map(function (group) {
+        var users = Array.isArray(group.users) ? group.users : [];
+        var mine = users.some(function (user) {
+            if (Number(user.id) !== myId) return false;
+            var type = String(user.user_type || '').toLowerCase();
+            if (!type || !myType) return true;
+            var student = type === 'student' || type === 'students' || type === 'kabataan' || type === 'user';
+            var teacher = type === 'teacher' || type === 'teachers' || type === 'sk_official' || type === 'official';
+            var meStudent = myType === 'student' || myType === 'students' || myType === 'kabataan' || myType === 'user';
+            var meTeacher = myType === 'teacher' || myType === 'teachers' || myType === 'sk_official' || myType === 'official';
+            return (student && meStudent) || (teacher && meTeacher) || type === myType;
+        });
+        return Object.assign({}, group, { mine: mine });
+    });
+}
+
 function onReactionChange(messageId, meta) {
     if (!state.activeId || !messageId) return;
     if (!state.messages.some(function (m) { return Number(m.id) === Number(messageId); })) return;
+    if (meta && Array.isArray(meta.reactions)) {
+        applyMessageReactions(messageId, reactionsForMe(meta.reactions), { closePicker: false });
+        return;
+    }
     if (state.reactSkipRealtime[String(messageId)]) return;
 
     if (meta && meta.eventType && patchRemoteReaction(messageId, meta.eventType, meta.row)) {

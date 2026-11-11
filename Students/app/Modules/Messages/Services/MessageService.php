@@ -131,8 +131,11 @@ class MessageService
             $messageType = $kind === 'image' ? 'image' : 'file';
 
             try {
+                $folder = $conversation->isGroup()
+                    ? \App\Core\Services\CloudinaryService::FOLDER_GROUP
+                    : \App\Core\Services\CloudinaryService::FOLDER_MESSAGES;
                 $attachmentMeta = $kind === 'image'
-                    ? $this->attachmentStorage->storeImage($validated['file'])
+                    ? $this->attachmentStorage->storeImage($validated['file'], $folder)
                     : $this->attachmentStorage->storeDocument($validated['file'], (int) $conversation->id);
             } catch (RuntimeException $e) {
                 abort(503, $e->getMessage());
@@ -223,10 +226,19 @@ class MessageService
 
         $message->unsetRelation('reactions');
         $message->load('reactions.user');
+        $reactions = $this->serializeReactions($message, $user);
+
+        if ($conversation) {
+            app(ConversationRealtimeNotifier::class)->notifyReaction(
+                $conversation,
+                (int) $message->id,
+                $reactions
+            );
+        }
 
         return [
             'message_id' => (int) $message->id,
-            'reactions' => $this->serializeReactions($message, $user),
+            'reactions' => $reactions,
         ];
     }
 

@@ -15,12 +15,8 @@ class ConversationRealtimeNotifier
 {
     public function notifyGroupUpdated(Conversation $conversation, array $payload = []): void
     {
-        $url = rtrim((string) (env('SUPABASE_URL') ?: env('VITE_SUPABASE_URL') ?: ''), '/');
-        $key = (string) (env('SUPABASE_SECRET_KEY')
-            ?: env('SUPABASE_SERVICE_ROLE_KEY')
-            ?: env('SUPABASE_PUBLISHABLE_KEY')
-            ?: env('VITE_SUPABASE_PUBLISHABLE_KEY')
-            ?: '');
+        $url = rtrim((string) config('services.supabase.url', ''), '/');
+        $key = (string) config('services.supabase.broadcast_key', '');
 
         if ($url === '' || $key === '') {
             return;
@@ -79,6 +75,25 @@ class ConversationRealtimeNotifier
         $this->publish($conversation, 'message', ['message' => $message], $senderId, $senderType);
     }
 
+    /**
+     * @param  list<array<string, mixed>>  $reactions
+     */
+    public function notifyReaction(Conversation $conversation, int $messageId, array $reactions): void
+    {
+        $this->publish($conversation, 'message-reaction', [
+            'message_id' => $messageId,
+            'conversation_id' => (int) $conversation->id,
+            'reactions' => $reactions,
+        ], 0, '');
+    }
+
+    public function notifyCallHistory(Conversation $conversation, array $call): void
+    {
+        $this->publish($conversation, 'call-history', [
+            'call' => $call,
+        ], 0, '');
+    }
+
     public function notifyRead(Conversation $conversation, int $readerId, string $readerType, int $lastReadMessageId): void
     {
         if ($lastReadMessageId <= 0) {
@@ -99,12 +114,8 @@ class ConversationRealtimeNotifier
      */
     protected function publish(Conversation $conversation, string $event, array $payload, int $exceptUserId, string $exceptUserType): void
     {
-        $url = rtrim((string) (env('SUPABASE_URL') ?: env('VITE_SUPABASE_URL') ?: ''), '/');
-        $key = (string) (env('SUPABASE_SECRET_KEY')
-            ?: env('SUPABASE_SERVICE_ROLE_KEY')
-            ?: env('SUPABASE_PUBLISHABLE_KEY')
-            ?: env('VITE_SUPABASE_PUBLISHABLE_KEY')
-            ?: '');
+        $url = rtrim((string) config('services.supabase.url', ''), '/');
+        $key = (string) config('services.supabase.broadcast_key', '');
 
         if ($url === '' || $key === '') {
             return;

@@ -17,7 +17,7 @@ function renderAttachments(attachments) {
         if (att.file_type === 'image' || att.storage_provider === 'cloudinary') {
             var src = att.url || att.download_url;
             return '<button type="button" class="comms-bubble-image" data-comms-lightbox-src="' + Comms.escapeHtml(src) + '" aria-label="View image">' +
-                '<img src="' + Comms.escapeHtml(src) + '" alt="' + Comms.escapeHtml(att.file_name || 'Image') + '" loading="lazy">' +
+                '<img src="' + Comms.escapeHtml(src) + '" alt="' + Comms.escapeHtml(att.file_name || 'Image') + '" loading="lazy" style="max-width:100%;height:auto;object-fit:cover;" onerror="this.closest(\'button\').hidden=true">' +
                 '</button>';
         }
         var kind = api.fileKindClass(att);

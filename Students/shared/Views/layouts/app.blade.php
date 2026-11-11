@@ -13,8 +13,8 @@
     {{-- Publishable Supabase keys only (never service-role / sb_secret_*). Used by realtime.js for calls/chat. --}}
     <script>
         window.__COMMS_SUPABASE__ = {
-            url: @json(rtrim((string) (env('VITE_SUPABASE_URL') ?: env('SUPABASE_URL') ?: ''), '/')),
-            key: @json((string) (env('VITE_SUPABASE_PUBLISHABLE_KEY') ?: env('SUPABASE_PUBLISHABLE_KEY') ?: ''))
+            url: @json(rtrim((string) config('services.supabase.url', ''), '/')),
+            key: @json((string) config('services.supabase.publishable_key', ''))
         };
         window.__COMMS_CALL_POLL_MS__ = @json((int) config('communications.call_poll_interval_ms', 8000));
         window.__COMMS_CALL_HEARTBEAT__ = @json((int) config('communications.call_heartbeat_seconds', 30));

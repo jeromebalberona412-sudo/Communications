@@ -12,12 +12,17 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 
-# Migrations OFF by default. Set MIGRATE_ON_DEPLOY=true only when approved.
+# Full migrate stays off. This one file only creates communication_call_histories.
+echo "[render] Ensuring communication_call_histories exists..."
+php artisan migrate --force --path=database/migrations/2026_11_11_080100_create_communication_call_histories_table.php \
+  || echo "[render] Call history migration did not apply. Existing call rows still load."
+
+# Other migrations stay off. Set MIGRATE_ON_DEPLOY=true only when approved.
 if [ "${MIGRATE_ON_DEPLOY:-false}" = "true" ]; then
   echo "[render] MIGRATE_ON_DEPLOY=true — running php artisan migrate --force"
   php artisan migrate --force
 else
-  echo "[render] Skipping migrations (set MIGRATE_ON_DEPLOY=true to enable)."
+  echo "[render] Skipping the rest of the migrations."
 fi
 
 echo "[render] Laravel boot scripts complete."

@@ -44,7 +44,8 @@ class CallService
     public function __construct(
         protected ParticipantTypeResolver $types,
         protected ConversationService $conversations,
-        protected CallRealtimeNotifier $realtimeNotifier
+        protected CallRealtimeNotifier $realtimeNotifier,
+        protected CallHistoryRecorder $callHistory
     ) {}
 
     public function start(
@@ -233,6 +234,7 @@ class CallService
             $extraReceivers,
             $this->callerProfile($caller)
         );
+        $this->callHistory->sync($call->fresh() ?? $call);
 
         return $call;
     }
@@ -648,6 +650,8 @@ class CallService
         }
 
         $call->save();
+        $this->callHistory->sync($call->fresh() ?? $call);
+        $this->broadcastCallHistory($call);
 
         $body = $this->statusMessageBody($call, $status);
         if ($body !== null) {
@@ -685,7 +689,56 @@ class CallService
             ->orderByDesc('id')
             ->limit($limit)
             ->get()
-            ->map(fn (Call $call) => $this->serialize($call, $user));
+            ->map(fn (Call $call) => $this->serialize($call, $user))
+            ->pipe(fn (Collection $rows) => $this->overlayCallHistory($rows));
+    }
+
+    protected function overlayCallHistory(Collection $rows): Collection
+    {
+        if ($rows->isEmpty() || ! Schema::hasTable('communication_call_histories')) {
+            return $rows;
+        }
+
+        $saved = DB::table('communication_call_histories')
+            ->whereIn('call_id', $rows->pluck('id')->filter()->all())
+            ->get()
+            ->keyBy('call_id');
+
+        return $rows->map(function (array $row) use ($saved) {
+            $history = $saved->get($row['id'] ?? 0);
+            if (! $history) {
+                return $row;
+            }
+            $row['status'] = (string) $history->status;
+            $row['duration_seconds'] = $history->duration_seconds !== null ? (int) $history->duration_seconds : $row['duration_seconds'];
+            $row['call_uuid'] = (string) $history->call_uuid;
+            $row['end_reason'] = $history->end_reason;
+            if ($history->call_type === 'audio') {
+                $row['call_type'] = 'voice';
+            }
+
+            return $row;
+        });
+    }
+
+    protected function broadcastCallHistory(Call $call): void
+    {
+        $conversation = $call->relationLoaded('conversation')
+            ? $call->conversation
+            : $call->conversation()->first();
+        if (! $conversation) {
+            return;
+        }
+
+        $viewer = auth()->user();
+        if (! $viewer) {
+            return;
+        }
+
+        app(ConversationRealtimeNotifier::class)->notifyCallHistory(
+            $conversation,
+            $this->serialize($call, $viewer)
+        );
     }
 
     /**

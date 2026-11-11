@@ -30,17 +30,17 @@ class MessageAttachmentStorageService
     }
 
     /**
-     * Upload an image to Cloudinary folder `communication`.
+     * Upload an image to Cloudinary. Private chats use message_images; groups use Groupchat_Images.
      *
      * @return array{file_name: string, file_path: string, public_id: string, file_type: string, mime_type: string, file_size: int, storage_provider: string}
      */
-    public function storeImage(UploadedFile $file): array
+    public function storeImage(UploadedFile $file, string $folder = CloudinaryService::FOLDER_MESSAGES): array
     {
         if (! $this->cloudinaryConfigured()) {
             throw new RuntimeException('Cloudinary is not configured for communication image uploads.');
         }
 
-        $result = $this->cloudinary->uploadCommunicationImage($file);
+        $result = $this->cloudinary->uploadCommunicationImage($file, $folder);
 
         return [
             'file_name' => $this->safeOriginalName($file),

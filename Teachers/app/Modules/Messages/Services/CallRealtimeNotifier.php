@@ -22,12 +22,8 @@ class CallRealtimeNotifier
         array $extraReceivers = [],
         array $callerProfile = []
     ): void {
-        $url = rtrim((string) (env('SUPABASE_URL') ?: env('VITE_SUPABASE_URL') ?: ''), '/');
-        $key = (string) (env('SUPABASE_SECRET_KEY')
-            ?: env('SUPABASE_SERVICE_ROLE_KEY')
-            ?: env('SUPABASE_PUBLISHABLE_KEY')
-            ?: env('VITE_SUPABASE_PUBLISHABLE_KEY')
-            ?: '');
+        $url = rtrim((string) config('services.supabase.url', ''), '/');
+        $key = (string) config('services.supabase.broadcast_key', '');
 
         if ($url === '' || $key === '') {
             return;

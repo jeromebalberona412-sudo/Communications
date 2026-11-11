@@ -35,4 +35,25 @@ return [
         ],
     ],
 
+    /*
+    | Read here so `php artisan config:cache` on Render still has the values.
+    | env() outside config files returns null after that cache.
+    | broadcast_key stays server-side. The browser only receives publishable_key.
+    */
+    'supabase' => [
+        'url' => env('SUPABASE_URL', env('VITE_SUPABASE_URL', '')),
+        'publishable_key' => env('SUPABASE_PUBLISHABLE_KEY', env('VITE_SUPABASE_PUBLISHABLE_KEY', '')),
+        'secret_key' => env('SUPABASE_SECRET_KEY', env('SUPABASE_SERVICE_ROLE_KEY', '')),
+        'service_role_key' => env('SUPABASE_SECRET_KEY', env('SUPABASE_SERVICE_ROLE_KEY', '')),
+        'communication_bucket' => env('SUPABASE_COMMUNICATION_BUCKET', 'communication'),
+        'broadcast_key' => env('SUPABASE_SECRET_KEY', env('SUPABASE_SERVICE_ROLE_KEY', env('SUPABASE_PUBLISHABLE_KEY', env('VITE_SUPABASE_PUBLISHABLE_KEY', '')))),
+    ],
+
+    'cloudinary' => [
+        'cloud_name' => env('CLOUDINARY_CLOUD_NAME', ''),
+        'api_key' => env('CLOUDINARY_API_KEY', ''),
+        'api_secret' => env('CLOUDINARY_API_SECRET', ''),
+        'upload_preset' => env('CLOUDINARY_UPLOAD_PRESET', 'Unsigned'),
+    ],
+
 ];
