@@ -20,6 +20,7 @@ class Conversation extends Model
         'tenant_id',
         'max_members',
         'avatar_url',
+        'avatar_public_id',
     ];
 
     protected function casts(): array

@@ -1037,33 +1037,38 @@ class DefaultGroupChatService
             return $conversation->fresh();
         }
 
-        $url = '';
-        if (class_exists(CloudinaryService::class)) {
-            try {
-                $cloudinary = app(CloudinaryService::class);
-                if (method_exists($cloudinary, 'isConfigured') && $cloudinary->isConfigured()) {
-                    $uploaded = $cloudinary->uploadGroupChatAvatar($file);
-                    $url = trim((string) ($uploaded['url'] ?? ''));
-                }
-            } catch (\Throwable $e) {
-                report($e);
-            }
+        $cloudinary = app(CloudinaryService::class);
+        if (! $cloudinary->isConfigured()) {
+            abort(503, 'Cloudinary is not configured for group photos.');
         }
 
-        if ($url === '') {
-            $path = $file->store('comms/group-avatars', 'public');
-            $url = $path ? url(\Illuminate\Support\Facades\Storage::disk('public')->url($path)) : '';
+        try {
+            $uploaded = $cloudinary->uploadGroupChatAvatar($file);
+        } catch (\Throwable $e) {
+            report($e);
+            abort(503, 'Cloudinary rejected the group photo.');
         }
 
-        if ($url === '') {
-            abort(502, 'Unable to upload group photo.');
+        $url = trim((string) ($uploaded['url'] ?? ''));
+        $publicId = trim((string) ($uploaded['public_id'] ?? ''));
+        if ($url === '' || $publicId === '') {
+            abort(503, 'Cloudinary did not return a group photo URL.');
         }
 
         $previous = (string) ($conversation->avatar_url ?? '');
+        $previousId = SchemaCache::hasColumn('conversations', 'avatar_public_id')
+            ? trim((string) ($conversation->avatar_public_id ?? ''))
+            : '';
 
         $conversation->avatar_url = $url;
+        if (SchemaCache::hasColumn('conversations', 'avatar_public_id')) {
+            $conversation->avatar_public_id = $publicId;
+        }
         $conversation->save();
         $this->deleteLocalAvatar($previous);
+        if ($previousId !== '' && $previousId !== $publicId) {
+            $cloudinary->delete($previousId);
+        }
 
         return $conversation->fresh();
     }

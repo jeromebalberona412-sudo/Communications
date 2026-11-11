@@ -16,6 +16,9 @@ php artisan view:cache
 echo "[render] Ensuring communication_call_histories exists..."
 php artisan migrate --force --path=database/migrations/2026_11_11_080100_create_communication_call_histories_table.php \
   || echo "[render] Call history migration did not apply. Existing call rows still load."
+php artisan migrate --force --path=database/migrations/2026_11_11_083000_add_cloudinary_photo_columns.php \
+  || echo "[render] Photo columns were not added."
+rm -f storage/framework/cache/comms-schema-*.flag || true
 
 # Other migrations stay off. Set MIGRATE_ON_DEPLOY=true only when approved.
 if [ "${MIGRATE_ON_DEPLOY:-false}" = "true" ]; then

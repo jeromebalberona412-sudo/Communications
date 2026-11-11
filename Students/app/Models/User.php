@@ -36,6 +36,8 @@ class User extends Authenticatable
         'is_active',
         'last_seen',
         'online_status',
+        'profile_image_url',
+        'profile_image_public_id',
     ];
 
     /**
