@@ -12,7 +12,9 @@ use RuntimeException;
  */
 class CloudinaryService
 {
-    public const PRESET = 'Unsigned';
+    public const PRESET_MESSAGES = 'message_images';
+
+    public const PRESET_GROUP = 'Groupchat_Images';
 
     public const FOLDER_MESSAGES = 'message_images';
 
@@ -91,28 +93,14 @@ class CloudinaryService
             throw new RuntimeException('Unable to read the selected image.');
         }
 
-        $preset = (string) (config('services.cloudinary.upload_preset') ?: self::PRESET);
+        $preset = $folder === self::FOLDER_GROUP
+            ? (string) (config('services.cloudinary.group_preset') ?: self::PRESET_GROUP)
+            : (string) (config('services.cloudinary.message_preset') ?: self::PRESET_MESSAGES);
         $filename = $file->getClientOriginalName() ?: 'image.jpg';
+        // The preset already sets the asset folder, overwrite, filename, and upload type.
         $response = $this->postUpload($cloud, $contents, $filename, [
             'upload_preset' => $preset,
-            'asset_folder' => $folder,
-            'folder' => $folder,
-            'overwrite' => 'false',
-            'use_filename' => 'false',
-            'unique_filename' => 'false',
-            'use_filename_as_display_name' => 'true',
-            'use_asset_folder_as_public_id_prefix' => 'false',
-            'type' => 'upload',
         ]);
-
-        // Unsigned presets reject flags that are already fixed on the preset.
-        if (! $response->successful()) {
-            $response = $this->postUpload($cloud, $contents, $filename, [
-                'upload_preset' => $preset,
-                'asset_folder' => $folder,
-                'folder' => $folder,
-            ]);
-        }
 
         if (! $response->successful()) {
             throw new RuntimeException('Cloudinary rejected the image upload.');

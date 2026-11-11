@@ -852,12 +852,11 @@ class DefaultGroupChatService
         }
 
         if ($this->isCapstoneGroup($conversation)) {
-            return $this->types->portalType() === ParticipantTypeResolver::TEACHERS
-                && $this->isGroupAdmin($conversation, $user);
+            return $this->types->portalType() === ParticipantTypeResolver::TEACHERS;
         }
 
         if (! $conversation->isDefaultGroup()) {
-            return $this->isGroupAdmin($conversation, $user);
+            return true;
         }
 
         return $this->hasFederationLeadershipPosition(

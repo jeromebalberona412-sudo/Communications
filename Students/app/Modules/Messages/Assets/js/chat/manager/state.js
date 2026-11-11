@@ -87,6 +87,7 @@ export function createChatContext() {
         threadMenu: document.getElementById('commsThreadMenu'),
         renameGroupBtn: document.getElementById('commsRenameGroupBtn'),
         changeGroupPhotoBtn: document.getElementById('commsChangeGroupPhotoBtn'),
+        groupPhotoBtn: document.getElementById('commsGroupPhotoBtn'),
         groupAvatarInput: document.getElementById('commsGroupAvatarInput'),
         viewMembersBtn: document.getElementById('commsViewMembersBtn'),
         groupInfoBtn: document.getElementById('commsGroupInfoBtn'),

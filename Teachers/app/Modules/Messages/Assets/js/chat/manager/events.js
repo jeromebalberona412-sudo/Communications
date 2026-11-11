@@ -560,13 +560,24 @@ if (els.renameGroupBtn) {
         if (els.renameInput) els.renameInput.focus();
     });
 }
-if (els.changeGroupPhotoBtn && els.groupAvatarInput) {
-    els.changeGroupPhotoBtn.addEventListener('click', function () {
-        api.closeGroupModals();
+if ((els.changeGroupPhotoBtn || els.groupPhotoBtn) && els.groupAvatarInput) {
+    function openGroupPhotoPicker() {
         if (!state.activeConversation || !state.activeConversation.can_change_avatar) return;
         els.groupAvatarInput.value = '';
         els.groupAvatarInput.click();
-    });
+    }
+    if (els.changeGroupPhotoBtn) {
+        els.changeGroupPhotoBtn.addEventListener('click', function () {
+            api.closeGroupModals();
+            openGroupPhotoPicker();
+        });
+    }
+    if (els.groupPhotoBtn) {
+        els.groupPhotoBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            openGroupPhotoPicker();
+        });
+    }
     els.groupAvatarInput.addEventListener('change', function () {
         var file = els.groupAvatarInput.files && els.groupAvatarInput.files[0];
         if (!file || !state.activeId || !routes.conversationAvatar) return;

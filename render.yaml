@@ -65,8 +65,10 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: CLOUDINARY_UPLOAD_PRESET
-        value: Unsigned
+      - key: CLOUDINARY_MESSAGE_PRESET
+        value: message_images
+      - key: CLOUDINARY_GROUP_PRESET
+        value: Groupchat_Images
       - key: MIGRATE_ON_DEPLOY
         value: "false"
 
@@ -130,7 +132,9 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: CLOUDINARY_UPLOAD_PRESET
-        value: Unsigned
+      - key: CLOUDINARY_MESSAGE_PRESET
+        value: message_images
+      - key: CLOUDINARY_GROUP_PRESET
+        value: Groupchat_Images
       - key: MIGRATE_ON_DEPLOY
         value: "false"

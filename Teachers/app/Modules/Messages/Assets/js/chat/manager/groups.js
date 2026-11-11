@@ -87,9 +87,9 @@ function syncGroupActions(conversation) {
     if (els.renameGroupBtn) {
         els.renameGroupBtn.hidden = !(isGroup && conversation && conversation.can_rename);
     }
-    if (els.changeGroupPhotoBtn) {
-        els.changeGroupPhotoBtn.hidden = !(isGroup && conversation && conversation.can_change_avatar);
-    }
+    var canPhoto = !!(isGroup && conversation && conversation.can_change_avatar);
+    if (els.changeGroupPhotoBtn) els.changeGroupPhotoBtn.hidden = !canPhoto;
+    if (els.groupPhotoBtn) els.groupPhotoBtn.hidden = !canPhoto;
 }
 
 function closeGroupModals() {

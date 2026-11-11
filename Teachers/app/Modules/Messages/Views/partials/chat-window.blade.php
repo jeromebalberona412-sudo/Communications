@@ -13,6 +13,9 @@
                         <img src="" alt="" class="comms-avatar" id="commsPeerAvatar" width="40" height="40">
                         <span class="comms-avatar-stack" id="commsPeerAvatarStack" hidden aria-hidden="true"></span>
                         <span class="comms-peer-status-dot" id="commsPeerStatusDot" data-status="offline" aria-hidden="true"></span>
+                        <button type="button" class="comms-group-photo-btn" id="commsGroupPhotoBtn" hidden title="Upload group photo" aria-label="Upload group photo">
+                            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="13" r="3.2"/></svg>
+                        </button>
                     </div>
                     <div class="comms-thread-peer">
                         <div class="comms-peer-name" id="commsPeerName"></div>
