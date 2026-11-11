@@ -100,7 +100,8 @@ import { attachWindows } from './floating/windows.js';
         open: openChatWindow,
         close: ctx.closeWindow,
         minimize: ctx.minimizeWindow,
-        restore: ctx.restoreWindow
+        restore: ctx.restoreWindow,
+        applyReaction: ctx.applyFloatingReaction
     };
 
     window.openChatWindow = openChatWindow;

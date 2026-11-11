@@ -607,8 +607,23 @@ if ((els.changeGroupPhotoBtn || els.groupPhotoBtn) && els.groupAvatarInput) {
             .then(function (data) {
                 if (data && data.conversation) {
                     state.activeConversation = data.conversation;
+                    if (!data.conversation.has_custom_avatar && data.conversation.avatar_url) {
+                        data.conversation.has_custom_avatar = true;
+                    }
                     api.updatePeerHeader(data.conversation);
+                    if (window.CommsChat && typeof window.CommsChat.applyGroupPhoto === 'function') {
+                        window.CommsChat.applyGroupPhoto(
+                            data.conversation.id,
+                            data.conversation.avatar_url,
+                            data.conversation.name || ''
+                        );
+                    }
                     api.loadConversations();
+                    if (els.groupModal && !els.groupModal.hidden
+                        && els.groupModalTitle && els.groupModalTitle.textContent === 'Group Info'
+                        && typeof api.paintGroupInfoModal === 'function') {
+                        api.paintGroupInfoModal('info', state.activeConversation);
+                    }
                 }
                 Comms.showToast('Group photo updated.', 'success');
             })

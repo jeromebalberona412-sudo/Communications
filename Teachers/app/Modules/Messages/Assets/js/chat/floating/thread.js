@@ -75,6 +75,73 @@ export function attachThread(ctx) {
         if (w) ctx.syncJumpButton(w);
     };
 
+    ctx.floatReactionEmojis = ctx.floatReactionEmojis || ['👍', '❤️', '😆', '😮', '😢', '🙏'];
+
+    ctx.reactionChipsHtml = function (message) {
+        var items = Array.isArray(message && message.reactions) ? message.reactions : [];
+        items = items.filter(function (item) { return Number(item && item.count || 0) > 0; });
+        if (!items.length || !message || message.id == null) return '';
+        return '<div class="comms-reaction-chips" role="group" aria-label="Reactions">' +
+            items.map(function (item) {
+                var count = Number(item.count || 0);
+                var mine = Array.isArray(item.users)
+                    ? item.users.some(function (user) { return Number(user.id) === Number(ctx.currentUserId) && user.mine; })
+                    : !!item.mine;
+                return '<button type="button" class="comms-reaction-summary' + (mine ? ' is-mine' : '') + '"' +
+                    ' data-react-people="' + Number(message.id) + '"' +
+                    ' data-react-people-emoji="' + ctx.escapeHtml(item.emoji || '') + '"' +
+                    ' aria-label="' + ctx.escapeHtml(item.emoji || '') + ' ' + count + ' reactions">' +
+                    '<span class="comms-reaction-stack-btn" aria-hidden="true">' + ctx.escapeHtml(item.emoji || '') + '</span>' +
+                    '<span class="comms-reaction-count' + (count <= 1 ? ' is-single' : '') + '" aria-hidden="true">' + count + '</span>' +
+                    '</button>';
+            }).join('') +
+            '</div>';
+    };
+
+    ctx.floatReactButtonHtml = function (message) {
+        if (!message || message.id == null) return '';
+        var id = String(message.id);
+        if (id.indexOf('temp') === 0 || id.indexOf('local-') === 0) return '';
+        if (message.message_type === 'deleted' || message.deleted_for_all) return '';
+        return '<button type="button" class="comms-react-btn" data-float-react="' + ctx.escapeHtml(id) + '" aria-label="Add reaction" title="React">' +
+            '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.5 2 3.5 2 3.5-2 3.5-2"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg>' +
+            '</button>';
+    };
+
+    ctx.sendFloatingReaction = function (conversationId, messageId, emoji) {
+        var route = ctx.routes && ctx.routes.react;
+        if (!route || !messageId || !emoji || !window.Comms || typeof window.Comms.api !== 'function') return;
+        window.Comms.api(window.Comms.route(route, messageId), {
+            method: 'POST',
+            body: JSON.stringify({ emoji: emoji }),
+            dedupe: false
+        }).then(function (data) {
+            ctx.applyFloatingReaction(messageId, (data && data.reactions) || []);
+        }).catch(function (err) {
+            if (window.Comms.showToast) {
+                window.Comms.showToast((err && err.message) || 'Unable to react.', 'error');
+            }
+        });
+    };
+
+    ctx.applyFloatingReaction = function (messageId, reactions) {
+        var id = String(messageId);
+        Object.keys(ctx.threadMessages || {}).forEach(function (cid) {
+            (ctx.threadMessages[cid] || []).forEach(function (row) {
+                if (String(row.id) === id) row.reactions = reactions;
+            });
+        });
+        Object.keys(ctx.openWindows || {}).forEach(function (cid) {
+            var w = ctx.openWindows[cid];
+            var rowEl = w && w.el ? w.el.querySelector('[data-message-id="' + id + '"]') : null;
+            if (!rowEl) return;
+            var old = rowEl.querySelector('.comms-reaction-chips');
+            if (old) old.remove();
+            var html = ctx.reactionChipsHtml({ id: messageId, reactions: reactions });
+            if (html) rowEl.insertAdjacentHTML('beforeend', html);
+        });
+    };
+
     ctx.messageActionsHtml = function (message, mine) {
         if (!message || message.id == null) return '';
         var id = String(message.id);
@@ -247,8 +314,11 @@ export function attachThread(ctx) {
                 (body ? '<div class="floating-chat-msg-body">' + body + '</div>' : '') +
                 '<div class="floating-chat-msg-time">' + time + '</div>' +
                 '</div>' +
+                ctx.floatReactButtonHtml(m) +
                 ctx.messageActionsHtml(m, mine) +
-                '</div></div>';
+                '</div>' +
+                ctx.reactionChipsHtml(m) +
+                '</div>';
         }).join('');
         bodyEl.innerHTML = html;
         ctx.stickFloatingBody(bodyEl);
@@ -284,8 +354,10 @@ export function attachThread(ctx) {
                 (body ? '<div class="floating-chat-msg-body">' + body + '</div>' : '') +
                 '<div class="floating-chat-msg-time">' + time + '</div>' +
                 '</div>' +
+                ctx.floatReactButtonHtml(message) +
                 ctx.messageActionsHtml(message, mine) +
-                '</div>';
+                '</div>' +
+                ctx.reactionChipsHtml(message);
             bodyEl.appendChild(msgEl2);
         }
 
@@ -363,6 +435,9 @@ export function attachThread(ctx) {
                     reactionEmojis: (data && data.reaction_emojis) || [],
                     ts: Date.now()
                 });
+            }
+            if (data && Array.isArray(data.reaction_emojis) && data.reaction_emojis.length) {
+                ctx.floatReactionEmojis = data.reaction_emojis;
             }
             ctx.renderMessages(bodyEl, merged);
         }).catch(function () {

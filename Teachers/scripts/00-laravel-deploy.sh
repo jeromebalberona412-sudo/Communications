@@ -18,6 +18,8 @@ php artisan migrate --force --path=database/migrations/2026_11_11_080100_create_
   || echo "[render] Call history migration did not apply. Existing call rows still load."
 php artisan migrate --force --path=database/migrations/2026_11_11_083000_add_cloudinary_photo_columns.php \
   || echo "[render] Photo columns were not added."
+php artisan migrate --force --path=database/migrations/2026_11_11_091700_add_message_attachment_public_id.php \
+  || echo "[render] Attachment public_id column was not added."
 rm -f storage/framework/cache/comms-schema-*.flag || true
 
 # Other migrations stay off. Set MIGRATE_ON_DEPLOY=true only when approved.

@@ -205,7 +205,8 @@ export function createGroupCallLifecycle(ctx, deps) {
             caller_id: payload.caller_id,
             caller_type: payload.caller_type,
             is_group_call: true,
-            call_max_participants: payload.call_max_participants || 8,
+            call_max_participants: payload.call_max_participants || 0,
+            call_unlimited: !!payload.call_unlimited,
             peer: { name: payload.peer_name || 'Group call', is_group: true },
             invitees: payload.invitees || []
         };

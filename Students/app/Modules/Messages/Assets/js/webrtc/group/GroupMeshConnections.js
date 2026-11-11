@@ -125,8 +125,9 @@ export function createGroupMeshConnections(ctx, deps) {
         var self = me();
         if (Number(remoteId) === self.id && samePortalType(self.type, remoteType)) return;
         var key = participantKey(remoteId, remoteType);
-        var max = Number((ctx.meshCall && ctx.meshCall.call_max_participants) || 8);
-        if (Object.keys(ctx.meshPeers).length >= Math.max(1, max - 1) && !ctx.meshPeers[key]) {
+        var unlimited = !!(ctx.meshCall && ctx.meshCall.call_unlimited);
+        var max = Number((ctx.meshCall && ctx.meshCall.call_max_participants) || 0);
+        if (!unlimited && max > 1 && Object.keys(ctx.meshPeers).length >= Math.max(1, max - 1) && !ctx.meshPeers[key]) {
             deps.toast('Call participant limit reached (' + max + ').', 'error');
             return;
         }

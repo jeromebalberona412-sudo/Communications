@@ -95,9 +95,35 @@ export function flushPendingSignals() {
     });
 }
 
+function applyGroupPhotoUpdate(payload) {
+    var id = payload && payload.conversation_id;
+    var url = String((payload && payload.avatar_url) || '').trim();
+    if (window.CommsChat && typeof window.CommsChat.applyGroupPhoto === 'function') {
+        window.CommsChat.applyGroupPhoto(id, url, payload.name || '');
+    }
+    if (window.CommsHeaderChat && typeof window.CommsHeaderChat.reload === 'function') {
+        window.CommsHeaderChat.reload();
+    }
+    if (!url || id == null) return;
+    var selectors = [
+        '#floatingChat' + id + ' .floating-chat-avatar',
+        '#floatingBubble' + id + ' img'
+    ];
+    selectors.forEach(function (selector) {
+        document.querySelectorAll(selector).forEach(function (img) {
+            img.src = url;
+        });
+    });
+}
+
 export function handleIncomingSignal(raw) {
     var payload = unwrapBroadcast(raw);
-    if (!payload || isOwnSignal(payload)) return;
+    if (!payload) return;
+    if (String(payload.type || '') === 'group-updated') {
+        applyGroupPhotoUpdate(payload);
+        return;
+    }
+    if (isOwnSignal(payload)) return;
     if (isDuplicateSignal(payload)) return;
     deliverSignal(payload);
 }

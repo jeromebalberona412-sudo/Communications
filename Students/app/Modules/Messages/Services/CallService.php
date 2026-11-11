@@ -228,11 +228,17 @@ class CallService
                 ->values()
                 ->all();
         }
+        $callerProfile = $this->callerProfile($caller);
+        if ($isGroupCall) {
+            $room = $this->conversations->groupCallRoom($conversation);
+            $callerProfile['call_max_participants'] = $room['call_max_participants'];
+            $callerProfile['call_unlimited'] = $room['call_unlimited'];
+        }
         $this->realtimeNotifier->notifyIncoming(
             $call,
             $peerName !== '' ? $peerName : 'Incoming caller',
             $extraReceivers,
-            $this->callerProfile($caller)
+            $callerProfile
         );
         $this->callHistory->sync($call->fresh() ?? $call);
 
@@ -670,21 +676,36 @@ class CallService
             $types = [$userType];
         }
 
-        return Call::query()
-            ->where(function ($q) use ($userId, $types) {
+        $conversationIds = ConversationParticipant::query()
+            ->where('user_id', $userId)
+            ->whereIn('user_type', $types)
+            ->pluck('conversation_id')
+            ->unique()
+            ->values()
+            ->all();
+
+        $query = Call::query()
+            ->where(function ($q) use ($userId, $types, $conversationIds) {
                 $q->where(function ($inner) use ($userId, $types) {
                     $inner->where('caller_id', $userId)->whereIn('caller_type', $types);
                 })->orWhere(function ($inner) use ($userId, $types) {
                     $inner->where('receiver_id', $userId)->whereIn('receiver_type', $types);
-                })->orWhere(function ($inner) use ($userId) {
-                    $inner->whereColumn('caller_id', 'receiver_id')
-                        ->whereIn('conversation_id', function ($sub) use ($userId) {
-                            $sub->select('conversation_id')
-                                ->from('conversation_participants')
-                                ->where('user_id', $userId);
-                        });
                 });
-            })
+                if ($conversationIds !== []) {
+                    $q->orWhereIn('conversation_id', $conversationIds);
+                }
+            });
+
+        if ($userType === \App\Modules\Messages\Services\ParticipantTypeResolver::STUDENTS) {
+            $studentTypes = $this->types->equivalentTypes(\App\Modules\Messages\Services\ParticipantTypeResolver::STUDENTS);
+            $query->where(function ($q) use ($studentTypes) {
+                $q->whereColumn('caller_id', 'receiver_id')
+                    ->orWhereNotIn('caller_type', $studentTypes)
+                    ->orWhereNotIn('receiver_type', $studentTypes);
+            });
+        }
+
+        return $query
             ->with(['caller', 'receiver', 'conversation'])
             ->orderByDesc('id')
             ->limit($limit)
@@ -857,7 +878,12 @@ class CallService
             'receiver_id' => (int) $call->receiver_id,
             'receiver_type' => $call->receiver_type,
             'is_group_call' => $isGroupCall,
-            'call_max_participants' => (int) config('communications.call_max_participants', 8),
+            'call_max_participants' => $isGroupCall && $conversation
+                ? $this->conversations->groupCallRoom($conversation)['call_max_participants']
+                : 2,
+            'call_unlimited' => $isGroupCall && $conversation
+                ? $this->conversations->groupCallRoom($conversation)['call_unlimited']
+                : false,
             'invitees' => $invitees,
             'started_at' => optional($call->started_at)?->toIso8601String(),
             'answered_at' => optional($call->answered_at)?->toIso8601String(),

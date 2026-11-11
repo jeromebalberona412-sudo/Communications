@@ -307,6 +307,7 @@ class ConversationService
                 $count = (int) $payload['member_count'];
                 $avatar = $this->defaultGroups->groupAvatarUrl($conversation);
                 $payload['avatar_url'] = $avatar;
+                $payload['has_custom_avatar'] = trim((string) ($conversation->avatar_url ?? '')) !== '';
                 $payload['can_rename'] = $this->defaultGroups->canRename($conversation, $user);
                 $payload['can_change_avatar'] = $this->defaultGroups->canChangeAvatar($conversation, $user);
                 $payload['member_previews'] = $conversation->participants
@@ -433,6 +434,7 @@ class ConversationService
                 'can_change_avatar' => $this->defaultGroups->canChangeAvatar($conversation, $user),
                 'call_max_participants' => (int) config('communications.call_max_participants', 8),
                 'avatar_url' => $avatar,
+                'has_custom_avatar' => trim((string) ($conversation->avatar_url ?? '')) !== '',
                 'created_at' => optional($conversation->created_at)?->toIso8601String(),
                 'owner' => $owner,
                 'member_previews' => $conversation->participants

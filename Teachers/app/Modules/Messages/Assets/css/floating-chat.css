@@ -436,6 +436,14 @@
     padding: 0 0.25rem;
 }
 
+.floating-chat-msg .comms-reaction-picker {
+    z-index: 40;
+}
+
+.floating-chat-msg:has(.comms-reaction-chips) {
+    margin-bottom: 8px;
+}
+
 /* Typing Indicator */
 .floating-chat-typing {
     padding: 0 0.75rem 0.5rem;

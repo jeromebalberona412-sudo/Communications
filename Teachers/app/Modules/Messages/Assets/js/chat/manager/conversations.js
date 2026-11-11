@@ -110,8 +110,15 @@ function renderConversations(filter) {
             ? (c.name || peer.name || 'Group chat')
             : (peer.name || 'User');
         var displayName = fullName.length > 22 ? fullName.slice(0, 19).replace(/\s+$/, '') + '...' : fullName;
+        var customGroupPhoto = isGroup && (
+            c.has_custom_avatar
+            || String(c.avatar_url || '').indexOf('res.cloudinary.com') !== -1
+            || String(c.avatar_url || '').indexOf('/storage/') !== -1
+        );
         var avatar = isGroup
-            ? (peer.profile_image_url || c.avatar_url || Comms.defaultAvatar(fullName))
+            ? (customGroupPhoto
+                ? (c.avatar_url || peer.profile_image_url || Comms.defaultAvatar(fullName))
+                : (peer.profile_image_url || c.avatar_url || Comms.defaultAvatar(fullName)))
             : api.resolvePeerAvatar(peer);
         var liveMap = window.__COMMS_PRESENCE_ONLINE_IDS__ || {};
         var peerPortal = String(peer.user_type || peer.type || peer.portal || '').trim().toLowerCase();
@@ -132,7 +139,7 @@ function renderConversations(filter) {
                 ? ('<div class="comms-conv-limit">' + count + ' / ' + max + ' members</div>')
                 : (count > 0 ? ('<div class="comms-conv-limit">' + count + ' members</div>') : '');
             var previews = Array.isArray(c.member_previews) ? c.member_previews.slice(0, 3) : [];
-            if (previews.length >= 2) {
+            if (!customGroupPhoto && previews.length >= 2) {
                 avatarHtml = '<span class="comms-avatar-stack" aria-hidden="true">' +
                     previews.map(function (p, idx) {
                         var src = (p && p.profile_image_url) || Comms.defaultAvatar((p && p.name) || 'U');

@@ -30,6 +30,7 @@
             'messages' => url('/api/communications/conversations/__ID__/messages'),
             'deleteMessage' => url('/api/communications/messages/__ID__'),
             'updateMessage' => url('/api/communications/messages/__ID__'),
+            'react' => url('/api/communications/messages/__ID__/reactions'),
             'read' => url('/api/communications/conversations/__ID__/read'),
             'unreadCount' => route('api.communications.unread-count'),
             'startCall' => url('/api/communications/conversations/__ID__/calls'),

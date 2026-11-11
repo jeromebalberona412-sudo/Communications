@@ -321,6 +321,38 @@ export function attachWindows(ctx) {
                 ctx.loadMessages(cid);
                 return;
             }
+            var reactBtn = e.target.closest('[data-float-react]');
+            if (reactBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                var reactRow = reactBtn.closest('[data-message-id]');
+                if (!reactRow) return;
+                var openPicker = reactRow.querySelector('.comms-reaction-picker');
+                w.el.querySelectorAll('.comms-reaction-picker').forEach(function (picker) {
+                    if (picker !== openPicker) picker.remove();
+                });
+                if (openPicker) {
+                    openPicker.remove();
+                    return;
+                }
+                var picker = document.createElement('div');
+                picker.className = 'comms-reaction-picker';
+                picker.setAttribute('role', 'listbox');
+                picker.innerHTML = (ctx.floatReactionEmojis || []).map(function (emoji) {
+                    return '<button type="button" class="comms-reaction-pick" data-float-emoji="' + ctx.escapeHtml(emoji) + '" data-float-react-id="' + ctx.escapeHtml(reactRow.getAttribute('data-message-id') || '') + '">' + emoji + '</button>';
+                }).join('');
+                reactRow.appendChild(picker);
+                return;
+            }
+            var emojiBtn = e.target.closest('[data-float-emoji]');
+            if (emojiBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                ctx.sendFloatingReaction(cid, emojiBtn.getAttribute('data-float-react-id'), emojiBtn.getAttribute('data-float-emoji'));
+                var pickerEl = emojiBtn.closest('.comms-reaction-picker');
+                if (pickerEl) pickerEl.remove();
+                return;
+            }
             var del = e.target.closest('[data-float-delete]');
             if (del) {
                 e.preventDefault();

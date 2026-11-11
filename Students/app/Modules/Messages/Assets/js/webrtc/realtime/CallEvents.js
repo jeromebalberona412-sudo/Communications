@@ -408,6 +408,7 @@ function handleCallRow(payload) {
             peer_name: (row.peer && row.peer.name) || 'Group call',
             invitees: row.invitees || [],
             call_max_participants: row.call_max_participants,
+            call_unlimited: !!row.call_unlimited,
             is_group_call: true
         });
         return;
@@ -554,6 +555,7 @@ function syncIncomingFromServer(conversationId) {
                             peer_name: (c.peer && c.peer.name) || 'Group call',
                             invitees: c.invitees || [],
                             call_max_participants: c.call_max_participants,
+                            call_unlimited: !!c.call_unlimited,
                             is_group_call: true
                         });
                         return;

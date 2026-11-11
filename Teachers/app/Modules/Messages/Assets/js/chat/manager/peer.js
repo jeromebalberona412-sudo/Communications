@@ -30,10 +30,23 @@ function formatPresenceLabel(peer) {
     return 'Offline';
 }
 
+function groupHasCustomPhoto(conversation) {
+    if (!conversation) return false;
+    if (conversation.has_custom_avatar) return true;
+    var url = String(conversation.avatar_url || '');
+    return url.indexOf('res.cloudinary.com') !== -1 || url.indexOf('/storage/') !== -1;
+}
+
 function renderPeerAvatarStack(conversation, fallbackName) {
     var stack = els.peerAvatarStack;
     var single = els.peerAvatar;
     if (!stack) {
+        if (single) single.hidden = false;
+        return;
+    }
+    if (groupHasCustomPhoto(conversation)) {
+        stack.hidden = true;
+        stack.innerHTML = '';
         if (single) single.hidden = false;
         return;
     }

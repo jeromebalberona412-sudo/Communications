@@ -126,7 +126,11 @@ function renderMembersListHtml(members, mode) {
                 (position ? Comms.escapeHtml(String(position)) : Comms.escapeHtml(role)) +
                 (position && role === 'Admin' ? ' · Admin' : '') +
                 '</div></div>';
-            if (!isCurrentUser) {
+            var memberType = String(m.user_type || m.type || '').toLowerCase();
+            var viewerType = String(state.portalUserType || '').toLowerCase();
+            var studentFamily = { students: 1, student: 1, kabataan: 1, user: 1 };
+            var hideDirect = studentFamily[viewerType] && studentFamily[memberType];
+            if (!isCurrentUser && !hideDirect) {
                 html += '<div class="comms-group-member-actions">' +
                     '<button type="button" class="comms-btn-secondary comms-member-message-btn" data-user-id="' + Number(m.id) + '" data-user-name="' + Comms.escapeHtml(mName) + '" data-user-type="' + Comms.escapeHtml(m.type || m.user_type || state.portalUserType) + '">Message</button>' +
                     '<button type="button" class="comms-btn-secondary comms-member-call-btn" data-user-id="' + Number(m.id) + '" data-user-name="' + Comms.escapeHtml(mName) + '">Call</button>' +
@@ -191,7 +195,9 @@ function paintGroupInfoModal(mode, conv) {
             '<div class="comms-group-info-name">' + Comms.escapeHtml(name) + '</div>' +
             '<div class="comms-group-info-meta">Type: ' + Comms.escapeHtml(typeLabel) + '</div>' +
             '<div class="comms-group-info-meta">Members: ' + count + (max > 0 ? (' / ' + max) : '') + '</div>' +
-            '<div class="comms-group-info-meta">Call limit: ' + Number(conv.call_max_participants || 8) + ' simultaneous participants</div>' +
+            '<div class="comms-group-info-meta">' + (conv.call_unlimited
+                ? 'Everyone in this group can join the same call'
+                : ('Up to ' + Number(conv.call_max_participants || conv.member_count || 2) + ' people in one call')) + '</div>' +
             '</div></div></div>';
         html += '<div class="comms-group-info-section-title">Members</div>';
         html += renderMembersListHtml(members, 'info');

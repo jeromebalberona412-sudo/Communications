@@ -224,9 +224,14 @@
     display: flex;
     flex-direction: column;
     gap: 0.125rem;
-    max-width: 75%;
+    max-width: 85%;
     position: relative;
+    overflow: visible;
     animation: fadeInUp 0.2s ease;
+}
+
+.floating-chat-body .comms-msg-menu {
+    z-index: 40;
 }
 
 .floating-chat-msg-row {
@@ -434,6 +439,14 @@
     font-size: 0.6875rem;
     color: #65676b;
     padding: 0 0.25rem;
+}
+
+.floating-chat-msg .comms-reaction-picker {
+    z-index: 40;
+}
+
+.floating-chat-msg:has(.comms-reaction-chips) {
+    margin-bottom: 8px;
 }
 
 /* Typing Indicator */

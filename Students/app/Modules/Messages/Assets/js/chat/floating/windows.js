@@ -14,6 +14,11 @@ export function attachWindows(ctx) {
         var statusText = isGroup
             ? (memberCount > 0 ? memberCount + ' members' : 'Group')
             : (online ? 'Online' : '');
+        var studentFamily = { students: 1, student: 1, kabataan: 1, user: 1 };
+        var boot = document.getElementById('commsRealtimeBoot') || document.getElementById('commsApp');
+        var myType = boot ? String(boot.dataset.portalUserType || '').toLowerCase() : '';
+        var peerType = String(opts.peerType || '').toLowerCase();
+        var hideDirectCall = !isGroup && studentFamily[myType] && studentFamily[peerType];
 
         var statusInner = isGroup
             ? ctx.escapeHtml(statusText)
@@ -32,12 +37,13 @@ export function attachWindows(ctx) {
             (statusInner ? '<div class="floating-chat-peer-status">' + statusInner + '</div>' : '') +
             '</div></div>' +
             '<div class="floating-chat-actions">' +
+            (hideDirectCall ? '' :
             '<button type="button" class="floating-chat-btn" data-action="voice" title="Voice call" aria-label="Voice call">' +
             '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6A19.79 19.79 0 0 1 2.12 4.18 2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.81.36 1.6.68 2.35a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.75.32 1.54.55 2.35.68A2 2 0 0 1 22 16.92z"/></svg>' +
             '</button>' +
             '<button type="button" class="floating-chat-btn" data-action="video" title="Video call" aria-label="Video call">' +
             '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>' +
-            '</button>' +
+            '</button>') +
             '<button type="button" class="floating-chat-btn" data-action="close" title="Close" aria-label="Close">' +
             '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg>' +
             '</button>' +
@@ -321,6 +327,38 @@ export function attachWindows(ctx) {
                 ctx.loadMessages(cid);
                 return;
             }
+            var reactBtn = e.target.closest('[data-float-react]');
+            if (reactBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                var reactRow = reactBtn.closest('[data-message-id]');
+                if (!reactRow) return;
+                var openPicker = reactRow.querySelector('.comms-reaction-picker');
+                w.el.querySelectorAll('.comms-reaction-picker').forEach(function (picker) {
+                    if (picker !== openPicker) picker.remove();
+                });
+                if (openPicker) {
+                    openPicker.remove();
+                    return;
+                }
+                var picker = document.createElement('div');
+                picker.className = 'comms-reaction-picker';
+                picker.setAttribute('role', 'listbox');
+                picker.innerHTML = (ctx.floatReactionEmojis || []).map(function (emoji) {
+                    return '<button type="button" class="comms-reaction-pick" data-float-emoji="' + ctx.escapeHtml(emoji) + '" data-float-react-id="' + ctx.escapeHtml(reactRow.getAttribute('data-message-id') || '') + '">' + emoji + '</button>';
+                }).join('');
+                reactRow.appendChild(picker);
+                return;
+            }
+            var emojiBtn = e.target.closest('[data-float-emoji]');
+            if (emojiBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                ctx.sendFloatingReaction(cid, emojiBtn.getAttribute('data-float-react-id'), emojiBtn.getAttribute('data-float-emoji'));
+                var pickerEl = emojiBtn.closest('.comms-reaction-picker');
+                if (pickerEl) pickerEl.remove();
+                return;
+            }
             var del = e.target.closest('[data-float-delete]');
             if (del) {
                 e.preventDefault();
@@ -467,10 +505,11 @@ export function attachWindows(ctx) {
     ctx.openChatWindow = function (conversationId, opts) {
         opts = opts || {};
 
-        if (ctx.isOnMessagesPage()) {
-            var navUrl = ctx.routes.messagesPage || '/messages';
-            navUrl += (navUrl.indexOf('?') === -1 ? '?' : '&') + 'conversation=' + conversationId;
-            window.location.href = navUrl;
+        if (ctx.isOnMessagesPage() && window.CommsChat && typeof window.CommsChat.openConversation === 'function') {
+            window.CommsChat.openConversation(conversationId);
+            if (window.CommsHeaderChat && typeof window.CommsHeaderChat.close === 'function') {
+                window.CommsHeaderChat.close();
+            }
             return;
         }
 

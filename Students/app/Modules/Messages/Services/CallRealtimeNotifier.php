@@ -32,6 +32,10 @@ class CallRealtimeNotifier
         $isGroup = (int) $call->caller_id === (int) $call->receiver_id
             && (string) $call->caller_type === (string) $call->receiver_type;
 
+        $callMax = isset($callerProfile['call_max_participants']) ? (int) $callerProfile['call_max_participants'] : null;
+        $callUnlimited = (bool) ($callerProfile['call_unlimited'] ?? false);
+        unset($callerProfile['call_max_participants'], $callerProfile['call_unlimited']);
+
         $callerProfile = array_merge([
             'name' => $peerName,
             'profile_image_url' => '',
@@ -49,6 +53,8 @@ class CallRealtimeNotifier
             'receiver_id' => (int) $call->receiver_id,
             'receiver_type' => (string) $call->receiver_type,
             'is_group_call' => $isGroup,
+            'call_max_participants' => $isGroup ? ($callMax ?: null) : 2,
+            'call_unlimited' => $isGroup && $callUnlimited,
             'peer_name' => $peerName,
             'from_name' => $peerName,
             'from_user_id' => (int) $call->caller_id,

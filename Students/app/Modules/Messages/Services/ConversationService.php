@@ -72,7 +72,9 @@ class ConversationService
         }
 
         if (! $this->canMessage($authUser, $other)) {
-            abort(403, 'You are not allowed to message this account.');
+            abort(403, $this->studentsCannotReach($authUser, $other, $other->role)
+                ? 'Students cannot message or call other students.'
+                : 'You are not allowed to message this account.');
         }
 
         $otherType = $this->types->fromUser($other);
@@ -307,6 +309,7 @@ class ConversationService
                 $count = (int) $payload['member_count'];
                 $avatar = $this->defaultGroups->groupAvatarUrl($conversation);
                 $payload['avatar_url'] = $avatar;
+                $payload['has_custom_avatar'] = trim((string) ($conversation->avatar_url ?? '')) !== '';
                 $payload['can_rename'] = $this->defaultGroups->canRename($conversation, $user);
                 $payload['can_change_avatar'] = $this->defaultGroups->canChangeAvatar($conversation, $user);
                 $payload['member_previews'] = $conversation->participants
@@ -354,7 +357,13 @@ class ConversationService
                 return null;
             }
 
+            if ($this->studentsCannotReach($user, $other?->user, $other?->user_type)) {
+                return null;
+            }
+
             $payload['other_user'] = $this->serializeUser($other?->user, $other?->user_type);
+            $payload['can_message'] = $other?->user ? $this->canMessage($user, $other->user) : false;
+            $payload['can_call'] = $payload['can_message'];
 
             return $payload;
         })->filter()->values();
@@ -431,8 +440,10 @@ class ConversationService
                 'is_capstone_group' => $this->defaultGroups->isCapstoneGroup($conversation),
                 'can_rename' => $this->defaultGroups->canRename($conversation, $user),
                 'can_change_avatar' => $this->defaultGroups->canChangeAvatar($conversation, $user),
-                'call_max_participants' => (int) config('communications.call_max_participants', 8),
+                'call_max_participants' => ($groupCallRoom = $this->groupCallRoom($conversation))['call_max_participants'],
+                'call_unlimited' => $groupCallRoom['call_unlimited'],
                 'avatar_url' => $avatar,
+                'has_custom_avatar' => trim((string) ($conversation->avatar_url ?? '')) !== '',
                 'created_at' => optional($conversation->created_at)?->toIso8601String(),
                 'owner' => $owner,
                 'member_previews' => $conversation->participants
@@ -476,7 +487,10 @@ class ConversationService
             'is_default_group' => false,
             'can_rename' => false,
             'can_change_avatar' => false,
-            'call_max_participants' => (int) config('communications.call_max_participants', 8),
+            'call_max_participants' => 2,
+            'call_unlimited' => false,
+            'can_message' => $other?->user ? $this->canMessage($user, $other->user) : false,
+            'can_call' => $other?->user ? $this->canMessage($user, $other->user) : false,
             'other_user' => $this->serializeUser($other?->user, $other?->user_type),
             'members' => [],
         ];
@@ -725,6 +739,10 @@ class ConversationService
             abort(403, 'Conversation peer not found.');
         }
 
+        if ($this->studentsCannotReach($user, $peer, $peer->role)) {
+            abort(403, 'Students cannot message or call other students.');
+        }
+
         if ($this->canMessage($user, $peer) || $this->rolesAllowCall($user, $peer)) {
             return;
         }
@@ -759,6 +777,51 @@ class ConversationService
     public function rolesAllowCall(Authenticatable $from, User $to): bool
     {
         return $this->canMessage($from, $to);
+    }
+
+    /**
+     * Students may talk with teachers. They cannot open a direct message or
+     * a direct call with another student. Group chats stay available.
+     */
+    public function studentsCannotReach(Authenticatable $from, ?User $to, ?string $fallbackType = null): bool
+    {
+        if ($this->types->portalType() !== ParticipantTypeResolver::STUDENTS) {
+            return false;
+        }
+
+        $peerType = $to
+            ? $this->types->canonicalType((string) ($to->role ?? ''))
+            : $this->types->canonicalType($fallbackType);
+
+        return $peerType === ParticipantTypeResolver::STUDENTS;
+    }
+
+    /**
+     * Groups with no member cap let every member join one call together.
+     * A capped group can hold that many people in the same call.
+     *
+     * @return array{call_max_participants: int, call_unlimited: bool}
+     */
+    public function groupCallRoom(Conversation $conversation): array
+    {
+        $maxMembers = (int) ($conversation->max_members ?: 0);
+        $count = $conversation->relationLoaded('participants')
+            ? $conversation->participants->count()
+            : \App\Modules\Messages\Models\ConversationParticipant::query()
+                ->where('conversation_id', $conversation->id)
+                ->count();
+
+        if ($maxMembers <= 0) {
+            return [
+                'call_max_participants' => max($count, 2),
+                'call_unlimited' => true,
+            ];
+        }
+
+        return [
+            'call_max_participants' => max($maxMembers, $count, 2),
+            'call_unlimited' => false,
+        ];
     }
 
     /**

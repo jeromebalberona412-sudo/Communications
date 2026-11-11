@@ -64,6 +64,18 @@
         list.innerHTML = calls.map(rowHtml).join('');
     }
 
+    const cacheKey = 'comms.call-history';
+    let calls = [];
+    try {
+        const cached = JSON.parse(sessionStorage.getItem(cacheKey) || '[]');
+        if (Array.isArray(cached)) calls = cached;
+    } catch (e) { /* ignore */ }
+    paint(calls);
+
+    function remember() {
+        try { sessionStorage.setItem(cacheKey, JSON.stringify(calls)); } catch (e) { /* ignore */ }
+    }
+
     window.CommsCallHistory = {
         upsert(call) {
             if (!call || call.id == null) return;
@@ -71,13 +83,23 @@
             if (existing === -1) calls.unshift(call);
             else calls[existing] = Object.assign({}, calls[existing], call);
             calls.sort((a, b) => Number(b.id) - Number(a.id));
+            remember();
             paint(calls);
         }
     };
 
-    const response = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' });
-    const data = await response.json();
-    let calls = Array.isArray(data.calls) ? data.calls : [];
-    paint(calls);
+    fetch(url, { headers: { Accept: 'application/json' }, credentials: 'same-origin' })
+        .then((response) => response.json())
+        .then((data) => {
+            calls = Array.isArray(data.calls) ? data.calls : [];
+            remember();
+            paint(calls);
+        })
+        .catch(() => {
+            if (!calls.length) {
+                empty.hidden = false;
+                empty.textContent = 'Call history is unavailable right now.';
+            }
+        });
 </script>
 @endsection

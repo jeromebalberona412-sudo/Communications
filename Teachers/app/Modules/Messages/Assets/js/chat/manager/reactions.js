@@ -25,7 +25,7 @@ function renderReactionChips(reactions, messageId) {
                 ' data-react-people-emoji="' + Comms.escapeHtml(r.emoji) + '"' +
                 ' aria-haspopup="dialog" aria-label="' + Comms.escapeHtml(r.emoji) + ' ' + Number(r.count || 0) + ' reactions">' +
                 '<span class="comms-reaction-stack-btn" aria-hidden="true">' + Comms.escapeHtml(r.emoji) + '</span>' +
-                '<span class="comms-reaction-count" aria-hidden="true">' + Number(r.count || 0) + '</span>' +
+                '<span class="comms-reaction-count' + (Number(r.count || 0) <= 1 ? ' is-single' : '') + '" aria-hidden="true">' + Number(r.count || 0) + '</span>' +
                 '</button>';
         }).join('') +
         '</div>';

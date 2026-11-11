@@ -110,8 +110,12 @@ function renderConversations(filter) {
             ? (c.name || peer.name || 'Group chat')
             : (peer.name || 'User');
         var displayName = fullName.length > 22 ? fullName.slice(0, 19).replace(/\s+$/, '') + '...' : fullName;
+        var peerType = String(peer.user_type || peer.type || '').toLowerCase();
+        var myType = String((root && root.dataset.portalUserType) || '').toLowerCase();
+        var studentFamily = { students: 1, student: 1, kabataan: 1, user: 1 };
+        if (!isGroup && studentFamily[myType] && studentFamily[peerType]) return '';
         var avatar = isGroup
-            ? (peer.profile_image_url || c.avatar_url || Comms.defaultAvatar(fullName))
+            ? (c.avatar_url || peer.profile_image_url || Comms.defaultAvatar(fullName))
             : api.resolvePeerAvatar(peer);
         var liveMap = window.__COMMS_PRESENCE_ONLINE_IDS__ || {};
         var peerPortal = String(peer.user_type || peer.type || peer.portal || '').trim().toLowerCase();
@@ -131,21 +135,6 @@ function renderConversations(filter) {
             memberHint = max > 0
                 ? ('<div class="comms-conv-limit">' + count + ' / ' + max + ' members</div>')
                 : (count > 0 ? ('<div class="comms-conv-limit">' + count + ' members</div>') : '');
-            var previews = Array.isArray(c.member_previews) ? c.member_previews.slice(0, 3) : [];
-            if (previews.length >= 2) {
-                avatarHtml = '<span class="comms-avatar-stack" aria-hidden="true">' +
-                    previews.map(function (p, idx) {
-                        var src = (p && p.profile_image_url) || Comms.defaultAvatar((p && p.name) || 'U');
-                        var nm = (p && p.name) || 'U';
-                        return '<img class="comms-avatar-stack-item" style="z-index:' + (10 - idx) + '" src="' +
-                            Comms.escapeHtml(src) + '" alt="" title="' + Comms.escapeHtml(nm) + '"' +
-                            ' onerror="this.onerror=null;this.src=\'' + Comms.escapeHtml(Comms.defaultAvatar(nm)) + '\'">';
-                    }).join('') +
-                    (count > previews.length
-                        ? ('<span class="comms-avatar-stack-more">+' + (count - previews.length) + '</span>')
-                        : '') +
-                    '</span>';
-            }
         }
         var unreadBadge = unread > 0
             ? ('<span class="comms-unread" aria-label="' + unread + ' unread">' + (unread > 99 ? '99+' : unread) + '</span>')
@@ -155,6 +144,7 @@ function renderConversations(filter) {
             ' title="' + Comms.escapeHtml(fullName) + '"' +
             ' data-peer-avatar="' + Comms.escapeHtml(avatar) + '"' +
             ' data-peer-status="' + online + '"' +
+            ' data-peer-type="' + Comms.escapeHtml(peerType) + '"' +
             ' data-is-group="' + (isGroup ? '1' : '0') + '"' +
             ' data-member-count="' + Number(c.member_count || 0) + '"' +
             ' role="listitem">' +

@@ -129,6 +129,41 @@ if (!ctx) {
             els.typing.textContent = who ? (who + ' is typing...') : 'Typing...';
             els.typing.hidden = false;
         },
+        applyGroupPhoto: function (conversationId, avatarUrl, name) {
+            var id = Number(conversationId);
+            var url = String(avatarUrl || '').trim();
+            (state.conversations || []).forEach(function (c) {
+                if (Number(c.id) !== id) return;
+                if (url) {
+                    c.avatar_url = url;
+                    c.has_custom_avatar = true;
+                    if (c.other_user) c.other_user.profile_image_url = url;
+                }
+                if (name) c.name = name;
+            });
+            if (Comms.writeInboxCache) Comms.writeInboxCache(state.conversations);
+            if (typeof api.renderConversations === 'function') {
+                api.renderConversations(els.convFilter ? els.convFilter.value : '');
+            }
+            if (Number(state.activeId) === id && state.activeConversation) {
+                if (url) {
+                    state.activeConversation.avatar_url = url;
+                    state.activeConversation.has_custom_avatar = true;
+                    if (state.activeConversation.other_user) {
+                        state.activeConversation.other_user.profile_image_url = url;
+                    }
+                }
+                if (name) state.activeConversation.name = name;
+                api.updatePeerHeader(state.activeConversation);
+            }
+            if (url) {
+                document.querySelectorAll(
+                    '#floatingChat' + id + ' .floating-chat-avatar, #floatingBubble' + id + ' img'
+                ).forEach(function (img) {
+                    img.src = url;
+                });
+            }
+        },
         updatePeerOnlineFromPresence: api.updatePeerOnlineFromPresence,
         refreshActivePeerProfile: api.refreshActivePeerProfile,
         routes: routes,

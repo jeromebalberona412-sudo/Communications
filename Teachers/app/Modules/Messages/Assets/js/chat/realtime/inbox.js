@@ -41,6 +41,9 @@ function bindInboxChannel(sb, name) {
             if (window.CommsChat && typeof window.CommsChat.onReactionChange === 'function') {
                 window.CommsChat.onReactionChange(data.message_id, { reactions: data.reactions || [] });
             }
+            if (window.CommsFloatingChat && typeof window.CommsFloatingChat.applyReaction === 'function') {
+                window.CommsFloatingChat.applyReaction(data.message_id, data.reactions || []);
+            }
         })
         .on('broadcast', { event: 'call-history' }, function (raw) {
             var data = (raw && raw.payload) ? raw.payload : (raw || {});

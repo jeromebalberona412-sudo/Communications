@@ -30,40 +30,14 @@ function formatPresenceLabel(peer) {
     return 'Offline';
 }
 
-function renderPeerAvatarStack(conversation, fallbackName) {
+function renderPeerAvatarStack() {
     var stack = els.peerAvatarStack;
     var single = els.peerAvatar;
-    if (!stack) {
-        if (single) single.hidden = false;
-        return;
-    }
-    var previews = [];
-    if (conversation) {
-        if (Array.isArray(conversation.members) && conversation.members.length) {
-            previews = conversation.members.slice(0, 3);
-        } else if (Array.isArray(conversation.member_previews)) {
-            previews = conversation.member_previews.slice(0, 3);
-        }
-    }
-    var count = Number((conversation && conversation.member_count) || previews.length || 0);
-    if (previews.length < 2) {
+    if (stack) {
         stack.hidden = true;
         stack.innerHTML = '';
-        if (single) single.hidden = false;
-        return;
     }
-    if (single) single.hidden = true;
-    stack.hidden = false;
-    stack.innerHTML = previews.map(function (p, idx) {
-        var nm = (p && p.name) || 'U';
-        var src = (p && (p.profile_image_url || p.avatar_url)) || Comms.defaultAvatar(nm);
-        return '<img class="comms-avatar-stack-item" style="z-index:' + (10 - idx) + '" src="' +
-            Comms.escapeHtml(src) + '" alt="" title="' + Comms.escapeHtml(nm) + '"' +
-            ' onerror="this.onerror=null;this.src=\'' + Comms.escapeHtml(Comms.defaultAvatar(nm)) + '\'">';
-    }).join('') + (count > previews.length
-        ? ('<span class="comms-avatar-stack-more">+' + (count - previews.length) + '</span>')
-        : '');
-    stack.setAttribute('title', fallbackName || 'Group members');
+    if (single) single.hidden = false;
 }
 
 function updatePeerHeader(conversation) {
@@ -118,8 +92,18 @@ function updatePeerHeader(conversation) {
         els.peerAvatarWrap.classList.toggle('is-group', !!isGroup);
     }
 
+    var peerType = String(peer.user_type || peer.type || '').toLowerCase();
+    var myType = String((root && root.dataset.portalUserType) || '').toLowerCase();
+    var studentFamily = { students: 1, student: 1, kabataan: 1, user: 1 };
+    var studentToStudent = !isGroup && studentFamily[myType] && studentFamily[peerType];
+    var allowMessage = !studentToStudent && (!conversation || conversation.can_message !== false);
+    var allowCall = !studentToStudent && (!conversation || conversation.can_call !== false) && allowMessage;
+    if (els.composer) els.composer.hidden = !allowMessage;
+    if (els.voiceBtn) els.voiceBtn.hidden = !allowCall;
+    if (els.videoBtn) els.videoBtn.hidden = !allowCall;
+
     if (isGroup) {
-        renderPeerAvatarStack(conversation, name);
+        renderPeerAvatarStack();
     } else if (els.peerAvatarStack) {
         els.peerAvatarStack.hidden = true;
         els.peerAvatarStack.innerHTML = '';

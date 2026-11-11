@@ -182,7 +182,12 @@
             var time = formatTime(c.last_message && c.last_message.created_at);
             var href = messagesPageUrl(c.id);
             var liveMap = window.__COMMS_PRESENCE_ONLINE_IDS__ || {};
-            var peerType = String(peer.user_type || peer.type || 'students').trim().toLowerCase();
+            var peerType = String(peer.user_type || peer.type || '').trim().toLowerCase();
+            var bootEl = document.getElementById('commsRealtimeBoot') || document.getElementById('commsApp');
+            var myType = bootEl ? String(bootEl.dataset.portalUserType || '').toLowerCase() : '';
+            var studentFamily = { students: 1, student: 1, kabataan: 1, user: 1 };
+            if (!isGroup && studentFamily[myType] && studentFamily[peerType]) return '';
+            if (!peerType) peerType = 'students';
             var online = !isGroup && peer.id && (
                 liveMap[peerType + ':' + Number(peer.id)] || liveMap[Number(peer.id)]
             );
@@ -190,7 +195,7 @@
                 ? (c.avatar_url || peer.profile_image_url || avatarUrl(null, name))
                 : (peer.profile_image_url || avatarUrl(null, name));
 
-            return '<a class="comms-chat-fs-item' + (unread > 0 ? ' is-unread' : '') + '" href="' + href + '" data-conversation-id="' + Number(c.id) + '" data-peer-name="' + escapeHtml(name) + '" data-peer-avatar="' + escapeHtml(peerAvatar) + '" data-is-group="' + (isGroup ? '1' : '0') + '" data-member-count="' + Number(c.member_count || 0) + '" data-online="' + (online ? '1' : '0') + '">' +
+            return '<a class="comms-chat-fs-item' + (unread > 0 ? ' is-unread' : '') + '" href="' + href + '" data-conversation-id="' + Number(c.id) + '" data-peer-name="' + escapeHtml(name) + '" data-peer-avatar="' + escapeHtml(peerAvatar) + '" data-peer-type="' + escapeHtml(peer.user_type || peer.type || '') + '" data-is-group="' + (isGroup ? '1' : '0') + '" data-member-count="' + Number(c.member_count || 0) + '" data-online="' + (online ? '1' : '0') + '">' +
                 '<span class="comms-chat-fs-avatar-wrap">' +
                 '<img class="comms-chat-fs-avatar" src="' + escapeHtml(peerAvatar) + '" alt="" width="40" height="40">' +
                 (online ? '<span class="comms-chat-fs-online" title="Online"></span>' : '') +
@@ -367,6 +372,7 @@
             window.openChatWindow(cid, {
                 peerName: name,
                 peerAvatar: avatar,
+                peerType: item.getAttribute('data-peer-type') || '',
                 isGroup: isGroup,
                 memberCount: memberCount,
                 online: online
