@@ -414,10 +414,14 @@ function showInCall(call, statusText) {
         S.els.inCall.classList.toggle('is-audio-call', !videoCall);
         S.els.inCall.classList.toggle('is-ringing-preview', videoCall && !S.callConnected && !S.callAnswered);
     }
-    if (videoCall && !S.callConnected) {
+    if (videoCall && !S.callConnected && !S.callAnswered) {
         S.els.inCall.classList.remove('has-remote-video');
         if (S.els.remoteVideoOff) S.els.remoteVideoOff.hidden = true;
         if (S.els.localVideoOff) S.els.localVideoOff.hidden = true;
+    }
+    if (S.callConnected || S.callAnswered) {
+        S.els.inCall.classList.add('is-connected');
+        S.els.inCall.classList.remove('is-ringing-preview');
     }
     api.setCallStatus(statusText != null ? statusText : (S.callConnected ? 'Connected' : 'Calling...'));
     if (typeof api.syncCallTimerVisibility === 'function') api.syncCallTimerVisibility();

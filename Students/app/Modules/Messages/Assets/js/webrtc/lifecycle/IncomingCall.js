@@ -89,6 +89,16 @@ function ensureRingAudio() {
     S.ringAudio.setAttribute('playsinline', '');
     S.ringAudio.muted = false;
     S.ringAudio.volume = 1;
+    if (!S.ringAudio._commsStopBound) {
+        S.ringAudio._commsStopBound = true;
+        S.ringAudio.addEventListener('play', function () {
+            if (S.ringtonePlaying && !S.callAnswered && !S.callConnected && !S.acceptingCallId) return;
+            try {
+                S.ringAudio.pause();
+                S.ringAudio.currentTime = 0;
+            } catch (eStopPlay) { /* ignore */ }
+        });
+    }
     if (!S.ringAudio.src) {
         try {
             S.ringAudio.src = api.makeRingtoneDataUri();
@@ -163,6 +173,15 @@ function stopRingtone(callId) {
     if (S.ringCtx && S.ringCtx.state === 'running') {
         S.ringCtx.suspend().catch(function () { /* the next ring resumes it */ });
     }
+    if (window.__commsRingCtx && window.__commsRingCtx !== S.ringCtx && window.__commsRingCtx.state === 'running') {
+        window.__commsRingCtx.suspend().catch(function () { /* ignore */ });
+    }
+    if (S.ringGain && S.ringCtx) {
+        try {
+            S.ringGain.gain.cancelScheduledValues(S.ringCtx.currentTime);
+            S.ringGain.gain.setValueAtTime(0, S.ringCtx.currentTime);
+        } catch (eGain) { /* ignore */ }
+    }
     silenceRingtoneElements();
     if (S.ringAudio) {
         try {
@@ -216,7 +235,12 @@ function playToneBurst(ctx, freqs, when, duration, volume) {
         gain.gain.setValueAtTime(level, when + Math.max(0.06, duration - 0.08));
         gain.gain.exponentialRampToValueAtTime(0.0001, when + duration);
         osc.connect(gain);
-        gain.connect(ctx.destination);
+        if (!S.ringGain) {
+            S.ringGain = ctx.createGain();
+            S.ringGain.connect(ctx.destination);
+        }
+        S.ringGain.gain.setValueAtTime(S.ringtonePlaying ? 1 : 0, ctx.currentTime);
+        gain.connect(S.ringGain);
         osc.start(when);
         osc.stop(when + duration + 0.02);
         S.ringOscillators.push(osc);
@@ -243,7 +267,7 @@ function startOscillatorRing(incoming) {
     });
     S.ringOscillators = [];
     function scheduleCycle() {
-        if (!S.ringtonePlaying || !S.ringCtx) return;
+        if (!S.ringtonePlaying || S.callAnswered || S.callConnected || S.acceptingCallId || !S.ringCtx) return;
         var now = S.ringCtx.currentTime;
         if (incoming) {
             api.playToneBurst(S.ringCtx, [440, 480], now, 0.42, 0.24);
@@ -261,6 +285,9 @@ function startRingtone(mode, callId) {
     var incoming = mode === 'incoming';
     var id = callId != null ? Number(callId) : (S.incomingCallId || (S.currentCall && S.currentCall.id) || 0);
     if (S.callAnswered || S.callConnected || S.acceptingCallId) return;
+    if (S.ringGain && S.ringCtx) {
+        try { S.ringGain.gain.setValueAtTime(1, S.ringCtx.currentTime); } catch (eGain) { /* ignore */ }
+    }
     if (S.ringCtx && S.ringCtx.state === 'suspended') {
         S.ringCtx.resume().catch(function () { /* autoplay resumes on the next gesture */ });
     }
