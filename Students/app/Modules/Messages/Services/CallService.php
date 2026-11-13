@@ -637,10 +637,6 @@ class CallService
         }
 
         if (in_array($status, [Call::STATUS_ENDED, Call::STATUS_REJECTED, Call::STATUS_MISSED, Call::STATUS_CANCELLED], true)) {
-            if ($isGroupCall && $status === Call::STATUS_ENDED && (int) $call->caller_id !== (int) $user->id) {
-                return $call;
-            }
-
             $call->ended_at = now();
             if (Schema::hasColumn($call->getTable(), 'end_reason')) {
                 $call->end_reason = $status;

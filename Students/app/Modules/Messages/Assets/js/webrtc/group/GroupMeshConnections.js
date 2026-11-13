@@ -105,16 +105,19 @@ export function createGroupMeshConnections(ctx, deps) {
         pc.ontrack = function (ev) {
             var track = ev.track;
             if (!track) return;
+            if (!entry.stream) entry.stream = new MediaStream();
             var inbound = ev.streams && ev.streams[0] ? ev.streams[0] : null;
-            if (inbound && typeof inbound.getTracks === 'function' && inbound.getTracks().length) {
-                entry.stream = inbound;
-            } else {
-                if (!entry.stream) entry.stream = new MediaStream();
-                if (!entry.stream.getTracks().some(function (t) { return t.id === track.id; })) {
-                    entry.stream.addTrack(track);
+            var incomingTracks = inbound && inbound.getTracks ? inbound.getTracks() : [track];
+            incomingTracks.forEach(function (item) {
+                if (!item) return;
+                if (!entry.stream.getTracks().some(function (t) { return t.id === item.id; })) {
+                    entry.stream.addTrack(item);
                 }
-            }
+            });
             ui.bindPeerStream(key, entry.name, entry.stream);
+            track.onunmute = function () {
+                ui.bindPeerStream(key, entry.name, entry.stream);
+            };
             ctx.meshConnected = true;
             if (window.CommsWebRTC) {
                 if (window.CommsWebRTC.__markAnswered) window.CommsWebRTC.__markAnswered();
@@ -152,6 +155,18 @@ export function createGroupMeshConnections(ctx, deps) {
         return entry;
     }
 
+    function entryNeedsVideo(entry) {
+        var wants = !!(ctx.meshWantsVideo || (ctx.meshCall && ctx.meshCall.call_type === 'video'));
+        if (!wants || !entry || !entry.pc || entry.videoNudged) return false;
+        var receivers = entry.pc.getReceivers ? entry.pc.getReceivers() : [];
+        var hasVideo = receivers.some(function (receiver) {
+            return receiver.track && receiver.track.kind === 'video' && receiver.track.readyState !== 'ended';
+        });
+        if (hasVideo) return false;
+        entry.videoNudged = true;
+        return true;
+    }
+
     async function connectToPeer(remoteId, remoteType, remoteName) {
         var self = me();
         if (Number(remoteId) === self.id && samePortalType(self.type, remoteType)) return;
@@ -181,7 +196,7 @@ export function createGroupMeshConnections(ctx, deps) {
             return;
         }
         if (entry.pc.signalingState !== 'stable') return;
-        if (entry.pc.currentRemoteDescription || entry.pc.remoteDescription) return;
+        if ((entry.pc.currentRemoteDescription || entry.pc.remoteDescription) && !entryNeedsVideo(entry)) return;
 
         var offer = await entry.pc.createOffer();
         await entry.pc.setLocalDescription(offer);

@@ -88,6 +88,7 @@ export function createGroupLocalMedia(ctx, ui) {
         }
         var off = document.getElementById('commsLocalVideoOff');
         if (off) off.hidden = !!ctx.meshCameraOn;
+        if (typeof ui.showLocalTile === 'function') ui.showLocalTile();
         return ctx.meshLocalStream;
     }
 

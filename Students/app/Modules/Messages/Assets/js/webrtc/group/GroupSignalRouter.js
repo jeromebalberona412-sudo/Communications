@@ -8,6 +8,12 @@ export function createGroupSignalRouter(ctx, deps) {
 
     async function handleSignal(payload) {
         if (!payload || !payload.type) return false;
+        if ((payload.type === 'hangup' || payload.type === 'call-end') && (ctx.meshCall || ctx.meshLocalStream)) {
+            if (!ctx.meshCall || payload.call_id == null || Number(payload.call_id) === Number(ctx.meshCall.id)) {
+                await lifecycle.leaveGroupCall(payload.reason || 'ended', { remote: true });
+                return true;
+            }
+        }
         if (!payload.is_group_call && payload.type !== 'group-invite' && String(payload.type || '').indexOf('group-') !== 0) {
             return false;
         }
@@ -35,9 +41,12 @@ export function createGroupSignalRouter(ctx, deps) {
                 clearTimeout(ctx.ringTimer);
                 ctx.ringTimer = null;
             }
-            if (ctx.meshRole === 'caller' && window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
+            if (window.CommsWebRTC && typeof window.CommsWebRTC.__markAnswered === 'function') {
+                window.CommsWebRTC.__markAnswered(ctx.meshCall.id);
+            } else if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
                 window.CommsWebRTC.__stopRingtone();
             }
+            ui.setStatus('Connected');
             if (payload.started_at && window.CommsWebRTC && typeof window.CommsWebRTC.__syncTimer === 'function') {
                 window.CommsWebRTC.__syncTimer(payload.started_at, payload.server_time || null);
             }
@@ -97,7 +106,14 @@ export function createGroupSignalRouter(ctx, deps) {
             return true;
         }
 
-        if (payload.type === 'group-leave' || payload.type === 'hangup') {
+        if (payload.type === 'group-end') {
+            if (!ctx.meshCall && !ctx.meshLocalStream) return false;
+            if (ctx.meshCall && payload.call_id != null && Number(payload.call_id) !== Number(ctx.meshCall.id)) return true;
+            await lifecycle.leaveGroupCall(payload.reason || 'ended', { remote: true });
+            return true;
+        }
+
+        if (payload.type === 'group-leave') {
             if (!ctx.meshCall || Number(payload.call_id) !== Number(ctx.meshCall.id)) return true;
             var leaveKey = participantKey(payload.from_user_id, payload.from_user_type);
 
@@ -106,13 +122,10 @@ export function createGroupSignalRouter(ctx, deps) {
                 delete ctx.meshPeers[leaveKey];
                 ui.removeTile(leaveKey);
             }
+            if (!Object.keys(ctx.meshPeers).length) {
+                await lifecycle.leaveGroupCall('ended', { remote: true });
+            }
 
-            return true;
-        }
-
-        if (payload.type === 'group-end') {
-            if (!ctx.meshCall || Number(payload.call_id) !== Number(ctx.meshCall.id)) return true;
-            await lifecycle.leaveGroupCall('ended');
             return true;
         }
 

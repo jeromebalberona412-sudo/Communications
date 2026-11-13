@@ -38,7 +38,10 @@ function applyPeerAnswered() {
             });
         }
     }
-    api.keepActiveCallVisible('Connecting...');
+    api.keepActiveCallVisible('Connected');
+    if (!(S.currentCall && (S.currentCall.started_at || S.currentCall.answered_at)) && typeof api.publishDuration === 'function') {
+        api.publishDuration(new Date().toISOString(), null);
+    }
     api.armConnectionTimeout();
     api.attachLocalVideo();
     api.updateCameraUi();
@@ -221,6 +224,8 @@ async function handleSignal(payload) {
         if (hangupId != null) api.markCallTerminal(hangupId);
         S.acceptGeneration = (S.acceptGeneration || 0) + 1;
         S.acceptingCallId = null;
+        S.callConnected = false;
+        S.callAnswered = false;
         api.stopCallTimer();
         api.stopRingtone();
         api.stopVibration();
@@ -396,6 +401,16 @@ async function applyRemoteAnswer(sdp) {
 function handleCallRow(payload) {
     var row = (payload && payload.new) || null;
     if (!row) return;
+    if (['rejected', 'cancelled', 'ended', 'missed'].indexOf(row.status) !== -1
+        && window.CommsWebRTC && typeof window.CommsWebRTC.__meshActive === 'function'
+        && window.CommsWebRTC.__meshActive()
+        && typeof window.CommsWebRTC.__meshLeave === 'function') {
+        var meshId = typeof window.CommsWebRTC.__meshCallId === 'function' ? window.CommsWebRTC.__meshCallId() : null;
+        if (meshId != null && Number(meshId) === Number(row.id)) {
+            window.CommsWebRTC.__meshLeave(row.status || 'ended', { remote: true });
+            return;
+        }
+    }
     var isReceiver = api.isMeOnCallRow(row, true);
     var isCaller = api.isMeOnCallRow(row, false);
     var isGroupRow = !!(row.is_group_call)

@@ -169,7 +169,8 @@ async function acceptIncoming() {
     S.wantsVideo = String(call.call_type || '') === 'video';
     if (S.wantsVideo) S.cameraEnabled = true;
     S.lifecycle = 'accepted';
-    api.showInCall(call, 'Connecting...');
+    api.showInCall(call, 'Connected');
+    if (typeof api.publishDuration === 'function') api.publishDuration(new Date().toISOString(), null);
     api.updateCameraUi();
     api.unlockRemotePlayback();
     var answerPreview = S.wantsVideo && typeof api.prepareLocalPreview === 'function'

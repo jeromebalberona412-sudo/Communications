@@ -9,7 +9,9 @@ export function createGroupCallLifecycle(ctx, deps) {
 
     async function cleanupMesh(opts) {
         opts = opts || {};
-        if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
+        if (window.CommsWebRTC && typeof window.CommsWebRTC.__forceStopCall === 'function') {
+            window.CommsWebRTC.__forceStopCall();
+        } else if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
             window.CommsWebRTC.__stopCallTimer();
         }
         if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
@@ -138,7 +140,7 @@ export function createGroupCallLifecycle(ctx, deps) {
                 } else if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
                     window.CommsWebRTC.__stopRingtone();
                 }
-                ui.showGroupUi(Object.assign({}, ctx.meshCall, { peer: groupPeer }), 'Connecting...');
+                ui.showGroupUi(Object.assign({}, ctx.meshCall, { peer: groupPeer }), 'Connected');
                 var acceptedJoin = await signaling.updateStatus('accepted');
                 if (acceptedJoin && (acceptedJoin.started_at || acceptedJoin.answered_at)) {
                     ctx.meshCall.started_at = acceptedJoin.started_at || acceptedJoin.answered_at;
@@ -230,7 +232,7 @@ export function createGroupCallLifecycle(ctx, deps) {
         };
         ctx.meshInvitees = Array.isArray(ctx.meshCall.invitees) ? ctx.meshCall.invitees.slice() : [];
         await media.ensureLocalMedia();
-        ui.showGroupUi(ctx.meshCall, 'Connecting…');
+        ui.showGroupUi(ctx.meshCall, 'Connected');
         await flushPendingSignals();
         var accepted = await signaling.updateStatus('accepted');
         if (accepted && (accepted.started_at || accepted.answered_at)) {
@@ -252,29 +254,24 @@ export function createGroupCallLifecycle(ctx, deps) {
         ui.setStatus('Connected');
     }
 
-    async function leaveGroupCall(reason) {
+    async function leaveGroupCall(reason, opts) {
+        opts = opts || {};
+        if (ctx.meshLeaving) return;
         if (!ctx.meshCall) {
             await cleanupMesh();
             return;
         }
+        ctx.meshLeaving = true;
         var callId = ctx.meshCall.id;
         var convId = ctx.meshCall.conversation_id;
         var isCaller = ctx.meshRole === 'caller';
+        var remote = !!opts.remote;
 
-        var isEndingEntireCall = isCaller && (reason === 'ended' || reason === 'cancelled' || reason === 'missed');
-
-        if (isEndingEntireCall) {
-            await signaling.signal({ type: 'group-end', reason: reason || 'ended' });
-        } else {
-            await signaling.signal({ type: 'group-leave', reason: reason || 'ended' });
-        }
-
-        if (isCaller) {
-            var nextStatus = reason === 'cancelled' ? 'cancelled' : 'ended';
-            if (reason === 'missed' && !ctx.meshConnected) nextStatus = 'missed';
-            await signaling.updateStatus(nextStatus);
-        } else if (reason === 'rejected') {
-            await signaling.updateStatus('rejected');
+        if (!remote) {
+            var endEveryone = reason !== 'rejected';
+            signaling.signal({ type: endEveryone ? 'group-end' : 'group-leave', reason: reason || 'ended' });
+            var nextStatus = reason === 'cancelled' ? 'cancelled' : (reason === 'missed' ? 'missed' : (reason === 'rejected' ? 'rejected' : 'ended'));
+            if (isCaller || endEveryone) signaling.updateStatus(nextStatus);
         }
         if (window.CommsWebRTC && typeof window.CommsWebRTC.__rememberCall === 'function') {
             window.CommsWebRTC.__rememberCall({
@@ -286,6 +283,7 @@ export function createGroupCallLifecycle(ctx, deps) {
             });
         }
         await cleanupMesh();
+        ctx.meshLeaving = false;
         if (window.CommsWebRTC && typeof window.CommsWebRTC.__showEnded === 'function') {
             window.CommsWebRTC.__showEnded(reason || 'ended', 'Group call', callId);
         }

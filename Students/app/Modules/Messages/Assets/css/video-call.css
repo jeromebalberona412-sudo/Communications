@@ -205,6 +205,19 @@
 }
 .comms-call-overlay.is-group-call .comms-remote-grid {
     display: grid;
+    z-index: 3;
+}
+.comms-call-overlay.is-group-call.is-connected .comms-local-pip,
+.comms-call-overlay.is-group-call.has-remote-video .comms-local-pip {
+    inset: auto !important;
+    top: auto !important;
+    left: auto !important;
+    right: max(0.75rem, env(safe-area-inset-right, 0px)) !important;
+    bottom: max(6.75rem, calc(env(safe-area-inset-bottom, 0px) + 5.75rem)) !important;
+    width: min(34vw, 168px) !important;
+    height: auto !important;
+    max-width: min(42vw, 240px) !important;
+    max-height: 30vh !important;
 }
 .comms-call-overlay.is-group-call .comms-local-video {
     z-index: 4;

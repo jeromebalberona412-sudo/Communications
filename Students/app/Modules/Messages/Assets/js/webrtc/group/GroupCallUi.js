@@ -44,8 +44,7 @@ export function createGroupCallUi(ctx) {
             var stream = video && video.srcObject;
             if (!stream || typeof stream.getVideoTracks !== 'function') return;
             if (stream.getVideoTracks().some(function (t) {
-                return t && t.readyState === 'live' && t.enabled !== false && t.muted !== true
-                    && video && Number(video.videoWidth || 0) > 0;
+                return t && t.readyState === 'live' && t.enabled !== false;
             })) {
                 remoteVideoLive = true;
             }
@@ -112,9 +111,9 @@ export function createGroupCallUi(ctx) {
         refreshGridLayout();
     }
 
-    function bindPeerStream(key, name, stream) {
+    function bindPeerStream(key, name, stream, silent) {
         var tile = ensureTile(key, name);
-        if (!tile) return;
+        if (!tile || !stream) return;
         var video = tile.querySelector('video');
         if (video) {
             var videoTracks = stream.getVideoTracks ? stream.getVideoTracks().filter(function (track) {
@@ -155,7 +154,7 @@ export function createGroupCallUi(ctx) {
         audio.removeAttribute('muted');
         audio.volume = 1;
         var audioTracks = stream.getAudioTracks ? stream.getAudioTracks() : [];
-        if (audioTracks.length) {
+        if (!silent && audioTracks.length) {
             audio.srcObject = new MediaStream(audioTracks);
         }
         var audioPlay = audio.play();
@@ -208,6 +207,12 @@ export function createGroupCallUi(ctx) {
         var off = document.getElementById('commsLocalVideoOff');
         if (off) off.hidden = !!ctx.meshCameraOn;
         if (e.timer) e.timer.hidden = !ctx.meshConnected;
+        showLocalTile();
+    }
+
+    function showLocalTile() {
+        if (!ctx.meshLocalStream) return;
+        bindPeerStream('local', 'You', ctx.meshLocalStream, true);
     }
 
     return {
@@ -217,6 +222,7 @@ export function createGroupCallUi(ctx) {
         ensureTile: ensureTile,
         removeTile: removeTile,
         bindPeerStream: bindPeerStream,
+        showLocalTile: showLocalTile,
         showGroupUi: showGroupUi
     };
 }

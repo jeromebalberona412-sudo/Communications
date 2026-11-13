@@ -77,6 +77,15 @@ export function exposePublicApi() {
         __syncTimer: function (startedAt, serverTime) {
             if (typeof api.publishDuration === 'function') api.publishDuration(startedAt, serverTime);
         },
+        __forceStopCall: function () {
+            S.callConnected = false;
+            S.callAnswered = false;
+            S.startingCall = false;
+            S.acceptingCallId = null;
+            if (typeof api.stopCallTimer === 'function') api.stopCallTimer();
+            if (typeof api.stopRingtone === 'function') api.stopRingtone();
+            if (typeof api.hideIncoming === 'function') api.hideIncoming();
+        },
         __markAnswered: function (callId) {
             S.callAnswered = true;
             var id = callId != null ? Number(callId) : (S.incomingCallId || (S.currentCall && S.currentCall.id) || 0);

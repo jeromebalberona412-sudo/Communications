@@ -127,6 +127,9 @@ export function installGroupCoreHooks(ctx, mesh) {
     core.__meshSetCamera = mesh.setCameraEnabled;
     core.__meshSetMuted = mesh.setMuted;
     core.__meshActive = mesh.isActive;
+    core.__meshCallId = function () {
+        return ctx.meshCall && ctx.meshCall.id;
+    };
     core.__meshLeave = mesh.leaveGroupCall;
 
     core.__groupMesh = true;
