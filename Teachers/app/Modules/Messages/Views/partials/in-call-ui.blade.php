@@ -9,7 +9,7 @@
                 <span class="comms-video-off-label">Camera Off</span>
             </div>
         </div>
-        <div class="comms-local-pip">
+        <div class="comms-local-pip comms-self-corner">
             <video id="commsLocalVideo" class="comms-local-video" autoplay playsinline muted></video>
             <div class="comms-video-off comms-video-off--local" id="commsLocalVideoOff" hidden aria-hidden="true">
                 <span class="comms-video-off-avatar" id="commsLocalVideoOffAvatar">U</span>

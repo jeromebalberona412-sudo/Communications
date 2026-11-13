@@ -60,10 +60,7 @@ function hasLiveRemoteVideo() {
         if (streamIsOnlyLocal(stream)) continue;
         if (stream.getVideoTracks().some(remoteVideoTrackShowing)) live = true;
     }
-    if (!live) return false;
-    if (S.els.remoteVideo && Number(S.els.remoteVideo.videoWidth || 0) > 0) return true;
-    if (S.remoteHasFrames) return true;
-    return false;
+    return live;
 }
 
 function transceiverKind(transceiver) {

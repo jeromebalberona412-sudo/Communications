@@ -37,8 +37,8 @@ export function createGroupCallUi(ctx) {
         if (!e.remoteGrid) return;
         var tiles = Array.prototype.slice.call(e.remoteGrid.querySelectorAll('.comms-remote-tile'));
         var remoteTiles = tiles.filter(function (tile) { return tile.dataset.peerKey !== 'local'; });
-        var count = tiles.length;
         var others = remoteTiles.length;
+        var count = others;
         var remoteVideoLive = false;
         tiles.forEach(function (tile) {
             tile.classList.remove('is-overflow-hidden');
