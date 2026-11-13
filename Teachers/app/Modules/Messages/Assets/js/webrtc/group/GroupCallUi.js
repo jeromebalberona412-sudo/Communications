@@ -40,6 +40,7 @@ export function createGroupCallUi(ctx) {
         var remoteVideoLive = false;
         tiles.forEach(function (tile) {
             tile.classList.remove('is-overflow-hidden');
+            if (tile.dataset.peerKey === 'local') return;
             var video = tile.querySelector('video');
             var stream = video && video.srcObject;
             if (!stream || typeof stream.getVideoTracks !== 'function') return;
@@ -77,7 +78,7 @@ export function createGroupCallUi(ctx) {
             e.inCall.classList.toggle('is-video-call', showVideo);
             e.inCall.classList.toggle('is-audio-call', !showVideo);
             e.inCall.classList.toggle('is-local-camera-off', !localCamera);
-            e.inCall.classList.toggle('is-connected', ctx.meshConnected || count > 0);
+            e.inCall.classList.toggle('is-connected', remoteVideoLive);
         }
         if (e.callCenter) {
             e.callCenter.classList.toggle('is-compact', remoteVideoLive);
@@ -111,6 +112,21 @@ export function createGroupCallUi(ctx) {
         refreshGridLayout();
     }
 
+    function paintMainRemote(stream) {
+        var main = document.getElementById('commsRemoteVideo');
+        if (!main || !stream) return;
+        var off = document.getElementById('commsRemoteVideoOff');
+        if (off) off.hidden = true;
+        main.hidden = false;
+        main.removeAttribute('hidden');
+        main.muted = true;
+        main.autoplay = true;
+        main.playsInline = true;
+        main.srcObject = stream;
+        var play = main.play();
+        if (play && typeof play.catch === 'function') play.catch(function () { /* ignore */ });
+    }
+
     function bindPeerStream(key, name, stream, silent) {
         var tile = ensureTile(key, name);
         if (!tile || !stream) return;
@@ -128,6 +144,7 @@ export function createGroupCallUi(ctx) {
             if (videoTracks.length) {
                 var inboundHasOnlyVideo = stream.getTracks && videoTracks.length === stream.getTracks().length;
                 video.srcObject = inboundHasOnlyVideo ? stream : new MediaStream(videoTracks);
+                if (!silent) paintMainRemote(video.srcObject);
             }
             var play = video.play();
             if (play && typeof play.catch === 'function') play.catch(function () { /* ignore */ });
@@ -177,8 +194,10 @@ export function createGroupCallUi(ctx) {
         e.inCall.classList.toggle('is-video-call', !!ctx.meshWantsVideo || !!ctx.meshCameraOn);
         document.documentElement.classList.add('comms-in-call');
         document.body.classList.add('comms-in-call');
-        if (e.remoteGrid) e.remoteGrid.hidden = false;
-        if (e.remoteVideo) e.remoteVideo.srcObject = null;
+        if (e.remoteGrid) {
+            e.remoteGrid.hidden = false;
+            e.remoteGrid.removeAttribute('hidden');
+        }
         if (e.peerName) e.peerName.textContent = (call.peer && call.peer.name) || 'Group call';
         if (e.callAvatar) {
             var src = (call.peer && call.peer.profile_image_url) || '';
@@ -193,13 +212,13 @@ export function createGroupCallUi(ctx) {
         if (e.cameraBtn) e.cameraBtn.hidden = false;
         if (e.localVideo) {
             e.localVideo.hidden = false;
-            var cameraOff = !ctx.meshCameraOn;
-            e.localVideo.classList.toggle('is-camera-off', cameraOff);
-            if (ctx.meshLocalStream && e.localVideo.srcObject !== ctx.meshLocalStream) {
+            e.localVideo.removeAttribute('hidden');
+            e.localVideo.classList.remove('is-camera-off');
+            e.localVideo.muted = true;
+            e.localVideo.autoplay = true;
+            e.localVideo.playsInline = true;
+            if (ctx.meshLocalStream) {
                 e.localVideo.srcObject = ctx.meshLocalStream;
-                e.localVideo.muted = true;
-                e.localVideo.autoplay = true;
-                e.localVideo.playsInline = true;
                 var replay = e.localVideo.play();
                 if (replay && typeof replay.catch === 'function') replay.catch(function () { /* ignore */ });
             }

@@ -371,7 +371,7 @@ function syncCameraUi() {
         var attached = S.els.remoteVideo && S.els.remoteVideo.srcObject
             && typeof S.els.remoteVideo.srcObject.getVideoTracks === 'function'
             && S.els.remoteVideo.srcObject.getVideoTracks().some(function (track) {
-                return track && track.readyState !== 'ended' && track.muted !== true;
+                return track && track.readyState !== 'ended' && track.enabled !== false;
             });
         var cameraOff = !!videoCall && (remoteExplicitOff || (!callStartedAsVideo() && !remoteCameraOn()));
         var connecting = !!videoCall && !cameraOff && !remoteLive && !attached;

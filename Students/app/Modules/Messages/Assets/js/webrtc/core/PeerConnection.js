@@ -36,7 +36,7 @@ function findVideoSender() {
 }
 
 function remoteVideoTrackShowing(track) {
-    return !!(track && track.readyState === 'live' && track.muted !== true && track.enabled !== false);
+    return !!(track && track.readyState === 'live' && track.enabled !== false);
 }
 
 function hasLiveRemoteVideo() {
