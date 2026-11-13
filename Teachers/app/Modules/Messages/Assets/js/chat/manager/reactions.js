@@ -125,7 +125,9 @@ function patchReactionChipsDom(messageId, reactions) {
         if (chipsHtml) existing.outerHTML = chipsHtml;
         else existing.remove();
     } else if (chipsHtml) {
-        wrap.insertAdjacentHTML('beforeend', chipsHtml);
+        var bubble = wrap.querySelector('.comms-bubble');
+        if (bubble) bubble.insertAdjacentHTML('beforeend', chipsHtml);
+        else wrap.insertAdjacentHTML('beforeend', chipsHtml);
     }
     return true;
 }

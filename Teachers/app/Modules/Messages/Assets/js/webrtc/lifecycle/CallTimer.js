@@ -33,14 +33,6 @@ function stopCallHeartbeat() {
     }
 }
 
-/**
- * FIX BUG #3: Force stop call timer and reset state
- * Called before starting any new call to ensure clean state
- * 
- * VERIFIED: api.stopCallTimer() properly clears S.callTimer, S.callStartedAt, and 
- * S.lastCallDurationMs before new call. This prevents timer continuation from 
- * previous calls.
- */
 function stopCallTimer() {
     if (S.callTimer) {
         clearInterval(S.callTimer);

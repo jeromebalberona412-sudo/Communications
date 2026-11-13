@@ -21,8 +21,9 @@ export function acquireTopicChannel(topic, conversationId) {
     }
 
     var channel = sb.channel(topic, {
-        config: { broadcast: { ack: true, self: false } }
+        config: { broadcast: { ack: false, self: false } }
     });
+    state.topicChannels[topic] = { channel: channel, refs: 1, ready: false, queue: [] };
 
     channel.on('broadcast', { event: 'typing' }, function (raw) {
         var data = (raw && raw.payload) ? raw.payload : (raw || {});
@@ -68,9 +69,27 @@ export function acquireTopicChannel(topic, conversationId) {
                 window.CommsChat.applyDelivered(data);
             }
         })
-        .subscribe();
-
-    state.topicChannels[topic] = { channel: channel, refs: 1 };
+        .subscribe(function (status) {
+            var row = state.topicChannels[topic];
+            if (!row) return;
+            if (status === 'SUBSCRIBED') {
+                row.ready = true;
+                row.tries = 0;
+                var queued = row.queue || [];
+                row.queue = [];
+                queued.forEach(function (item) {
+                    channel.send(item).catch(function () {});
+                });
+                return;
+            }
+            if (status !== 'CHANNEL_ERROR' && status !== 'TIMED_OUT' && status !== 'CLOSED') return;
+            row.ready = false;
+            row.tries = (row.tries || 0) + 1;
+            if (row.tries > 2) return;
+            window.setTimeout(function () {
+                try { channel.subscribe(); } catch (e) { /* ignore */ }
+            }, 500);
+        });
 
     return channel;
 }
@@ -131,7 +150,7 @@ export function ensureCallChannel(conversationId) {
             settled = true;
             resolve(state.callChannel);
         };
-        var timer = setTimeout(finish, 8000);
+        var timer = setTimeout(finish, 1500);
         if (!state.callChannel) {
             finish();
             return;
@@ -154,52 +173,56 @@ export function teardownCallChannel(conversationId) {
 }
 
 function sendOnChannel(channelName, payload) {
+    if (String(channelName).indexOf('comms-signal-') === 0 && !state.topicChannels[channelName]) {
+        acquireTopicChannel(channelName, String(channelName).replace('comms-signal-', ''));
+    }
     return sendBroadcast(channelName, 'webrtc', payload);
 }
 
-export function sendBroadcast(channelName, eventName, payload) {
+function holdChannel(channelName) {
+    var existing = state.topicChannels[channelName];
+    if (existing && existing.channel) return existing;
     var sb = ensureClient();
-    if (!sb || !channelName) return Promise.resolve();
+    if (!sb) return null;
+    var channel = sb.channel(channelName, {
+        config: { broadcast: { ack: false, self: false } }
+    });
+    var row = { channel: channel, refs: 1, ready: false, queue: [], tries: 0 };
+    state.topicChannels[channelName] = row;
+    channel.subscribe(function (status) {
+        if (status === 'SUBSCRIBED') {
+            row.ready = true;
+            row.tries = 0;
+            var queued = row.queue || [];
+            row.queue = [];
+            queued.forEach(function (item) {
+                channel.send(item).catch(function () {});
+            });
+            return;
+        }
+        if (status !== 'CHANNEL_ERROR' && status !== 'TIMED_OUT' && status !== 'CLOSED') return;
+        row.ready = false;
+        row.tries += 1;
+        if (row.tries > 2) return;
+        window.setTimeout(function () {
+            try { channel.subscribe(); } catch (e) { /* ignore */ }
+        }, 500);
+    });
+    return row;
+}
 
+export function sendBroadcast(channelName, eventName, payload) {
+    if (!ensureClient() || !channelName) return Promise.resolve();
     var packet = { type: 'broadcast', event: eventName || 'webrtc', payload: payload };
-
-    var entry = state.topicChannels[channelName];
-    if (entry && entry.channel) {
+    var entry = holdChannel(channelName);
+    if (!entry) return Promise.resolve();
+    if (entry.ready) {
         return entry.channel.send(packet).catch(function () {});
     }
-
-    var prior = typeof sb.getChannels === 'function' ? sb.getChannels().slice() : [];
-    var ch = sb.channel(channelName, {
-        config: { broadcast: { ack: true, self: false } }
-    });
-    var createdHere = prior.indexOf(ch) === -1;
-
-    if (!createdHere) {
-        return ch.send(packet).catch(function () {});
-    }
-
-    return new Promise(function (resolve) {
-        var settled = false;
-        var finish = function () {
-            if (settled) return;
-            settled = true;
-            try { sb.removeChannel(ch); } catch (e) { /* ignore */ }
-            resolve();
-        };
-        var timer = setTimeout(finish, 8000);
-        ch.subscribe(function (status) {
-            if (status !== 'SUBSCRIBED') return;
-            ch.send(packet)
-                .then(function () {
-                    clearTimeout(timer);
-                    finish();
-                })
-                .catch(function () {
-                    clearTimeout(timer);
-                    finish();
-                });
-        });
-    });
+    entry.queue = entry.queue || [];
+    entry.queue.push(packet);
+    if (entry.queue.length > 60) entry.queue.shift();
+    return Promise.resolve();
 }
 
 export function collectInboxes(options) {
@@ -207,8 +230,10 @@ export function collectInboxes(options) {
     var names = [];
     var push = function (type, id) {
         var aliases = typeAliases(type);
-        for (var i = 0; i < aliases.length; i += 1) {
-            var name = peerInboxName(aliases[i], id);
+        var list = aliases.length ? aliases : [type];
+        var i;
+        for (i = 0; i < list.length; i += 1) {
+            var name = peerInboxName(list[i], id);
             if (name && names.indexOf(name) === -1) names.push(name);
         }
     };

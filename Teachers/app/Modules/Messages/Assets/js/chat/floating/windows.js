@@ -341,7 +341,8 @@ export function attachWindows(ctx) {
                 picker.innerHTML = (ctx.floatReactionEmojis || []).map(function (emoji) {
                     return '<button type="button" class="comms-reaction-pick" data-float-emoji="' + ctx.escapeHtml(emoji) + '" data-float-react-id="' + ctx.escapeHtml(reactRow.getAttribute('data-message-id') || '') + '">' + emoji + '</button>';
                 }).join('');
-                reactRow.appendChild(picker);
+                var anchor = reactRow.querySelector('.floating-chat-msg-main') || reactRow;
+                anchor.appendChild(picker);
                 return;
             }
             var emojiBtn = e.target.closest('[data-float-emoji]');

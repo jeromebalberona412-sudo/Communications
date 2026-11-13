@@ -32,15 +32,6 @@ export function createGroupCallUi(ctx) {
         return best;
     }
 
-    function slotsThatFit(width, height) {
-        var gap = 8;
-        var minW = width < 520 ? 92 : 120;
-        var minH = width < 520 ? 70 : 90;
-        var cols = Math.max(1, Math.floor((width + gap) / (minW + gap)));
-        var rows = Math.max(1, Math.floor((height + gap) / (minH + gap)));
-        return Math.max(1, Math.min(12, cols * rows));
-    }
-
     function refreshGridLayout() {
         var e = els();
         if (!e.remoteGrid) return;
@@ -48,6 +39,7 @@ export function createGroupCallUi(ctx) {
         var count = tiles.length;
         var remoteVideoLive = false;
         tiles.forEach(function (tile) {
+            tile.classList.remove('is-overflow-hidden');
             var video = tile.querySelector('video');
             var stream = video && video.srcObject;
             if (!stream || typeof stream.getVideoTracks !== 'function') return;
@@ -58,48 +50,18 @@ export function createGroupCallUi(ctx) {
                 remoteVideoLive = true;
             }
         });
+        var more = e.remoteGrid.querySelector('.comms-remote-more');
+        if (more) more.remove();
         var box = e.remoteGrid.getBoundingClientRect();
         var width = box.width || window.innerWidth;
         var height = box.height || window.innerHeight;
-        var capacity = slotsThatFit(width, height);
-        var overflow = count > capacity;
-        var pageSize = overflow ? Math.max(1, capacity - 1) : count;
-        var pages = Math.max(1, pageSize ? Math.ceil(count / pageSize) : 1);
-        var page = Math.min(pages - 1, Math.max(0, Number(e.remoteGrid.dataset.page || 0)));
-        var start = page * pageSize;
-        tiles.forEach(function (tile, index) {
-            var visible = !overflow || (index >= start && index < start + pageSize);
-            tile.classList.toggle('is-overflow-hidden', !visible);
-        });
-        var shown = overflow ? pageSize + 1 : Math.max(count, 1);
-        var shape = shapeFor(Math.max(1, overflow ? pageSize + 1 : count), width, height);
+        var shown = Math.max(count, 1);
+        var shape = shapeFor(shown, width, height);
         e.remoteGrid.style.setProperty('--comms-cols', String(shape.cols));
         e.remoteGrid.style.setProperty('--comms-rows', String(shape.rows));
         e.remoteGrid.dataset.count = String(count);
         e.remoteGrid.dataset.cells = String(shown);
-        e.remoteGrid.dataset.page = String(page);
-        if (e.inCall) e.inCall.classList.toggle('has-remote-video', count > 0);
-        var more = e.remoteGrid.querySelector('.comms-remote-more');
-        if (overflow) {
-            if (!more) {
-                more = document.createElement('button');
-                more.type = 'button';
-                more.className = 'comms-remote-more';
-                more.setAttribute('aria-label', 'Show more participants');
-                e.remoteGrid.appendChild(more);
-            }
-            var hidden = count - pageSize;
-            more.hidden = false;
-            more.textContent = '+' + hidden;
-            more.onclick = function () {
-                var next = (Number(e.remoteGrid.dataset.page || 0) + 1) % pages;
-                e.remoteGrid.dataset.page = String(next);
-                refreshGridLayout();
-            };
-        } else if (more) {
-            more.remove();
-            e.remoteGrid.dataset.page = '0';
-        }
+        e.remoteGrid.dataset.page = '0';
         e.remoteGrid.hidden = count === 0;
         if (!e.remoteGrid._commsResizeBound) {
             e.remoteGrid._commsResizeBound = true;

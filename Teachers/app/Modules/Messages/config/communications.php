@@ -15,7 +15,7 @@ return [
     // dead tab apart from a real call (seconds).
     'call_heartbeat_seconds' => (int) env('COMMS_CALL_HEARTBEAT', 30),
     // Safety-net poll for missed call invitations (milliseconds).
-    'call_poll_interval_ms' => (int) env('COMMS_CALL_POLL_MS', 8000),
+    'call_poll_interval_ms' => (int) env('COMMS_CALL_POLL_MS', 2000),
     'reaction_emojis' => ['👍', '❤️', '😂', '😮', '😢', '🙏'],
     'attachments' => [
         'max_image_kb' => 5120,

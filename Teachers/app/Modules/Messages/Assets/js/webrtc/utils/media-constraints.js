@@ -31,12 +31,12 @@ export function videoConstraints() {
         facingMode: { ideal: 'user' },
         aspectRatio: { ideal: mobile ? 4 / 3 : 16 / 9 },
         width: mobile
-            ? { ideal: 960, min: 480, max: 1280 }
-            : { ideal: 1280, min: 640, max: 1920 },
+            ? { ideal: 640, min: 320, max: 960 }
+            : { ideal: 960, min: 640, max: 1280 },
         height: mobile
-            ? { ideal: 720, min: 360, max: 960 }
-            : { ideal: 720, min: 360, max: 1080 },
-        frameRate: { ideal: mobile ? 28 : 30, max: 30 }
+            ? { ideal: 480, min: 240, max: 720 }
+            : { ideal: 540, min: 360, max: 720 },
+        frameRate: { ideal: 24, max: 24 }
     };
 }
 

@@ -227,12 +227,16 @@ function renderMessages(opts) {
             bubbleContent =
                 '<div class="comms-bubble-cluster">' +
                 '<div class="comms-bubble ' + sideCls + ' has-attachment has-attachment-only">' + attachHtml + '</div>' +
-                '<div class="comms-bubble ' + sideCls + (isAutomation ? ' comms-bubble--automation' : '') + '">' + bodyHtml + '</div></div>';
+                '<div class="comms-bubble ' + sideCls + (isAutomation ? ' comms-bubble--automation' : '') + '">' +
+                bodyHtml +
+                api.renderReactionChips(m.reactions, m.id) +
+                '</div></div>';
         } else {
             bubbleContent =
                 '<div class="comms-bubble ' + sideCls + bubbleExtra + '">' +
                 attachHtml +
                 bodyHtml +
+                api.renderReactionChips(m.reactions, m.id) +
                 '</div>';
         }
 
@@ -245,8 +249,6 @@ function renderMessages(opts) {
             (showReact ? '<button type="button" class="comms-react-btn" data-react-toggle="' + m.id + '" aria-label="Add reaction" title="React" aria-expanded="' + (pickerOpen ? 'true' : 'false') + '">' + reactBtnIcon + '</button>' : '') +
             '</div>' +
             '</div>' +
-            (showReact ? api.renderReactionPicker(m.id) : '') +
-            api.renderReactionChips(m.reactions, m.id) +
             renderSendStatus(m, latestMineId != null && String(m.id) === latestMineId) +
             '</div>');
         prevCreatedAt = m.created_at;

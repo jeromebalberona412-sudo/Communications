@@ -42,6 +42,18 @@ export function createGroupSignalRouter(ctx, deps) {
                 window.CommsWebRTC.__syncTimer(payload.started_at, payload.server_time || null);
             }
             await peers.connectToPeer(payload.from_user_id, payload.from_user_type, payload.from_name || payload.peer_name || 'Participant');
+            if (deps.signaling && typeof deps.signaling.signal === 'function') {
+                await deps.signaling.signal({
+                    type: 'group-here',
+                    peer_name: me().name
+                }, { id: payload.from_user_id, type: payload.from_user_type });
+            }
+            return true;
+        }
+
+        if (payload.type === 'group-here') {
+            if (!ctx.meshCall || Number(payload.call_id) !== Number(ctx.meshCall.id)) return true;
+            await peers.connectToPeer(payload.from_user_id, payload.from_user_type, payload.from_name || payload.peer_name || 'Participant');
             return true;
         }
 
@@ -70,12 +82,9 @@ export function createGroupSignalRouter(ctx, deps) {
             var incomingSeq = Number(payload.seq || 0);
             var lastSeq = ctx.meshPeerCameraSeq[key] || 0;
             if (incomingSeq > 0 && incomingSeq <= lastSeq) {
-                console.debug('[cam] Ignored stale camera-state from', key, 'seq', incomingSeq, '<=', lastSeq);
                 return true;
             }
             ctx.meshPeerCameraSeq[key] = incomingSeq;
-
-            console.debug('[cam] Apply camera-state from', key, 'enabled:', payload.enabled, 'seq:', incomingSeq);
 
             var tile = document.getElementById('commsRemoteGrid')?.querySelector('[data-peer-key="' + key.replace(/"/g, '') + '"]');
             if (tile) {

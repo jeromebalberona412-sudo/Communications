@@ -37,6 +37,26 @@ export function createGroupMeshConnections(ctx, deps) {
         return String(self.type) > String(remoteType || '');
     }
 
+    function retryIce(entry) {
+        if (!entry || entry.iceRetried || !entry.pc) return;
+        if (!shouldOffer(entry.id, entry.type)) return;
+        if (entry.pc.signalingState !== 'stable') return;
+        entry.iceRetried = true;
+        entry.pc.createOffer({ iceRestart: true }).then(function (offer) {
+            return entry.pc.setLocalDescription(offer).then(function () {
+                return signaling.signal({
+                    type: 'group-offer',
+                    renegotiate: true,
+                    sdp: plainSdp(offer, 'offer'),
+                    to_user_id: entry.id,
+                    to_user_type: entry.type,
+                    call_type: (ctx.meshCall && ctx.meshCall.call_type) || 'voice',
+                    peer_name: me().name
+                }, { id: entry.id, type: entry.type });
+            });
+        }).catch(function () { /* the other side can ask again */ });
+    }
+
     async function createPeerConnection(remoteId, remoteType, remoteName) {
         var key = participantKey(remoteId, remoteType);
         if (ctx.meshPeers[key] && ctx.meshPeers[key].pc) return ctx.meshPeers[key];
@@ -112,10 +132,21 @@ export function createGroupMeshConnections(ctx, deps) {
         };
 
         pc.onconnectionstatechange = function () {
-            if (pc.connectionState === 'connected') {
+            if (pc.connectionState === 'connected' || pc.connectionState === 'completed') {
+                entry.iceRetried = false;
                 ctx.meshConnected = true;
                 ui.refreshGridLayout();
             }
+            if (pc.connectionState === 'failed') retryIce(entry);
+        };
+        pc.oniceconnectionstatechange = function () {
+            var ice = pc.iceConnectionState;
+            if (ice === 'connected' || ice === 'completed') {
+                entry.iceRetried = false;
+                ctx.meshConnected = true;
+                ui.refreshGridLayout();
+            }
+            if (ice === 'failed') retryIce(entry);
         };
 
         return entry;
@@ -125,14 +156,26 @@ export function createGroupMeshConnections(ctx, deps) {
         var self = me();
         if (Number(remoteId) === self.id && samePortalType(self.type, remoteType)) return;
         var key = participantKey(remoteId, remoteType);
-        var max = Number((ctx.meshCall && ctx.meshCall.call_max_participants) || 8);
-        if (Object.keys(ctx.meshPeers).length >= Math.max(1, max - 1) && !ctx.meshPeers[key]) {
-            deps.toast('Call participant limit reached (' + max + ').', 'error');
+        var max = Number((ctx.meshCall && ctx.meshCall.call_max_participants) || 0);
+        var unlimited = !!(ctx.meshCall && ctx.meshCall.call_unlimited) || max <= 0;
+        var room = Math.max(max, ((ctx.meshInvitees && ctx.meshInvitees.length) || 0) + 1, 2);
+        if (!unlimited && Object.keys(ctx.meshPeers).length >= room - 1 && !ctx.meshPeers[key]) {
             return;
         }
 
         var entry = await createPeerConnection(remoteId, remoteType, remoteName);
         if (!shouldOffer(remoteId, remoteType)) return;
+        if (entry.pc.signalingState === 'have-local-offer' && entry.pc.localDescription) {
+            await signaling.signal({
+                type: 'group-offer',
+                sdp: plainSdp(entry.pc.localDescription, 'offer'),
+                to_user_id: entry.id,
+                to_user_type: entry.type,
+                call_type: ctx.meshCall.call_type,
+                peer_name: me().name
+            }, { id: entry.id, type: entry.type });
+            return;
+        }
         if (entry.pc.signalingState !== 'stable') return;
 
         var offer = await entry.pc.createOffer();

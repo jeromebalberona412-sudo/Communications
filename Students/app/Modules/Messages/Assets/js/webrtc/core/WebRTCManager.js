@@ -35,8 +35,8 @@ function reconcileWithServerState(data) {
 }
 
 function ringingPollIntervalMs() {
-    var ms = Number(window.__COMMS_CALL_POLL_MS__) || 2500;
-    return Math.max(2500, Math.min(ms, 8000));
+    var ms = Number(window.__COMMS_CALL_POLL_MS__) || 2000;
+    return Math.max(1500, Math.min(ms, 4000));
 }
 
 function presenceOnlineKey(userId, portalType) {
@@ -77,7 +77,13 @@ export function exposePublicApi() {
         __syncTimer: function (startedAt, serverTime) {
             if (typeof api.publishDuration === 'function') api.publishDuration(startedAt, serverTime);
         },
-        __markAnswered: function () { S.callAnswered = true; },
+        __markAnswered: function (callId) {
+            S.callAnswered = true;
+            var id = callId != null ? Number(callId) : (S.incomingCallId || (S.currentCall && S.currentCall.id) || 0);
+            if (id && typeof api.rememberCallId === 'function') api.rememberCallId(S.answeredCallIds, id);
+            if (typeof api.stopRingtone === 'function') api.stopRingtone();
+            if (typeof api.hideIncoming === 'function') api.hideIncoming();
+        },
         __stopCallTimer: function () { return api.stopCallTimer.apply(null, arguments); },
         primeOutgoingRingtone: function () { return api.primeOutgoingRingtone(); },
         __startRingtone: function () { return api.startRingtone.apply(null, arguments); },

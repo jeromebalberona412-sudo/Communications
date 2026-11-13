@@ -147,9 +147,6 @@ function silenceRingtoneElements() {
 }
 
 function stopRingtone(callId) {
-    if (callId != null && S.ringingCallId != null && Number(callId) !== Number(S.ringingCallId)) {
-        return;
-    }
     S.ringGeneration = (S.ringGeneration || 0) + 1;
     S.ringtonePlaying = false;
     S.ringMode = null;
@@ -288,6 +285,14 @@ function startRingtone(mode, callId) {
                         api.stopRingtone();
                         return;
                     }
+                    if (S.ringTimer) {
+                        clearInterval(S.ringTimer);
+                        S.ringTimer = null;
+                    }
+                    S.ringOscillators.forEach(function (osc) {
+                        try { osc.stop(); } catch (eStop) { /* ignore */ }
+                    });
+                    S.ringOscillators = [];
                     api.ringHint(false);
                 }).catch(function () {
                     if (generation !== S.ringGeneration || !S.ringtonePlaying || S.callAnswered || S.callConnected) return;
@@ -441,7 +446,18 @@ function showIncoming(call) {
         return;
     }
 
-    if (api.isCallAlreadyHandled(callId)) return;
+    if (api.isCallAlreadyHandled(callId)) {
+        if (!S.ringingCallId || Number(S.ringingCallId) === callId) api.stopRingtone();
+        return;
+    }
+    if (S.acceptingCallId === callId || S.answeredCallIds[callId] || (S.callAnswered && S.currentCall && Number(S.currentCall.id) === callId)) {
+        if (!S.ringingCallId || Number(S.ringingCallId) === callId) api.stopRingtone();
+        if (!S.incomingCallId || S.incomingCallId === callId) api.hideIncoming();
+        return;
+    }
+    if (S.callConnected || S.acceptingCallId) {
+        return;
+    }
     if (S.incomingCallId === callId && S.els.incoming && !S.els.incoming.hidden) return;
 
     // One modal at a time. A different call never replaces the one on screen.

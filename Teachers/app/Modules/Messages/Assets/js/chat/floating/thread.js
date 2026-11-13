@@ -138,7 +138,12 @@ export function attachThread(ctx) {
             var old = rowEl.querySelector('.comms-reaction-chips');
             if (old) old.remove();
             var html = ctx.reactionChipsHtml({ id: messageId, reactions: reactions });
-            if (html) rowEl.insertAdjacentHTML('beforeend', html);
+            if (html) {
+                var main = rowEl.querySelector('.floating-chat-msg-main') || rowEl;
+                var timeEl = main.querySelector('.floating-chat-msg-time');
+                if (timeEl) timeEl.insertAdjacentHTML('beforebegin', html);
+                else main.insertAdjacentHTML('beforeend', html);
+            }
         });
     };
 
@@ -312,13 +317,12 @@ export function attachThread(ctx) {
                 '<div class="floating-chat-msg-main">' +
                 ctx.renderAttachmentHtml(m.attachments) +
                 (body ? '<div class="floating-chat-msg-body">' + body + '</div>' : '') +
+                ctx.reactionChipsHtml(m) +
                 '<div class="floating-chat-msg-time">' + time + '</div>' +
                 '</div>' +
                 ctx.floatReactButtonHtml(m) +
                 ctx.messageActionsHtml(m, mine) +
-                '</div>' +
-                ctx.reactionChipsHtml(m) +
-                '</div>';
+                '</div></div>';
         }).join('');
         bodyEl.innerHTML = html;
         ctx.stickFloatingBody(bodyEl);
@@ -352,12 +356,12 @@ export function attachThread(ctx) {
                 '<div class="floating-chat-msg-main">' +
                 ctx.renderAttachmentHtml(message.attachments) +
                 (body ? '<div class="floating-chat-msg-body">' + body + '</div>' : '') +
+                ctx.reactionChipsHtml(message) +
                 '<div class="floating-chat-msg-time">' + time + '</div>' +
                 '</div>' +
                 ctx.floatReactButtonHtml(message) +
                 ctx.messageActionsHtml(message, mine) +
-                '</div>' +
-                ctx.reactionChipsHtml(message);
+                '</div>';
             bodyEl.appendChild(msgEl2);
         }
 

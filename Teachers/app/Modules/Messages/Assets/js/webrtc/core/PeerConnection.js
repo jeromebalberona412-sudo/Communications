@@ -530,6 +530,7 @@ async function ensurePeerConnection(videoEnabled) {
     api.attachLocalVideo();
 
     S.pc = new RTCPeerConnection(stunConfig());
+    S.iceRestarted = false;
     S.pc.onicecandidate = function (ev) {
         if (!ev.candidate || !S.currentCall) return;
         api.signalPeer({
@@ -578,6 +579,7 @@ async function ensurePeerConnection(videoEnabled) {
             api.signalMediaState();
         }
         if (st === 'disconnected' || st === 'failed') {
+            if (st === 'failed') api.recoverIce();
             if (S.iceDisconnectTimer) clearTimeout(S.iceDisconnectTimer);
             S.iceDisconnectTimer = setTimeout(function () {
                 S.iceDisconnectTimer = null;
@@ -604,6 +606,7 @@ async function ensurePeerConnection(videoEnabled) {
             api.signalMediaState();
         }
         if (S.pc && S.pc.connectionState === 'failed') {
+            api.recoverIce();
             if (S.iceDisconnectTimer) clearTimeout(S.iceDisconnectTimer);
             S.iceDisconnectTimer = setTimeout(function () {
                 S.iceDisconnectTimer = null;
@@ -640,6 +643,30 @@ async function ensurePeerConnection(videoEnabled) {
     return S.pc;
 }
 
+function recoverIce() {
+    if (!S.pc || !S.currentCall || S.iceRestarted) return Promise.resolve(false);
+    if (S.role !== 'caller') {
+        S.iceRestarted = true;
+        return api.signalPeer({
+            type: 'ice-restart',
+            call_id: S.currentCall.id,
+            conversation_id: S.currentCall.conversation_id
+        });
+    }
+    S.iceRestarted = true;
+    return S.pc.createOffer({ iceRestart: true }).then(function (offer) {
+        return S.pc.setLocalDescription(offer).then(function () {
+            return api.signalPeer({
+                type: 'offer',
+                renegotiate: true,
+                call_id: S.currentCall.id,
+                conversation_id: S.currentCall.conversation_id,
+                sdp: offer
+            });
+        });
+    }).catch(function () { return false; });
+}
+
 /**
  * Toggle the camera without destroying the call.
  *
@@ -671,3 +698,4 @@ api.applyRemoteVideoMetrics = applyRemoteVideoMetrics;
 api.refreshRemoteFromReceivers = refreshRemoteFromReceivers;
 api.bindRemoteMedia = bindRemoteMedia;
 api.ensurePeerConnection = ensurePeerConnection;
+api.recoverIce = recoverIce;

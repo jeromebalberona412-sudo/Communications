@@ -27,13 +27,10 @@ export function createGroupMeshCamera(ctx, deps) {
         if (!ctx.meshLocalStream) return;
         enabled = !!enabled;
 
-        console.debug('[cam] Apply local camera state:', enabled ? 'ON' : 'OFF');
-
         var videoTracks = ctx.meshLocalStream.getVideoTracks();
         var live = videoTracks.filter(function (t) { return t.readyState === 'live'; });
 
         if (!enabled) {
-            console.debug('[cam] Disabling camera, setting tracks.enabled = false');
             videoTracks.forEach(function (t) {
                 try { t.enabled = false; } catch (eOff) {}
             });
@@ -52,7 +49,6 @@ export function createGroupMeshCamera(ctx, deps) {
             }
             syncMeshCameraUi();
             ctx.meshCameraSeq += 1;
-            console.debug('[cam] Broadcasting camera OFF, seq:', ctx.meshCameraSeq);
             await signaling.signal({ type: 'camera-state', enabled: false, seq: ctx.meshCameraSeq });
             return;
         }
@@ -93,7 +89,6 @@ export function createGroupMeshCamera(ctx, deps) {
         syncMeshCameraUi();
         await pushVideoToPeers();
         ctx.meshCameraSeq += 1;
-        console.debug('[cam] Broadcasting camera ON, seq:', ctx.meshCameraSeq);
         await signaling.signal({ type: 'camera-state', enabled: true, seq: ctx.meshCameraSeq });
     }
 

@@ -330,6 +330,15 @@ async function handleSignal(payload) {
     if ((payload.type === 'ice' || payload.type === 'ice-candidate') && payload.candidate) {
         if (!api.sameCall(payload)) return;
         try { await api.addRemoteIceCandidate(payload.candidate); } catch (e) { /* ignore */ }
+        return;
+    }
+
+    if (payload.type === 'ice-restart') {
+        if (!api.sameCall(payload)) return;
+        if (S.role === 'caller') {
+            S.iceRestarted = false;
+            if (typeof api.recoverIce === 'function') api.recoverIce();
+        }
     }
 }
 
@@ -508,6 +517,7 @@ function handleCallRow(payload) {
  */
 function syncIncomingFromServer(conversationId) {
     api.resetCallerRoleIfIdle();
+    if (S.callAnswered || S.callConnected || S.acceptingCallId || S.startingCall) return;
     if (api.isOutboundCallerBusy()) return;
     if (api.isLiveAcceptedCall()) return;
     if (S.els.incoming && !S.els.incoming.hidden) return;

@@ -1,4 +1,3 @@
-import { CALL_BUILD } from '../utils/WebRTCConfig.js';
 import { createMeshState } from './GroupMeshState.js';
 import { toast } from './GroupCallUtils.js';
 import { createGroupCallUi } from './GroupCallUi.js';
@@ -14,13 +13,6 @@ export function installGroupCalls() {
     if (!window.CommsWebRTC || window.CommsWebRTC.__groupMesh) {
         return;
     }
-    console.info('[CALL] build ' + CALL_BUILD + ' | GroupCallManager loaded');
-
-    if (!window.CommsWebRTC || window.CommsWebRTC.__groupMesh) {
-        return;
-    }
-
-    console.info('[CALL] build 2026-11-09-c | webrtc-group.js loaded');
 
     var ctx = createMeshState();
     var ui = createGroupCallUi(ctx);
@@ -50,7 +42,8 @@ export function installGroupCalls() {
     var router = createGroupSignalRouter(ctx, {
         ui: ui,
         peers: peers,
-        lifecycle: lifecycle
+        lifecycle: lifecycle,
+        signaling: signaling
     });
 
     var mesh = {

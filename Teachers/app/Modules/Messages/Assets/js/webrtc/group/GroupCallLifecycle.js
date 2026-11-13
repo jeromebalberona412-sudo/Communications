@@ -50,6 +50,28 @@ export function createGroupCallLifecycle(ctx, deps) {
         window.__commsMeshTimerStarted = false;
     }
 
+    async function linkKnownParticipants(callerId, callerType, callerName) {
+        var people = [];
+        var seen = Object.create(null);
+        function add(id, type, name) {
+            if (!id) return;
+            var key = String(id) + ':' + String(type || '');
+            if (seen[key]) return;
+            seen[key] = true;
+            people.push({ id: id, type: type, name: name || 'Participant' });
+        }
+        add(callerId, callerType, callerName || 'Caller');
+        (ctx.meshInvitees || []).forEach(function (person) {
+            add(person.id || person.user_id, person.user_type || person.type, person.name);
+        });
+        var i;
+        for (i = 0; i < people.length; i += 1) {
+            try {
+                await peers.connectToPeer(people[i].id, people[i].type, people[i].name);
+            } catch (eLink) { /* the next join signal retries this peer */ }
+        }
+    }
+
     async function startGroupCall(conversationId, callType, conversation, forceNew) {
         if (!window.Comms) return;
         var now = Date.now();
@@ -111,7 +133,9 @@ export function createGroupCallLifecycle(ctx, deps) {
                 ctx.meshRole = 'callee';
                 ctx.meshWantsVideo = (ctx.meshCall.call_type || callType) === 'video' || callType === 'video';
                 ctx.meshCameraOn = ctx.meshWantsVideo;
-                if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
+                if (window.CommsWebRTC && typeof window.CommsWebRTC.__markAnswered === 'function') {
+                    window.CommsWebRTC.__markAnswered(ctx.meshCall && ctx.meshCall.id);
+                } else if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
                     window.CommsWebRTC.__stopRingtone();
                 }
                 ui.showGroupUi(Object.assign({}, ctx.meshCall, { peer: groupPeer }), 'Connecting...');
@@ -130,15 +154,7 @@ export function createGroupCallLifecycle(ctx, deps) {
                     started_at: ctx.meshCall.started_at || null,
                     server_time: ctx.meshCall.server_time || null
                 });
-                if (ctx.meshCall.caller_id) {
-                    await peers.connectToPeer(ctx.meshCall.caller_id, ctx.meshCall.caller_type, 'Host');
-                }
-                (ctx.meshInvitees || []).forEach(function (person) {
-                    var pid = person.id || person.user_id;
-                    var ptype = person.user_type || person.type;
-                    if (!pid) return;
-                    peers.connectToPeer(pid, ptype, person.name || 'Participant');
-                });
+                await linkKnownParticipants(ctx.meshCall.caller_id, ctx.meshCall.caller_type, 'Host');
                 ctx.meshConnected = true;
                 ui.setStatus('Connected');
                 return;
@@ -192,7 +208,9 @@ export function createGroupCallLifecycle(ctx, deps) {
         if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopCallTimer === 'function') {
             window.CommsWebRTC.__stopCallTimer();
         }
-        if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
+        if (window.CommsWebRTC && typeof window.CommsWebRTC.__markAnswered === 'function') {
+            window.CommsWebRTC.__markAnswered(payload.call_id);
+        } else if (window.CommsWebRTC && typeof window.CommsWebRTC.__stopRingtone === 'function') {
             window.CommsWebRTC.__stopRingtone();
         }
         ctx.meshWantsVideo = (payload.call_type || 'voice') === 'video';
@@ -228,9 +246,7 @@ export function createGroupCallLifecycle(ctx, deps) {
             started_at: ctx.meshCall.started_at || null,
             server_time: ctx.meshCall.server_time || null
         });
-        if (payload.caller_id) {
-            await peers.connectToPeer(payload.caller_id, payload.caller_type, payload.peer_name || 'Caller');
-        }
+        await linkKnownParticipants(payload.caller_id, payload.caller_type, payload.peer_name || 'Caller');
         ctx.meshConnected = true;
         ui.setStatus('Connected');
     }
