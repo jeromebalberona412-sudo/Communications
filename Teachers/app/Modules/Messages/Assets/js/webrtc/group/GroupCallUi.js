@@ -150,11 +150,22 @@ export function createGroupCallUi(ctx) {
             video.style.setProperty('display', 'block', 'important');
             video.style.setProperty('visibility', 'visible', 'important');
             video.style.setProperty('opacity', '1', 'important');
+            var livePicture = videoTracks.some(function (track) {
+                return track && track.readyState === 'live' && track.enabled !== false;
+            });
             if (videoTracks.length) {
                 var inboundHasOnlyVideo = stream.getTracks && videoTracks.length === stream.getTracks().length;
                 video.srcObject = inboundHasOnlyVideo ? stream : new MediaStream(videoTracks);
                 if (!silent) paintMainRemote(video.srcObject);
             }
+            var camOff = tile.querySelector('.comms-tile-cam-off');
+            if (!camOff) {
+                camOff = document.createElement('div');
+                camOff.className = 'comms-tile-cam-off';
+                camOff.textContent = 'Camera off';
+                tile.appendChild(camOff);
+            }
+            camOff.hidden = livePicture;
             var play = video.play();
             if (play && typeof play.catch === 'function') play.catch(function () { /* ignore */ });
             if (!video._commsCameraBound) {

@@ -170,12 +170,6 @@ function stopRingtone(callId) {
         try { osc.stop(); } catch (e) { /* ignore */ }
     });
     S.ringOscillators = [];
-    if (S.ringCtx && S.ringCtx.state === 'running') {
-        S.ringCtx.suspend().catch(function () { /* the next ring resumes it */ });
-    }
-    if (window.__commsRingCtx && window.__commsRingCtx !== S.ringCtx && window.__commsRingCtx.state === 'running') {
-        window.__commsRingCtx.suspend().catch(function () { /* ignore */ });
-    }
     if (S.ringGain && S.ringCtx) {
         try {
             S.ringGain.gain.cancelScheduledValues(S.ringCtx.currentTime);
@@ -228,7 +222,7 @@ function playToneBurst(ctx, freqs, when, duration, volume) {
     freqs.forEach(function (freq) {
         var osc = ctx.createOscillator();
         var gain = ctx.createGain();
-        osc.type = 'sine';
+        osc.type = 'triangle';
         osc.frequency.value = freq;
         gain.gain.setValueAtTime(0.0001, when);
         gain.gain.exponentialRampToValueAtTime(level, when + 0.03);
@@ -269,15 +263,18 @@ function startOscillatorRing(incoming) {
     function scheduleCycle() {
         if (!S.ringtonePlaying || S.callAnswered || S.callConnected || S.acceptingCallId || !S.ringCtx) return;
         var now = S.ringCtx.currentTime;
+        if (S.ringGain) {
+            try { S.ringGain.gain.setValueAtTime(1, now); } catch (eGain) { /* ignore */ }
+        }
         if (incoming) {
-            api.playToneBurst(S.ringCtx, [440, 480], now, 0.42, 0.24);
-            api.playToneBurst(S.ringCtx, [440, 480], now + 0.52, 0.42, 0.24);
+            api.playToneBurst(S.ringCtx, [480, 620], now, 0.45, 0.55);
+            api.playToneBurst(S.ringCtx, [480, 620], now + 0.55, 0.45, 0.55);
         } else {
-            api.playToneBurst(S.ringCtx, [440, 480], now, 1.15, 0.18);
+            api.playToneBurst(S.ringCtx, [440, 480], now, 1.35, 0.5);
         }
     }
     scheduleCycle();
-    S.ringTimer = setInterval(scheduleCycle, incoming ? 2800 : 3600);
+    S.ringTimer = setInterval(scheduleCycle, incoming ? 2600 : 3200);
 }
 
 function startRingtone(mode, callId) {
@@ -297,15 +294,7 @@ function startRingtone(mode, callId) {
     }
     if (S.ringtonePlaying && S.ringMode === mode) {
         if (id) S.ringingCallId = id;
-        api.ensureRingAudio();
-        if (S.ringAudio && S.ringAudio.paused) {
-            var again = S.ringAudio.play();
-            if (again && typeof again.catch === 'function') {
-                again.catch(function () {
-                    if (S.ringtonePlaying && S.ringMode === mode) api.startOscillatorRing(incoming);
-                });
-            }
-        }
+        if (!S.ringTimer) api.startOscillatorRing(incoming);
         return;
     }
     if (S.ringtonePlaying) {
@@ -316,43 +305,8 @@ function startRingtone(mode, callId) {
     S.ringtonePlaying = true;
     S.ringMode = mode;
     S.ringingCallId = id || null;
-    api.ensureRingAudio();
-
-    if (S.ringAudio) {
-        try {
-            S.ringAudio.loop = true;
-            S.ringAudio.muted = false;
-            S.ringAudio.volume = 1;
-            var playPromise = S.ringAudio.play();
-            if (playPromise && typeof playPromise.then === 'function') {
-                playPromise.then(function () {
-                    if (generation !== S.ringGeneration || !S.ringtonePlaying || S.callAnswered || S.callConnected) {
-                        api.stopRingtone();
-                        return;
-                    }
-                    if (S.ringTimer) {
-                        clearInterval(S.ringTimer);
-                        S.ringTimer = null;
-                    }
-                    S.ringOscillators.forEach(function (osc) {
-                        try { osc.stop(); } catch (eStop) { /* ignore */ }
-                    });
-                    S.ringOscillators = [];
-                    api.ringHint(false);
-                }).catch(function () {
-                    if (generation !== S.ringGeneration || !S.ringtonePlaying || S.callAnswered || S.callConnected) return;
-                    api.startOscillatorRing(incoming);
-                    api.ringHint(true);
-                });
-            }
-        } catch (ePlay) {
-            api.startOscillatorRing(incoming);
-            api.ringHint(true);
-        }
-    } else {
-        api.startOscillatorRing(incoming);
-        api.ringHint(true);
-    }
+    api.startOscillatorRing(incoming);
+    if (generation !== S.ringGeneration || !S.ringtonePlaying) return;
 
     if (incoming) {
         api.startIncomingVibration();

@@ -395,10 +395,11 @@
     white-space: nowrap;
 }
 .comms-video-off-label {
-    font-size: 0.72rem;
+    font-size: 0.95rem;
+    font-weight: 800;
     letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: #9ca3af;
+    text-transform: none;
+    color: #fff;
 }
 .comms-call-overlay.is-video-call:not(.is-group-call):not(.has-remote-video) .comms-remote-stage {
     visibility: hidden;
@@ -449,8 +450,30 @@
     opacity: 1 !important;
     z-index: 3 !important;
 }
-.comms-call-overlay.is-video-call:not(.has-remote-video) .comms-video-off--remote,
-.comms-call-overlay.is-video-call:not(.is-local-camera-off) .comms-video-off--local {
+.comms-call-overlay.is-remote-camera-off .comms-video-off--remote,
+.comms-call-overlay.is-local-camera-off .comms-video-off--local,
+.comms-call-overlay.is-local-camera-off .comms-self-corner .comms-video-off--local {
+    display: flex !important;
+    visibility: visible !important;
+    z-index: 9 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+}
+.comms-tile-cam-off {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #1e293b;
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 700;
+}
+.comms-tile-cam-off[hidden] {
     display: none !important;
 }
 .comms-call-overlay.is-group-call .comms-remote-tile video {

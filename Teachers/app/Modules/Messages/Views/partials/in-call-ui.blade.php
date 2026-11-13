@@ -6,7 +6,7 @@
             <div class="comms-video-off comms-video-off--remote" id="commsRemoteVideoOff" hidden aria-hidden="true">
                 <span class="comms-video-off-avatar" id="commsRemoteVideoOffAvatar">U</span>
                 <span class="comms-video-off-name" id="commsRemoteVideoOffName"></span>
-                <span class="comms-video-off-label">Camera Off</span>
+                <span class="comms-video-off-label">Camera off</span>
             </div>
         </div>
         <div class="comms-local-pip comms-self-corner">
@@ -14,7 +14,7 @@
             <div class="comms-video-off comms-video-off--local" id="commsLocalVideoOff" hidden aria-hidden="true">
                 <span class="comms-video-off-avatar" id="commsLocalVideoOffAvatar">U</span>
                 <span class="comms-video-off-name" id="commsLocalVideoOffName">You</span>
-                <span class="comms-video-off-label">Camera Off</span>
+                <span class="comms-video-off-label">Camera off</span>
             </div>
         </div>
         <div class="comms-remote-mic-off" id="commsRemoteMicOff" hidden>Muted</div>

@@ -406,7 +406,7 @@ function syncCameraUi() {
         S.els.remoteVideoOff.setAttribute('aria-hidden', showRemotePlaceholder ? 'false' : 'true');
         var remoteLabel = S.els.remoteVideoOff.querySelector('.comms-video-off-label');
         if (remoteLabel) {
-            remoteLabel.textContent = cameraOff ? 'Camera Off' : '';
+            remoteLabel.textContent = cameraOff ? 'Camera off' : '';
         }
     }
     if (S.els.inCall && !S.els.inCall.classList.contains('is-group-call')) {
