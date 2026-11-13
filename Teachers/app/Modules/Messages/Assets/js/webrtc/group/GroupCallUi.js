@@ -197,7 +197,7 @@ export function createGroupCallUi(ctx) {
         e.inCall.hidden = false;
         e.inCall.removeAttribute('hidden');
         e.inCall.classList.add('is-group-call');
-        e.inCall.classList.remove('is-ringing-preview');
+        e.inCall.classList.remove('is-ringing-preview', 'has-remote-video');
         e.inCall.classList.toggle('is-video-call', !!ctx.meshWantsVideo || !!ctx.meshCameraOn);
         document.documentElement.classList.add('comms-in-call');
         document.body.classList.add('comms-in-call');

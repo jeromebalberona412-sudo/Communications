@@ -88,6 +88,9 @@ export function createGroupCallLifecycle(ctx, deps) {
             ctx.meshWantsVideo = callType === 'video';
             ctx.meshCameraOn = callType === 'video';
             ctx.meshRole = 'caller';
+            if (callType === 'video') {
+                try { await media.ensureLocalMedia(); } catch (ePreview) { /* the call screen still opens */ }
+            }
             var peer = (conversation && conversation.other_user) || {};
             ui.showGroupUi({
                 peer: {

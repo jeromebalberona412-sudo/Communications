@@ -169,7 +169,11 @@ async function placeCall(conversationId, callType, conversation, receiverId, for
     S.wantsVideo = callType === 'video';
     S.cameraEnabled = callType === 'video';
     S.videoLayoutLatched = callType === 'video';
+    if (callType === 'video') {
+        try { await api.prepareLocalPreview(true); } catch (ePreview) { /* the call screen still opens */ }
+    }
     api.showInCall({ peer: earlyPeer, call_type: callType }, 'Ringing...');
+    if (callType === 'video') api.attachLocalVideo();
     
     var r = api.routes();
     api.startRingtone('outgoing');

@@ -588,6 +588,24 @@ body.comms-in-call {
     z-index: 1;
 }
 
+.comms-call-overlay.is-video-call:not(.has-remote-video) .comms-remote-stage {
+    visibility: hidden;
+}
+.comms-call-overlay.is-video-call:not(.has-remote-video) .comms-local-pip {
+    inset: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    aspect-ratio: auto !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    z-index: 4 !important;
+}
 .comms-call-overlay.is-group-call:not(.has-remote-video):not(.is-connected) .comms-local-pip,
 .comms-call-overlay.is-ringing-preview:not(.is-connected) .comms-local-pip {
     inset: 0 !important;
