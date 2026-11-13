@@ -44,13 +44,10 @@ export function createGroupCallUi(ctx) {
             tile.classList.remove('is-overflow-hidden');
             if (tile.dataset.peerKey === 'local') return;
             var video = tile.querySelector('video');
-            var stream = video && video.srcObject;
-            if (!stream || typeof stream.getVideoTracks !== 'function') return;
-            if (stream.getVideoTracks().some(function (t) {
-                return t && t.readyState === 'live' && t.enabled !== false;
-            })) {
-                remoteVideoLive = true;
-            }
+            var showing = videoHasPicture(video);
+            var camOff = ensureCamOff(tile);
+            camOff.hidden = showing;
+            if (showing) remoteVideoLive = true;
         });
         var more = e.remoteGrid.querySelector('.comms-remote-more');
         if (more) more.remove();
@@ -76,11 +73,12 @@ export function createGroupCallUi(ctx) {
             var startedAsVideo = !!(ctx.meshCall && ctx.meshCall.call_type === 'video');
             if (localCamera || remoteVideoLive) ctx.meshVideoLatched = true;
             var showVideo = startedAsVideo || remoteVideoLive || localCamera || !!ctx.meshVideoLatched;
-            e.inCall.classList.toggle('has-remote-video', remoteVideoLive);
+            var peerTilesVisible = others > 0 && (startedAsVideo || showVideo);
+            e.inCall.classList.toggle('has-remote-video', remoteVideoLive || peerTilesVisible);
             e.inCall.classList.toggle('is-video-call', showVideo);
             e.inCall.classList.toggle('is-audio-call', !showVideo);
             e.inCall.classList.toggle('is-local-camera-off', !localCamera);
-            e.inCall.classList.toggle('is-connected', remoteVideoLive);
+            e.inCall.classList.toggle('is-connected', remoteVideoLive || !!ctx.meshConnected);
         }
         if (e.callCenter) {
             e.callCenter.classList.toggle('is-compact', remoteVideoLive);
@@ -88,6 +86,25 @@ export function createGroupCallUi(ctx) {
         if (others > 0) {
             setStatus(others === 1 ? 'Connected (1 peer)' : ('Connected (' + others + ' peers)'));
         }
+    }
+
+    function videoHasPicture(video) {
+        if (!video || !video.srcObject || typeof video.srcObject.getVideoTracks !== 'function') return false;
+        var live = video.srcObject.getVideoTracks().some(function (track) {
+            return track && track.readyState === 'live' && track.enabled !== false && track.muted !== true;
+        });
+        return live && video.videoWidth > 0 && video.videoHeight > 0;
+    }
+
+    function ensureCamOff(tile) {
+        var camOff = tile.querySelector('.comms-tile-cam-off');
+        if (!camOff) {
+            camOff = document.createElement('div');
+            camOff.className = 'comms-tile-cam-off';
+            camOff.textContent = 'Camera off';
+            tile.appendChild(camOff);
+        }
+        return camOff;
     }
 
     function ensureTile(key, name) {
@@ -150,9 +167,7 @@ export function createGroupCallUi(ctx) {
             video.style.setProperty('display', 'block', 'important');
             video.style.setProperty('visibility', 'visible', 'important');
             video.style.setProperty('opacity', '1', 'important');
-            var livePicture = videoTracks.some(function (track) {
-                return track && track.readyState === 'live' && track.enabled !== false;
-            });
+            var livePicture = videoHasPicture(video);
             if (videoTracks.length) {
                 var inboundHasOnlyVideo = stream.getTracks && videoTracks.length === stream.getTracks().length;
                 video.srcObject = inboundHasOnlyVideo ? stream : new MediaStream(videoTracks);

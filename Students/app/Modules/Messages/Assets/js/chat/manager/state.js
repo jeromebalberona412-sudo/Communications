@@ -27,7 +27,7 @@ export function createChatContext() {
         directoryFilter: 'officials',
         directoryGroups: [],
         barangayId: '',
-        reactionEmojis: ['❤️', '😆', '😮', '😢', '😠', '👍', '😂', '🙏'],
+        reactionEmojis: ['👍', '❤️', '😆', '😮', '😢', '🙏'],
         openReactionPickerId: null,
         reactInFlight: {},
         reactSkipRealtime: {},

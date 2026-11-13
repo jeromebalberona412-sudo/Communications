@@ -461,14 +461,15 @@
 .comms-tile-cam-off {
     position: absolute;
     inset: 0;
-    z-index: 3;
+    z-index: 4;
     display: flex;
     align-items: center;
     justify-content: center;
-    background: #1e293b;
+    background: #111;
     color: #fff;
-    font-size: 0.95rem;
+    font-size: 1.05rem;
     font-weight: 700;
+    pointer-events: none;
 }
 .comms-tile-cam-off[hidden] {
     display: none !important;
@@ -477,7 +478,11 @@
     z-index: 1 !important;
 }
 .comms-remote-tile-label {
-    z-index: 4;
+    z-index: 6;
+}
+#commsIncomingAvatar,
+.comms-incoming-avatar {
+    display: none !important;
 }
 .comms-remote-mic-off {
     position: absolute;

@@ -56,7 +56,7 @@ function applyCallLayout() {
     S.els.inCall.classList.toggle('is-audio-call', !videoCall);
     S.els.inCall.classList.toggle('is-voice-origin', !startedAsVideo);
     S.els.inCall.classList.toggle('has-local-camera', !!S.cameraEnabled && videoCall);
-    S.els.inCall.classList.toggle('is-remote-camera-off', remoteExplicitOff || (!startedAsVideo && videoCall && !remoteOn));
+    S.els.inCall.classList.toggle('is-remote-camera-off', remoteExplicitOff || (connected && videoCall && !remoteFrames) || (!startedAsVideo && videoCall && !remoteOn));
     S.els.inCall.classList.toggle('is-remote-mic-off', !S.remoteMicEnabled);
     S.els.inCall.classList.toggle('is-ringing-preview', startedAsVideo && videoCall && !connected && !S.callAnswered);
 }
@@ -398,7 +398,8 @@ function syncCameraUi() {
             && S.els.remoteVideo.srcObject.getVideoTracks().some(function (track) {
                 return track && track.readyState !== 'ended' && track.enabled !== false;
             });
-        var cameraOff = !!videoCall && (remoteExplicitOff || (!callStartedAsVideo() && !remoteCameraOn()));
+        var hasFrames = !!(S.els.remoteVideo && S.els.remoteVideo.videoWidth > 0 && S.els.remoteVideo.videoHeight > 0);
+        var cameraOff = !!videoCall && (remoteExplicitOff || (!callStartedAsVideo() && !remoteCameraOn()) || (S.callConnected && attached && !hasFrames));
         var connecting = !!videoCall && !cameraOff && !remoteLive && !attached;
         var showingSelf = !!(S.localStream && S.els.remoteVideo && S.els.remoteVideo.srcObject && !remoteVideoIsOtherPerson());
         var showRemotePlaceholder = (cameraOff || connecting) && !showingSelf;

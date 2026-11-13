@@ -567,13 +567,8 @@ function showIncoming(call) {
     }
     var incomingAvatarEl = document.getElementById('commsIncomingAvatar');
     if (incomingAvatarEl) {
-        var avatarSrc = (call.peer && (call.peer.profile_image_url || call.peer.avatar_url))
-            || call.caller_avatar
-            || '';
-        if (!avatarSrc && window.Comms && typeof window.Comms.defaultAvatar === 'function') {
-            avatarSrc = window.Comms.defaultAvatar(incomingName);
-        }
-        api.paintAvatar(incomingAvatarEl, incomingName, avatarSrc);
+        incomingAvatarEl.textContent = '';
+        incomingAvatarEl.hidden = true;
     }
     var titleEl = document.getElementById('commsIncomingTitle');
     var isVideo = String(call.call_type || '') === 'video';

@@ -36,7 +36,7 @@ function findVideoSender() {
 }
 
 function remoteVideoTrackShowing(track) {
-    return !!(track && track.readyState === 'live' && track.enabled !== false);
+    return !!(track && track.readyState === 'live' && track.enabled !== false && track.muted !== true);
 }
 
 function streamIsOnlyLocal(stream) {
@@ -60,7 +60,9 @@ function hasLiveRemoteVideo() {
         if (streamIsOnlyLocal(stream)) continue;
         if (stream.getVideoTracks().some(remoteVideoTrackShowing)) live = true;
     }
-    return live;
+    if (!live) return false;
+    var video = S.els.remoteVideo;
+    return !!(video && video.videoWidth > 0 && video.videoHeight > 0);
 }
 
 function transceiverKind(transceiver) {
