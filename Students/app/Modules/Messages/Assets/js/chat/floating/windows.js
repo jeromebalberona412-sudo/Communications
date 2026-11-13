@@ -344,11 +344,38 @@ export function attachWindows(ctx) {
                 var picker = document.createElement('div');
                 picker.className = 'comms-reaction-picker';
                 picker.setAttribute('role', 'listbox');
-                picker.innerHTML = (ctx.floatReactionEmojis || []).map(function (emoji) {
-                    return '<button type="button" class="comms-reaction-pick" data-float-emoji="' + ctx.escapeHtml(emoji) + '" data-float-react-id="' + ctx.escapeHtml(reactRow.getAttribute('data-message-id') || '') + '">' + emoji + '</button>';
-                }).join('');
+                var quickReacts = ['❤️', '😆', '😮', '😢', '😠', '👍'];
+                var allReacts = ctx.floatReactionEmojis || [];
+                var shownReacts = quickReacts.filter(function (emoji) { return allReacts.indexOf(emoji) !== -1; });
+                if (!shownReacts.length) shownReacts = allReacts.slice(0, 6);
+                var extraReacts = allReacts.filter(function (emoji) { return shownReacts.indexOf(emoji) === -1; });
+                var reactId = ctx.escapeHtml(reactRow.getAttribute('data-message-id') || '');
+                function floatReactButton(emoji) {
+                    return '<button type="button" class="comms-reaction-pick" data-float-emoji="' + ctx.escapeHtml(emoji) + '" data-float-react-id="' + reactId + '">' + emoji + '</button>';
+                }
+                picker.innerHTML = shownReacts.map(floatReactButton).join('') +
+                    (extraReacts.length ? '<button type="button" class="comms-reaction-more" data-float-react-more aria-label="More reactions">+</button>' : '');
+                picker._extraHtml = extraReacts.map(floatReactButton).join('');
                 var anchor = reactRow.querySelector('.floating-chat-msg-main') || reactRow;
                 anchor.appendChild(picker);
+                return;
+            }
+            var moreBtn = e.target.closest('[data-float-react-more]');
+            if (moreBtn) {
+                e.preventDefault();
+                e.stopPropagation();
+                var morePicker = moreBtn.closest('.comms-reaction-picker');
+                if (!morePicker) return;
+                var moreOpen = morePicker.classList.toggle('is-expanded');
+                var moreRow = morePicker.querySelector('.comms-reaction-more-row');
+                if (moreOpen && !moreRow) {
+                    moreRow = document.createElement('div');
+                    moreRow.className = 'comms-reaction-more-row';
+                    moreRow.innerHTML = morePicker._extraHtml || '';
+                    morePicker.appendChild(moreRow);
+                } else if (!moreOpen && moreRow) {
+                    moreRow.remove();
+                }
                 return;
             }
             var emojiBtn = e.target.closest('[data-float-emoji]');

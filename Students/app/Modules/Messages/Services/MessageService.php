@@ -33,7 +33,7 @@ class MessageService
 
         return is_array($configured) && $configured !== []
             ? array_values(array_map('strval', $configured))
-            : ['👍', '❤️', '😆', '😮', '😢', '🙏'];
+            : ['❤️', '😆', '😮', '😢', '😠', '👍', '😂', '🙏'];
     }
 
     public function paginate(Conversation $conversation, Authenticatable $user, ?int $beforeId = null): Collection

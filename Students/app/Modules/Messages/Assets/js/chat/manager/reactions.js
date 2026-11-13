@@ -71,15 +71,40 @@ function positionPicker(triggerBtn) {
     pickerEl.style.left = left + 'px';
 }
 
+var QUICK_REACTS = ['❤️', '😆', '😮', '😢', '😠', '👍'];
+
+function reactionPickButton(emoji) {
+    return '<button type="button" class="comms-reaction-pick" data-react-emoji="' +
+        Comms.escapeHtml(emoji) + '" role="menuitem">' +
+        Comms.escapeHtml(emoji) + '</button>';
+}
+
+function buildPickerHtml(expanded) {
+    var all = (state.reactionEmojis && state.reactionEmojis.length)
+        ? state.reactionEmojis.slice()
+        : QUICK_REACTS.slice();
+    var quick = QUICK_REACTS.filter(function (emoji) { return all.indexOf(emoji) !== -1; });
+    if (!quick.length) quick = all.slice(0, 6);
+    var extra = all.filter(function (emoji) { return quick.indexOf(emoji) === -1; });
+    var html = quick.map(reactionPickButton).join('');
+    if (extra.length) {
+        html += '<button type="button" class="comms-reaction-more" data-react-more aria-expanded="' +
+            (expanded ? 'true' : 'false') + '" aria-label="More reactions">+</button>';
+        if (expanded) {
+            html += '<div class="comms-reaction-more-row">' + extra.map(reactionPickButton).join('') + '</div>';
+        }
+    }
+    return html;
+}
+
 function showPickerFor(messageId, triggerBtn) {
     state.openReactionPickerId = Number(messageId) || null;
     if (!state.openReactionPickerId) { hideGlobalPicker(); return; }
+    pickerEl._trigger = triggerBtn;
+    pickerEl._expanded = false;
+    pickerEl.classList.remove('is-expanded');
     pickerEl.setAttribute('data-react-picker', messageId);
-    pickerEl.innerHTML = state.reactionEmojis.map(function (emoji) {
-        return '<button type="button" class="comms-reaction-pick" data-react-emoji="' +
-            Comms.escapeHtml(emoji) + '" role="menuitem">' +
-            Comms.escapeHtml(emoji) + '</button>';
-    }).join('');
+    pickerEl.innerHTML = buildPickerHtml(false);
     pickerEl.style.display = 'inline-flex';
     positionPicker(triggerBtn);
     requestAnimationFrame(function () {
@@ -89,9 +114,22 @@ function showPickerFor(messageId, triggerBtn) {
 
 function hideGlobalPicker() {
     state.openReactionPickerId = null;
+    pickerEl._expanded = false;
+    pickerEl.classList.remove('is-expanded');
     pickerEl.style.display = 'none';
     pickerEl.innerHTML = '';
 }
+
+pickerEl.addEventListener('click', function (e) {
+    var more = e.target.closest('[data-react-more]');
+    if (!more) return;
+    e.preventDefault();
+    e.stopPropagation();
+    pickerEl._expanded = !pickerEl._expanded;
+    pickerEl.classList.toggle('is-expanded', !!pickerEl._expanded);
+    pickerEl.innerHTML = buildPickerHtml(!!pickerEl._expanded);
+    positionPicker(pickerEl._trigger);
+});
 
 var reactBtnIcon = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8.5 14.5s1.5 2 3.5 2 3.5-2 3.5-2"/><circle cx="9" cy="10" r="1" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1" fill="currentColor" stroke="none"/></svg>';
 function closeReactionPickersDom() {

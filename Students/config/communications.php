@@ -8,7 +8,7 @@ return [
     'search_limit' => 20,
     'call_max_participants' => 8,
     'default_group_avatar' => null,
-    'reaction_emojis' => ['👍', '❤️', '😂', '😮', '😢', '🙏'],
+    'reaction_emojis' => ['❤️', '😆', '😮', '😢', '😠', '👍', '😂', '🙏'],
     'attachments' => [
         'max_image_kb' => 5120,
         'max_file_kb' => 10240,
