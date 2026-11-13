@@ -123,6 +123,9 @@ export function createGroupCallUi(ctx) {
         main.autoplay = true;
         main.playsInline = true;
         main.srcObject = stream;
+        main.style.setProperty('display', 'block', 'important');
+        main.style.setProperty('visibility', 'visible', 'important');
+        main.style.setProperty('opacity', '1', 'important');
         var play = main.play();
         if (play && typeof play.catch === 'function') play.catch(function () { /* ignore */ });
     }
@@ -141,6 +144,10 @@ export function createGroupCallUi(ctx) {
             video.autoplay = true;
             video.playsInline = true;
             video.setAttribute('playsinline', '');
+            video.hidden = false;
+            video.style.setProperty('display', 'block', 'important');
+            video.style.setProperty('visibility', 'visible', 'important');
+            video.style.setProperty('opacity', '1', 'important');
             if (videoTracks.length) {
                 var inboundHasOnlyVideo = stream.getTracks && videoTracks.length === stream.getTracks().length;
                 video.srcObject = inboundHasOnlyVideo ? stream : new MediaStream(videoTracks);
@@ -217,8 +224,12 @@ export function createGroupCallUi(ctx) {
             e.localVideo.muted = true;
             e.localVideo.autoplay = true;
             e.localVideo.playsInline = true;
+            e.localVideo.style.setProperty('display', 'block', 'important');
+            e.localVideo.style.setProperty('visibility', 'visible', 'important');
+            e.localVideo.style.setProperty('opacity', '1', 'important');
             if (ctx.meshLocalStream) {
                 e.localVideo.srcObject = ctx.meshLocalStream;
+                paintMainRemote(ctx.meshLocalStream);
                 var replay = e.localVideo.play();
                 if (replay && typeof replay.catch === 'function') replay.catch(function () { /* ignore */ });
             }

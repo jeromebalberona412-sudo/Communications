@@ -310,28 +310,58 @@ async function attachVideoTrackToSender(track) {
  * track simply produces no frames and the camera-off placeholder is
  * shown on top of it.
  */
+function paintCallVideo(el, stream) {
+    if (!el) return;
+    el.hidden = false;
+    el.removeAttribute('hidden');
+    el.classList.remove('is-camera-off');
+    el.muted = true;
+    el.defaultMuted = true;
+    el.setAttribute('muted', '');
+    el.autoplay = true;
+    el.playsInline = true;
+    el.setAttribute('playsinline', '');
+    if (stream && el.srcObject !== stream) el.srcObject = stream;
+    el.style.setProperty('display', 'block', 'important');
+    el.style.setProperty('visibility', 'visible', 'important');
+    el.style.setProperty('opacity', '1', 'important');
+    try {
+        var play = el.play();
+        if (play && typeof play.catch === 'function') play.catch(function () {});
+    } catch (ePlay) { /* autoplay retries on the next gesture */ }
+}
+
+function remoteVideoIsOtherPerson() {
+    var el = S.els.remoteVideo;
+    if (!el || !el.srcObject || !S.localStream || typeof el.srcObject.getVideoTracks !== 'function') return false;
+    var localIds = Object.create(null);
+    S.localStream.getVideoTracks().forEach(function (track) {
+        if (track) localIds[track.id] = true;
+    });
+    return el.srcObject.getVideoTracks().some(function (track) {
+        return track && !localIds[track.id];
+    });
+}
+
 function attachLocalVideo() {
     if (!S.els.localVideo || !S.localStream) return;
-    if (S.els.localVideo.srcObject !== S.localStream) {
-        S.els.localVideo.srcObject = S.localStream;
-    }
-    // FIX BUG #1: Ensure all required video attributes are set
-    // VERIFIED: api.attachLocalVideo() sets muted, playsInline, autoplay, and hidden 
-    // attributes (lines 1687-1693). Local preview displays correctly.
-    S.els.localVideo.muted = true;
-    S.els.localVideo.setAttribute('muted', '');
-    S.els.localVideo.playsInline = true;
-    S.els.localVideo.autoplay = true;
-    S.els.localVideo.hidden = false;
     var liveLocal = typeof api.findLiveVideoTrack === 'function' && api.findLiveVideoTrack();
     var showing = !!S.cameraEnabled && !!(liveLocal && liveLocal.enabled !== false);
-    S.els.localVideo.classList.toggle('is-camera-off', !showing);
-    try {
-        var lp = S.els.localVideo.play();
-        if (lp && typeof lp.catch === 'function') {
-            lp.catch(function () {});
+    if (showing || (S.wantsVideo && liveLocal)) {
+        paintCallVideo(S.els.localVideo, S.localStream);
+        if (S.els.localVideoOff) S.els.localVideoOff.hidden = true;
+        if (S.els.inCall) {
+            S.els.inCall.classList.add('is-video-call');
+            S.els.inCall.classList.remove('is-audio-call', 'is-local-camera-off');
         }
-    } catch (ePlay) { /* ignore */ }
+        if (S.els.remoteVideo && !remoteVideoIsOtherPerson()) {
+            paintCallVideo(S.els.remoteVideo, S.localStream);
+            if (S.els.remoteVideoOff) S.els.remoteVideoOff.hidden = true;
+            if (S.els.inCall) S.els.inCall.classList.remove('is-remote-camera-off');
+        }
+    } else {
+        S.els.localVideo.classList.toggle('is-camera-off', !!S.localStream && !showing);
+    }
     api.syncLocalPipLayout();
 }
 

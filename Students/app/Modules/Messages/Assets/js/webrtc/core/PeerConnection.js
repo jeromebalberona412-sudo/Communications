@@ -397,7 +397,16 @@ function bindRemoteMedia(stream) {
         S.els.remoteVideo.playsInline = true;
         S.els.remoteVideo.setAttribute('playsinline', '');
         S.els.remoteVideo.autoplay = true;
-        S.els.remoteVideo.style.visibility = '';
+        S.els.remoteVideo.hidden = false;
+        S.els.remoteVideo.removeAttribute('hidden');
+        S.els.remoteVideo.style.setProperty('display', 'block', 'important');
+        S.els.remoteVideo.style.setProperty('visibility', 'visible', 'important');
+        S.els.remoteVideo.style.setProperty('opacity', '1', 'important');
+        if (S.els.remoteVideoOff) S.els.remoteVideoOff.hidden = true;
+        if (S.els.inCall) {
+            S.els.inCall.classList.add('is-video-call', 'has-remote-video');
+            S.els.inCall.classList.remove('is-audio-call', 'is-remote-camera-off');
+        }
         var current = S.els.remoteVideo.srcObject;
         var currentHasTrack = current && typeof current.getVideoTracks === 'function'
             && current.getVideoTracks().some(function (track) {

@@ -398,8 +398,13 @@
     text-transform: uppercase;
     color: #9ca3af;
 }
-.comms-call-overlay.is-remote-camera-off:not(.is-group-call) .comms-remote-video {
-    visibility: hidden;
+.comms-call-overlay.is-video-call .comms-remote-video,
+.comms-call-overlay.is-video-call .comms-local-video,
+.comms-call-overlay.is-group-call .comms-remote-tile video,
+.comms-call-overlay.is-group-call .comms-local-video {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
 }
 .comms-remote-mic-off {
     position: absolute;
@@ -436,7 +441,7 @@
 /* The camera track is genuinely disabled in JS (track.enabled = false) and the
    element keeps its MediaStream; this only avoids painting the frozen last
    frame behind the camera-off placeholder. */
-.comms-local-video.is-camera-off {
+.comms-call-overlay.is-local-camera-off .comms-local-video.is-camera-off {
     visibility: hidden;
 }
 .comms-local-pip .comms-local-video.is-cam-landscape,
