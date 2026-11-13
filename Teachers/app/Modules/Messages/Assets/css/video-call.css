@@ -398,13 +398,59 @@
     text-transform: uppercase;
     color: #9ca3af;
 }
+.comms-call-overlay.is-video-call:not(.is-group-call):not(.has-remote-video) .comms-remote-stage {
+    visibility: hidden;
+}
+.comms-call-overlay.is-video-call.has-remote-video:not(.is-group-call) .comms-remote-stage {
+    display: block !important;
+    visibility: visible !important;
+    z-index: 1;
+}
+.comms-call-overlay.is-group-call .comms-remote-stage,
+.comms-call-overlay.is-group-call .comms-local-pip {
+    display: none !important;
+}
+.comms-call-overlay.is-group-call .comms-remote-grid {
+    display: grid !important;
+    visibility: visible !important;
+    background: #0b0b0b;
+    z-index: 2;
+}
+.comms-call-overlay.is-group-call .comms-remote-grid[data-cells="1"] .comms-remote-tile {
+    width: 100%;
+    height: 100%;
+    max-height: none;
+    aspect-ratio: auto;
+}
 .comms-call-overlay.is-video-call .comms-remote-video,
 .comms-call-overlay.is-video-call .comms-local-video,
 .comms-call-overlay.is-group-call .comms-remote-tile video,
 .comms-call-overlay.is-group-call .comms-local-video {
+    position: absolute !important;
+    inset: 0 !important;
+    top: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    object-fit: cover !important;
     display: block !important;
     visibility: visible !important;
     opacity: 1 !important;
+    z-index: 3 !important;
+}
+.comms-call-overlay.is-video-call:not(.has-remote-video) .comms-video-off--remote,
+.comms-call-overlay.is-video-call:not(.is-local-camera-off) .comms-video-off--local {
+    display: none !important;
+}
+.comms-call-overlay.is-group-call .comms-remote-tile video {
+    z-index: 1 !important;
+}
+.comms-remote-tile-label {
+    z-index: 4;
 }
 .comms-remote-mic-off {
     position: absolute;
@@ -588,9 +634,6 @@ body.comms-in-call {
     z-index: 1;
 }
 
-.comms-call-overlay.is-video-call:not(.has-remote-video) .comms-remote-stage {
-    visibility: hidden;
-}
 .comms-call-overlay.is-video-call:not(.has-remote-video) .comms-local-pip {
     inset: 0 !important;
     top: 0 !important;

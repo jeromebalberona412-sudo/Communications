@@ -233,26 +233,33 @@ export function createGroupCallLifecycle(ctx, deps) {
             invitees: payload.invitees || []
         };
         ctx.meshInvitees = Array.isArray(ctx.meshCall.invitees) ? ctx.meshCall.invitees.slice() : [];
-        await media.ensureLocalMedia();
+        var answeredAt = new Date().toISOString();
+        ctx.meshCall.started_at = answeredAt;
+        ctx.meshConnected = true;
         ui.showGroupUi(ctx.meshCall, 'Connected');
-        await flushPendingSignals();
-        var accepted = await signaling.updateStatus('accepted');
-        if (accepted && (accepted.started_at || accepted.answered_at)) {
-            ctx.meshCall.started_at = accepted.started_at || accepted.answered_at;
-            ctx.meshCall.server_time = accepted.server_time || null;
-            if (window.CommsWebRTC && typeof window.CommsWebRTC.__syncTimer === 'function') {
-                window.CommsWebRTC.__syncTimer(ctx.meshCall.started_at, ctx.meshCall.server_time);
-            }
+        if (window.CommsWebRTC && typeof window.CommsWebRTC.__syncTimer === 'function') {
+            window.CommsWebRTC.__syncTimer(answeredAt, null);
         }
-        await signaling.signal({
+        signaling.signal({
             type: 'group-join',
             peer_name: me().name,
             call_type: ctx.meshCall.call_type,
-            started_at: ctx.meshCall.started_at || null,
-            server_time: ctx.meshCall.server_time || null
+            started_at: answeredAt,
+            server_time: null
         });
+        signaling.updateStatus('accepted').then(function (accepted) {
+            if (!accepted || !ctx.meshCall || Number(ctx.meshCall.id) !== Number(payload.call_id)) return;
+            var startedAt = accepted.started_at || accepted.answered_at;
+            if (!startedAt) return;
+            ctx.meshCall.started_at = startedAt;
+            ctx.meshCall.server_time = accepted.server_time || null;
+            if (window.CommsWebRTC && typeof window.CommsWebRTC.__syncTimer === 'function') {
+                window.CommsWebRTC.__syncTimer(startedAt, ctx.meshCall.server_time);
+            }
+        }).catch(function () { /* the local timer is already running */ });
+        try { await media.ensureLocalMedia(); } catch (eMedia) { /* the call stays up while the camera retries */ }
+        await flushPendingSignals();
         await linkKnownParticipants(payload.caller_id, payload.caller_type, payload.peer_name || 'Caller');
-        ctx.meshConnected = true;
         ui.setStatus('Connected');
     }
 

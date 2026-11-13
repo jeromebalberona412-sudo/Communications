@@ -204,8 +204,8 @@ function publishDuration(startedAt, serverTime) {
     api.startTimer(startedAt, serverTime || (S.currentCall && S.currentCall.server_time));
     api.syncCallTimerVisibility();
     api.startCallHeartbeat();
-    if (S.els.inCall && !S.els.inCall.classList.contains('is-group-call') && S.els.callStatus) {
-        S.els.callStatus.textContent = '';
+    if (S.els.callStatus) {
+        S.els.callStatus.textContent = 'Connected';
     }
 }
 

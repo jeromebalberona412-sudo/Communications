@@ -160,12 +160,27 @@ function stopRingtone(callId) {
         try { osc.stop(); } catch (e) { /* ignore */ }
     });
     S.ringOscillators = [];
+    if (S.ringCtx && S.ringCtx.state === 'running') {
+        S.ringCtx.suspend().catch(function () { /* the next ring resumes it */ });
+    }
     silenceRingtoneElements();
+    if (S.ringAudio) {
+        try {
+            S.ringAudio.loop = false;
+            S.ringAudio.pause();
+            S.ringAudio.muted = true;
+            S.ringAudio.currentTime = 0;
+            S.ringAudio.removeAttribute('src');
+            S.ringAudio.load();
+        } catch (eAudio) { /* ignore */ }
+    }
     var generation = S.ringGeneration;
-    window.setTimeout(function () {
-        if (generation === S.ringGeneration) silenceRingtoneElements();
-    }, 0);
-    // Keep AudioContext open so the next ring is not blocked by autoplay.
+    [0, 80, 250, 700].forEach(function (delay) {
+        window.setTimeout(function () {
+            if (generation !== S.ringGeneration || S.ringtonePlaying) return;
+            silenceRingtoneElements();
+        }, delay);
+    });
     if (S.ringNotify) {
         try { S.ringNotify.close(); } catch (e3) { /* ignore */ }
         S.ringNotify = null;
@@ -245,7 +260,10 @@ function startRingtone(mode, callId) {
     api.bindRingtoneUnlock();
     var incoming = mode === 'incoming';
     var id = callId != null ? Number(callId) : (S.incomingCallId || (S.currentCall && S.currentCall.id) || 0);
-    if (S.callAnswered || S.callConnected) return;
+    if (S.callAnswered || S.callConnected || S.acceptingCallId) return;
+    if (S.ringCtx && S.ringCtx.state === 'suspended') {
+        S.ringCtx.resume().catch(function () { /* autoplay resumes on the next gesture */ });
+    }
     if (id && (S.answeredCallIds[id] || S.dismissedRingIds[id])) return;
     if (incoming && S.currentCall && Number(S.currentCall.id) === id && (S.callAnswered || S.callConnected)) {
         return;

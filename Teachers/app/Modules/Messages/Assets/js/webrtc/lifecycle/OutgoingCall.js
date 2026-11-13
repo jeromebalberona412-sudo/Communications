@@ -21,7 +21,7 @@ function armConnectionTimeout() {
     S.connectionTimeout = setTimeout(function () {
         if (!S.currentCall) return;
         var state = S.pc && (S.pc.connectionState || S.pc.iceConnectionState);
-        if (state === 'connected' || state === 'completed' || S.callConnected) return;
+        if (state === 'connected' || state === 'completed') return;
         api.toast('Call could not connect in time.', 'error');
         api.endCall();
     }, CONNECTION_TIMEOUT_MS);
@@ -216,7 +216,7 @@ async function placeCall(conversationId, callType, conversation, receiverId, for
         }
         api.showInCall(Object.assign({}, S.currentCall, {
             peer: S.currentCall.peer || (conversation && conversation.other_user) || { name: 'Contact' }
-        }), alreadyAnswered ? 'Connecting...' : 'Ringing...');
+        }), alreadyAnswered ? 'Connected' : 'Ringing...');
         if (alreadyAnswered) api.stopRingtone();
         else api.startRingtone('outgoing');
         api.armRingTimeout();

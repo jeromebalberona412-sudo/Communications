@@ -39,6 +39,16 @@ function remoteVideoTrackShowing(track) {
     return !!(track && track.readyState === 'live' && track.enabled !== false);
 }
 
+function streamIsOnlyLocal(stream) {
+    if (!stream || !S.localStream || typeof stream.getTracks !== 'function') return false;
+    var localIds = Object.create(null);
+    S.localStream.getTracks().forEach(function (track) {
+        if (track) localIds[track.id] = true;
+    });
+    var tracks = stream.getTracks();
+    return tracks.length > 0 && tracks.every(function (track) { return !!(track && localIds[track.id]); });
+}
+
 function hasLiveRemoteVideo() {
     if (S.remoteCameraSeq > 0 && S.remoteCameraEnabled === false) return false;
     var streams = [S.remoteDisplayStream, S.remoteStream, S.els.remoteVideo && S.els.remoteVideo.srcObject];
@@ -47,12 +57,12 @@ function hasLiveRemoteVideo() {
     for (i = 0; i < streams.length; i += 1) {
         var stream = streams[i];
         if (!stream || typeof stream.getVideoTracks !== 'function') continue;
+        if (streamIsOnlyLocal(stream)) continue;
         if (stream.getVideoTracks().some(remoteVideoTrackShowing)) live = true;
     }
     if (!live) return false;
     if (S.els.remoteVideo && Number(S.els.remoteVideo.videoWidth || 0) > 0) return true;
     if (S.remoteHasFrames) return true;
-    if (S.currentCall && String(S.currentCall.call_type || '') === 'video') return true;
     return false;
 }
 

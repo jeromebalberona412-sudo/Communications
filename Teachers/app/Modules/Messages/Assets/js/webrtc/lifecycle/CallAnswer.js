@@ -152,7 +152,7 @@ async function acceptIncoming() {
     var call = Object.assign({}, S.currentCall || {}, source);
     S.currentCall = call;
     S.role = 'callee';
-    S.callConnected = false;
+    S.callConnected = true;
     S.acceptingCallId = callId;
     S.acceptGeneration = (S.acceptGeneration || 0) + 1;
     var generation = S.acceptGeneration;
@@ -213,7 +213,8 @@ async function acceptIncoming() {
     try {
         api.assertMediaReady();
         api.armConnectionTimeout();
-        S.lifecycle = 'connecting';
+        S.lifecycle = 'accepted';
+        api.setCallStatus('Connected');
         if (answerPreview) {
             try { await answerPreview; } catch (ePreview) { /* the peer connection retries the camera */ }
         }

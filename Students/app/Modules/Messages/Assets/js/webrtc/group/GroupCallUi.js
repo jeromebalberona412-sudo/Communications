@@ -36,7 +36,9 @@ export function createGroupCallUi(ctx) {
         var e = els();
         if (!e.remoteGrid) return;
         var tiles = Array.prototype.slice.call(e.remoteGrid.querySelectorAll('.comms-remote-tile'));
+        var remoteTiles = tiles.filter(function (tile) { return tile.dataset.peerKey !== 'local'; });
         var count = tiles.length;
+        var others = remoteTiles.length;
         var remoteVideoLive = false;
         tiles.forEach(function (tile) {
             tile.classList.remove('is-overflow-hidden');
@@ -83,8 +85,8 @@ export function createGroupCallUi(ctx) {
         if (e.callCenter) {
             e.callCenter.classList.toggle('is-compact', remoteVideoLive);
         }
-        if (count > 0) {
-            setStatus(count === 1 ? 'Connected (1 peer)' : ('Connected (' + count + ' peers)'));
+        if (others > 0) {
+            setStatus(others === 1 ? 'Connected (1 peer)' : ('Connected (' + others + ' peers)'));
         }
     }
 
@@ -229,7 +231,6 @@ export function createGroupCallUi(ctx) {
             e.localVideo.style.setProperty('opacity', '1', 'important');
             if (ctx.meshLocalStream) {
                 e.localVideo.srcObject = ctx.meshLocalStream;
-                paintMainRemote(ctx.meshLocalStream);
                 var replay = e.localVideo.play();
                 if (replay && typeof replay.catch === 'function') replay.catch(function () { /* ignore */ });
             }

@@ -354,11 +354,6 @@ function attachLocalVideo() {
             S.els.inCall.classList.add('is-video-call');
             S.els.inCall.classList.remove('is-audio-call', 'is-local-camera-off');
         }
-        if (S.els.remoteVideo && !remoteVideoIsOtherPerson()) {
-            paintCallVideo(S.els.remoteVideo, S.localStream);
-            if (S.els.remoteVideoOff) S.els.remoteVideoOff.hidden = true;
-            if (S.els.inCall) S.els.inCall.classList.remove('is-remote-camera-off');
-        }
     } else {
         S.els.localVideo.classList.toggle('is-camera-off', !!S.localStream && !showing);
     }
@@ -405,7 +400,8 @@ function syncCameraUi() {
             });
         var cameraOff = !!videoCall && (remoteExplicitOff || (!callStartedAsVideo() && !remoteCameraOn()));
         var connecting = !!videoCall && !cameraOff && !remoteLive && !attached;
-        var showRemotePlaceholder = cameraOff || connecting;
+        var showingSelf = !!(S.localStream && S.els.remoteVideo && S.els.remoteVideo.srcObject && !remoteVideoIsOtherPerson());
+        var showRemotePlaceholder = (cameraOff || connecting) && !showingSelf;
         S.els.remoteVideoOff.hidden = !showRemotePlaceholder;
         S.els.remoteVideoOff.setAttribute('aria-hidden', showRemotePlaceholder ? 'false' : 'true');
         var remoteLabel = S.els.remoteVideoOff.querySelector('.comms-video-off-label');

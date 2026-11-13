@@ -24,6 +24,7 @@ function applyPeerAnswered() {
     }
     S.peerAnsweredFor = cid;
     S.callAnswered = true;
+    S.callConnected = true;
     S.lifecycle = 'accepted';
     S.startingCall = true;
     S.role = 'caller';
@@ -51,11 +52,7 @@ function applyPeerAnswered() {
     } else if (typeof api.pullSharedDuration === 'function') {
         api.pullSharedDuration();
     }
-    var ice = S.pc && (S.pc.iceConnectionState || S.pc.connectionState);
-    if (ice === 'connected' || ice === 'completed') {
-        S.callConnected = true;
-        api.setCallStatus('');
-    }
+    api.setCallStatus('Connected');
     api.startCallHeartbeat();
     api.signalMediaState();
 }
