@@ -401,9 +401,6 @@
     text-transform: none;
     color: #fff;
 }
-.comms-call-overlay.is-video-call:not(.is-group-call):not(.has-remote-video) .comms-remote-stage {
-    visibility: hidden;
-}
 .comms-call-overlay.is-video-call.has-remote-video:not(.is-group-call) .comms-remote-stage {
     display: block !important;
     visibility: visible !important;

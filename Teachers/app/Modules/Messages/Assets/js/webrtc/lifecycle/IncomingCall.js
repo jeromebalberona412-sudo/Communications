@@ -174,7 +174,7 @@ function stopRingtone(callId) {
     if (S.ringGain && S.ringCtx) {
         try {
             S.ringGain.gain.cancelScheduledValues(S.ringCtx.currentTime);
-            S.ringGain.gain.setValueAtTime(0, S.ringCtx.currentTime);
+            S.ringGain.gain.value = 0;
         } catch (eGain) { /* ignore */ }
     }
     silenceRingtoneElements();
@@ -265,7 +265,21 @@ function startOscillatorRing(incoming) {
     S._ringLoopOn = true;
     function scheduleCycle() {
         if (!S._ringLoopOn || !S.ringtonePlaying || S.callAnswered || S.callConnected || S.acceptingCallId || !S.ringCtx) {
-            api.stopRingtone();
+            if (S.ringTimer) {
+                clearInterval(S.ringTimer);
+                S.ringTimer = null;
+            }
+            S._ringLoopOn = false;
+            S.ringOscillators.forEach(function (osc) {
+                try { osc.stop(); } catch (eStop) { /* ignore */ }
+            });
+            S.ringOscillators = [];
+            if (S.ringGain && S.ringCtx) {
+                try {
+                    S.ringGain.gain.cancelScheduledValues(S.ringCtx.currentTime);
+                    S.ringGain.gain.value = 0;
+                } catch (eGain) { /* ignore */ }
+            }
             return;
         }
         var now = S.ringCtx.currentTime;

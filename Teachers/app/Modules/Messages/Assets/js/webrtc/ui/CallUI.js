@@ -196,14 +196,14 @@ function showCallEnded(reason, peerName, callId, endedByRole, callPayload) {
         : (S.lastCallDurationMs >= 1000);
 
     var statusLabel = ({
-        ended: connected ? 'Completed' : 'Failed',
-        completed: 'Completed',
+        ended: 'Call ended',
+        completed: 'Call ended',
         missed: 'Missed',
         rejected: 'Declined',
         cancelled: 'Cancelled',
         canceled: 'Cancelled',
-        offline: 'Failed',
-        failed: 'Failed'
+        offline: 'Call ended',
+        failed: 'Call ended'
     })[statusKey] || copy.title || 'Ended';
 
     if (S.els.endedTitle) S.els.endedTitle.textContent = copy.title;
@@ -346,6 +346,7 @@ function keepActiveCallVisible(statusText) {
     S.els.inCall.removeAttribute('hidden');
     document.documentElement.classList.add('comms-in-call');
     document.body.classList.add('comms-in-call');
+    if (S.callAnswered || S.callConnected) api.stopRingtone();
     if (statusText != null) api.setCallStatus(statusText);
     if (typeof api.syncCallTimerVisibility === 'function') api.syncCallTimerVisibility();
     api.attachLocalVideo();

@@ -568,6 +568,17 @@ async function ensurePeerConnection(videoEnabled) {
         api.bindRemoteMedia(merged);
         api.unlockRemotePlayback();
         api.ensureRemoteAudioPlaying();
+        if (track.kind === 'video' && !track._commsUnmuteBound) {
+            track._commsUnmuteBound = true;
+            track.addEventListener('unmute', function () {
+                api.bindRemoteMedia(S.remoteStream || merged);
+                if (S.els.remoteVideo) {
+                    var replay = S.els.remoteVideo.play();
+                    if (replay && typeof replay.catch === 'function') replay.catch(function () {});
+                }
+                api.updateCameraUi();
+            });
+        }
         if (ev.track && ev.track.kind === 'video') {
             api.updateCameraUi();
             api.scheduleRemoteVideoUiRefresh();
