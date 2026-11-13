@@ -651,8 +651,12 @@ function recoverIce() {
             type: 'ice-restart',
             call_id: S.currentCall.id,
             conversation_id: S.currentCall.conversation_id
+        }).catch(function () {
+            S.iceRestarted = false;
+            return false;
         });
     }
+    if (S.pc.signalingState !== 'stable') return Promise.resolve(false);
     S.iceRestarted = true;
     return S.pc.createOffer({ iceRestart: true }).then(function (offer) {
         return S.pc.setLocalDescription(offer).then(function () {
@@ -664,7 +668,10 @@ function recoverIce() {
                 sdp: offer
             });
         });
-    }).catch(function () { return false; });
+    }).catch(function () {
+        S.iceRestarted = false;
+        return false;
+    });
 }
 
 /**

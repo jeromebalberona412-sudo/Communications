@@ -437,6 +437,10 @@ function showIncoming(call) {
     if (!call) return;
     var callId = call.id != null ? Number(call.id) : null;
     if (!callId) return;
+    if (window.CommsWebRTC && typeof window.CommsWebRTC.__meshActive === 'function' && window.CommsWebRTC.__meshActive()) {
+        if (S.ringMode === 'incoming' && (!S.ringingCallId || Number(S.ringingCallId) === callId)) api.stopRingtone();
+        return;
+    }
 
     // Expired / already-terminal invitations are dropped silently.
     if (api.isInvitationExpired(call)) {

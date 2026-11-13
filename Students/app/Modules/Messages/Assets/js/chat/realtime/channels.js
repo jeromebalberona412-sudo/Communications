@@ -213,6 +213,9 @@ function holdChannel(channelName) {
 
 export function sendBroadcast(channelName, eventName, payload) {
     if (!ensureClient() || !channelName) return Promise.resolve();
+    if (String(channelName).indexOf('comms-signal-') === 0 && !state.topicChannels[channelName]) {
+        acquireTopicChannel(channelName, String(channelName).replace('comms-signal-', ''));
+    }
     var packet = { type: 'broadcast', event: eventName || 'webrtc', payload: payload };
     var entry = holdChannel(channelName);
     if (!entry) return Promise.resolve();
@@ -255,14 +258,7 @@ export function broadcastMessage(conversationId, message, options) {
         conversation_id: cid
     };
     var jobs = [];
-    var existing = conversationSignalChannel(cid);
-    if (existing) {
-        jobs.push(existing.send({
-            type: 'broadcast',
-            event: 'message',
-            payload: payload
-        }).catch(function () {}));
-    } else if (cid) {
+    if (cid) {
         jobs.push(sendBroadcast('comms-signal-' + cid, 'message', payload));
     }
     collectInboxes(options).forEach(function (inbox) {
@@ -276,14 +272,7 @@ export function broadcastSignal(conversationId, payload, options) {
     if (!ensureClient()) return Promise.resolve();
 
     var jobs = [];
-    var existing = conversationSignalChannel(conversationId);
-    if (existing) {
-        jobs.push(existing.send({
-            type: 'broadcast',
-            event: 'webrtc',
-            payload: payload
-        }).catch(function () { /* ignore */ }));
-    } else if (conversationId) {
+    if (conversationId) {
         jobs.push(sendOnChannel('comms-signal-' + conversationId, payload));
     }
 

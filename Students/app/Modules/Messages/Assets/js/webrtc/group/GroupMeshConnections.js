@@ -54,7 +54,7 @@ export function createGroupMeshConnections(ctx, deps) {
                     peer_name: me().name
                 }, { id: entry.id, type: entry.type });
             });
-        }).catch(function () { /* the other side can ask again */ });
+        }).catch(function () { entry.iceRetried = false; });
     }
 
     async function createPeerConnection(remoteId, remoteType, remoteName) {
@@ -166,6 +166,10 @@ export function createGroupMeshConnections(ctx, deps) {
         var entry = await createPeerConnection(remoteId, remoteType, remoteName);
         if (!shouldOffer(remoteId, remoteType)) return;
         if (entry.pc.signalingState === 'have-local-offer' && entry.pc.localDescription) {
+            if (entry.pendingAnswer) {
+                await applyPendingAnswer(entry);
+                return;
+            }
             await signaling.signal({
                 type: 'group-offer',
                 sdp: plainSdp(entry.pc.localDescription, 'offer'),
@@ -177,9 +181,14 @@ export function createGroupMeshConnections(ctx, deps) {
             return;
         }
         if (entry.pc.signalingState !== 'stable') return;
+        if (entry.pc.currentRemoteDescription || entry.pc.remoteDescription) return;
 
         var offer = await entry.pc.createOffer();
         await entry.pc.setLocalDescription(offer);
+        if (entry.pendingAnswer) {
+            await applyPendingAnswer(entry);
+            return;
+        }
         await signaling.signal({
             type: 'group-offer',
             sdp: plainSdp(offer, 'offer'),
@@ -222,6 +231,15 @@ export function createGroupMeshConnections(ctx, deps) {
         ui.setStatus('Connected');
     }
 
+    async function applyPendingAnswer(entry) {
+        if (!entry || !entry.pendingAnswer || !entry.pc) return;
+        if (entry.pc.signalingState !== 'have-local-offer') return;
+        var desc = entry.pendingAnswer;
+        entry.pendingAnswer = null;
+        await entry.pc.setRemoteDescription(new RTCSessionDescription(desc));
+        await flushIce(entry);
+    }
+
     async function flushIce(entry) {
         var pending = entry.iceQueue.slice();
         entry.iceQueue = [];
@@ -241,7 +259,7 @@ export function createGroupMeshConnections(ctx, deps) {
         var entry = ctx.meshPeers[key];
         if (!entry || !entry.pc) return;
         if (entry.pc.signalingState !== 'have-local-offer') {
-            entry.pendingAnswer = desc;
+            if (entry.pc.signalingState === 'stable') entry.pendingAnswer = desc;
             return;
         }
         await entry.pc.setRemoteDescription(new RTCSessionDescription(desc));

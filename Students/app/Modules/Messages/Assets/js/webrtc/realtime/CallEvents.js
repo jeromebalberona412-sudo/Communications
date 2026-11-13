@@ -529,11 +529,13 @@ function syncIncomingFromServer(conversationId) {
 
     window.clearTimeout(S.incomingSyncTimer);
     S.incomingSyncTimer = window.setTimeout(function () {
+        if (S.callAnswered || S.callConnected || S.acceptingCallId || S.startingCall) return;
         api.resetCallerRoleIfIdle();
         if (api.isOutboundCallerBusy()) return;
         if (api.isLiveAcceptedCall()) return;
         if (api.isActivelyInCall(null) && S.callConnected) return;
         window.Comms.api(url, { method: 'GET', dedupe: true }).then(function (data) {
+            if (S.callAnswered || S.callConnected || S.acceptingCallId || S.startingCall) return;
             api.reconcileWithServerState(data);
             api.resetCallerRoleIfIdle();
             if (api.isOutboundCallerBusy()) return;
